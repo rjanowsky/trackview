@@ -1,0 +1,9 @@
+.venv/
+output/
+__pycache__/
+*.pyc
+.DS_Store
+
+# personal ride data & regenerable outputs (not part of the tool)
+gpx/
+gc/

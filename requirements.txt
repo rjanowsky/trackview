@@ -1,0 +1,4 @@
+contextily>=1.7
+matplotlib>=3.8
+gpxpy>=1.6
+numpy>=1.24
