@@ -54,7 +54,9 @@ shape as the komoot tracks, so `trackview.py` renders them together):
 
 ```bash
 .venv/bin/python wahoo_to_gpx.py                     # ./gc -> ./gpx
-.venv/bin/python wahoo_to_gpx.py --ext               # also embed power/cad/speed/grade/temp
+.venv/bin/python wahoo_to_gpx.py --ext                # also embed power/cad/speed(km/h)/grade/temp
+.venv/bin/python wahoo_to_gpx.py --since 2026-09-05            # only rides on/after a date
+.venv/bin/python wahoo_to_gpx.py --until 2026-09-08            # only rides on/before a date
 .venv/bin/python wahoo_to_gpx.py <file.json> --out-dir DIR
 ```
 

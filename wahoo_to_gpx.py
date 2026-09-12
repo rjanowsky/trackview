@@ -25,7 +25,9 @@ Wahoo quirks handled:
 Usage:
     .venv/bin/python wahoo_to_gpx.py                      # ./gc -> ./gpx
     .venv/bin/python wahoo_to_gpx.py --in-dir gc --out-dir gpx
-    .venv/bin/python wahoo_to_gpx.py --ext                # also embed power/cad/speed/grade/temp
+    .venv/bin/python wahoo_to_gpx.py --ext                  # also embed power/cad/speed(km/h)/grade/temp
+    .venv/bin/python wahoo_to_gpx.py --since 2026-09-05             # only rides on/after a date
+    .venv/bin/python wahoo_to_gpx.py --until 2026-09-08 --ext        # only rides on/before a date
     .venv/bin/python wahoo_to_gpx.py gc/2026_09_01_08_07_05.json    # one explicit file
 """
 from __future__ import annotations
@@ -34,7 +36,7 @@ import argparse
 import json
 import math
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import xml.etree.ElementTree as ET
@@ -57,6 +59,9 @@ CREATOR  = "wahoo_to_gpx/1.0 (trackview)"
 
 # --------------------------------- helpers -----------------------------------
 _START_RE = re.compile(r"(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})")
+# Wahoo names each export after its ride start time (local), so the stem alone
+# tells us *when* the ride was: "2026_09_01_08_07_05".  Used by the date filter.
+_STEM_RE = re.compile(r"(\d{4})_(\d{2})_(\d{2})_\d{2}_\d{2}_\d{2}")
 
 
 def _parse_start(starttime: str) -> datetime:
@@ -67,6 +72,25 @@ def _parse_start(starttime: str) -> datetime:
         raise ValueError(f"unparseable STARTTIME: {starttime!r}")
     y, mo, d, h, mi, s = (int(x) for x in m.groups())
     return datetime(y, mo, d, h, mi, s, tzinfo=timezone.utc)
+
+
+def _ride_date(path: Path) -> date | None:
+    """Calendar date of the ride, read from the filename stem
+    (YYYY_MM_DD_HH_MM_SS, local time) - no JSON parse needed.  None when the
+    name isn't Wahoo-shaped, so a filter can skip it rather than guess."""
+    m = _STEM_RE.match(path.stem)
+    if not m:
+        return None
+    y, mo, d, *_ = (int(x) for x in m.groups()[:3])
+    return date(y, mo, d)
+
+
+def _parse_argdate(s: str, flag: str) -> date:
+    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
 
 
 def _distance_and_gain(points) -> tuple[float, float]:
@@ -199,6 +223,12 @@ def main() -> None:
     ap.add_argument("--ext", action="store_true",
                     help="also embed power/cadence/speed/grade/temperature as "
                          "<trkpt> extensions (off by default: plain lat/lon/ele/time)")
+    ap.add_argument("--since", metavar="YYYY-MM-DD", default=None,
+                    help="only convert rides on/after this date (local, read from the "
+                            "filename); default: no lower bound")
+    ap.add_argument("--until", metavar="YYYY-MM-DD", default=None,
+                    help="only convert rides on/before this date (local, read from the "
+                            "filename); default: no upper bound")
     args = ap.parse_args()
 
     in_dir, out_dir = Path(args.in_dir), Path(args.out_dir)
@@ -206,6 +236,31 @@ def main() -> None:
     if not paths:
         print(f"No Wahoo JSON files found in {in_dir} - nothing to convert.")
         return
+
+    lo = _parse_argdate(args.since, "--since") if args.since else None
+    hi = _parse_argdate(args.until, "--until") if args.until else None
+    if lo or hi:
+        lo_s = lo.isoformat() if lo else "any"
+        hi_s = hi.isoformat() if hi else "any"
+        kept, out_of_range, undated = [], [], []
+        for p in paths:
+            rd = _ride_date(p)
+            if rd is None:
+                undated.append(p)
+            elif (lo and rd < lo) or (hi and rd > hi):
+                out_of_range.append(p)
+            else:
+                kept.append(p)
+        paths = kept
+        for p in undated:
+            print(f"  skip (date not in filename): {p.name}")
+        n_total = len(kept) + len(out_of_range) + len(undated)
+        if out_of_range:
+            print(f"  --since/--until: {len(kept)}/{n_total} ride(s) in range "
+                  f"{lo_s}..{hi_s}")
+        if not paths:
+            print(f"No rides within {lo_s}..{hi_s} - nothing to convert.")
+            return
 
     print(f"wahoo_to_gpx - converting {len(paths)} ride(s) from {in_dir} -> {out_dir}"
           + ("    (+telemetry extensions)" if args.ext else ""))
