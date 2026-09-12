@@ -45,6 +45,35 @@ CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
 (one file per track, named from the GPX stem; the default renders all tracks
 onto one combined map).
 
+## Wahoo -> GPX (`wahoo_to_gpx.py`)
+
+`gc/` holds Wahoo ELEMNT ride exports (`*.json`, one `{"RIDE": {...}}` per
+ride, one `SAMPLES` row per second with `LAT/LON/ALT/WATTS/CAD/KPH/SLOPE/TEMP`).
+`wahoo_to_gpx.py` turns each into a standard GPX 1.1 track in `gpx/` (the same
+shape as the komoot tracks, so `trackview.py` renders them together):
+
+```bash
+.venv/bin/python wahoo_to_gpx.py                     # ./gc -> ./gpx
+.venv/bin/python wahoo_to_gpx.py --ext               # also embed power/cad/speed/grade/temp
+.venv/bin/python wahoo_to_gpx.py <file.json> --out-dir DIR
+```
+
+Non-obvious Wahoo quirks the converter handles (and why):
+- the JSON has a **UTF-8 BOM** -> opened `utf-8-sig`;
+- **`LAT`/`LON` are already decimal degrees** (no scale factor needed);
+- rows with `LAT/LON == 0` are "no fix" (ride start/stop) -> dropped;
+- `ALT == 0` is a **"no altitude" sentinel** (GPS altitude lags the position
+  lock; real values here run ~12-120 m) -> filled from the neighbouring valid
+  altitude so the `<ele>` series stays continuous;
+- absolute time = `STARTTIME` (`"... UTC"`) + `SECS`, written with a `Z` suffix
+  (via a tz-aware UTC `datetime`) to match the existing komoot tracks;
+- distance/gain use the **same equirectangular approximation as `trackview.py`**
+  (`_distance_and_gain`) — keep the two consistent;
+- `gpxpy.parse()` (1.6.2) must be handed a **file object or string, not a path**
+  (a path string is parsed *as* XML and fails).
+
+## Notes / testing
+
 There is **no test suite, linter, formatter, or CI** in this project. To
 validate a change, run the script (it needs network for the basemap) or at least
 syntax-check with `.venv/bin/python -c "import ast; ast.parse(open('trackview.py').read())"`.
