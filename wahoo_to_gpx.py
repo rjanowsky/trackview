@@ -24,7 +24,7 @@ Wahoo quirks handled:
 
 Usage:
     .venv/bin/python wahoo_to_gpx.py                      # ./gc -> ./gpx
-    .venv/bin/python wahoo_to_gpx.py --in-dir gc --out-dir gpx
+    .venv/bin/python wahoo_to_gpx.py --gc-dir gc --out-dir gpx
     .venv/bin/python wahoo_to_gpx.py --ext                  # also embed power/cad/speed(km/h)/grade/temp
     .venv/bin/python wahoo_to_gpx.py --since 2026-09-05             # only rides on/after a date
     .venv/bin/python wahoo_to_gpx.py --until 2026-09-08 --ext        # only rides on/before a date
@@ -215,9 +215,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Convert Wahoo ELEMNT ride JSON (gc/) into GPX tracks (gpx/).")
     ap.add_argument("files", nargs="*",
-                    help="explicit *.json files (default: every *.json in --in-dir)")
-    ap.add_argument("--in-dir", default=str(IN_DIR),
-                    help="folder of Wahoo JSON rides (default: ./gc)")
+                    help="explicit *.json files (default: every *.json in --gc-dir)")
+    ap.add_argument("--gc-dir", "--in-dir", default=str(IN_DIR),
+                    help="folder of Wahoo JSON rides to read (default: ./gc); "
+                             "--in-dir is kept as an alias")
     ap.add_argument("--out-dir", default=str(OUT_DIR),
                     help="folder for the .gpx output (default: ./gpx)")
     ap.add_argument("--ext", action="store_true",
@@ -231,10 +232,10 @@ def main() -> None:
                             "filename); default: no upper bound")
     args = ap.parse_args()
 
-    in_dir, out_dir = Path(args.in_dir), Path(args.out_dir)
-    paths = [Path(f) for f in args.files] if args.files else sorted(in_dir.glob("*.json"))
+    gc_dir, out_dir = Path(args.gc_dir), Path(args.out_dir)
+    paths = [Path(f) for f in args.files] if args.files else sorted(gc_dir.glob("*.json"))
     if not paths:
-        print(f"No Wahoo JSON files found in {in_dir} - nothing to convert.")
+        print(f"No Wahoo JSON files found in {gc_dir} - nothing to convert.")
         return
 
     lo = _parse_argdate(args.since, "--since") if args.since else None
@@ -262,7 +263,7 @@ def main() -> None:
             print(f"No rides within {lo_s}..{hi_s} - nothing to convert.")
             return
 
-    print(f"wahoo_to_gpx - converting {len(paths)} ride(s) from {in_dir} -> {out_dir}"
+    print(f"wahoo_to_gpx - converting {len(paths)} ride(s) from {gc_dir} -> {out_dir}"
           + ("    (+telemetry extensions)" if args.ext else ""))
     out_dir.mkdir(parents=True, exist_ok=True)
 
