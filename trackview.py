@@ -13,6 +13,7 @@ Usage:
     python trackview.py --style sat    # Esri satellite base map
     python trackview.py --zoom 15      # override the auto-chosen zoom
     python trackview.py --no-elev      # flat colour instead of elevation shading
+    python trackview.py --ext          # add avg power/speed/cadence to the title
 """
 from __future__ import annotations
 
@@ -106,17 +107,58 @@ def decimate(points, min_m: float):
     return out
 
 
-def load_tracks(gpx_dir: Path, decimate_m: float) -> list[dict]:
-    """Read every *.gpx in gpx_dir; merge its segments into one polyline each."""
+# Wahoo telemetry embedded under <trkpt><extensions> by `wahoo_to_gpx --ext`,
+# mapped to the short key trackview averages.  Un-namespaced on purpose (see
+# wahoo_to_gpx.py); gpxpy flattens the <extensions> children straight onto a
+# trackpoint's .extensions list, so each element's bare .tag is the metric.
+_TELE_TAGS = {"power": "power", "speed_kmh": "speed", "cadence": "cadence"}
+
+
+def _point_telemetry(point) -> dict:
+    """Optional Wahoo telemetry off a trackpoint -> {key: float}.  Empty when
+    the point carries no extensions (e.g. a plain komoot track)."""
+    out = {}
+    for ext in point.extensions:
+        key = _TELE_TAGS.get(ext.tag)
+        if key and ext.text:
+            try:
+                out[key] = float(ext.text)
+            except ValueError:
+                pass
+    return out
+
+
+def _metric_avg(tracks, key) -> float | None:
+    """Point-weighted average of a per-track [sum, count] metric across the
+    tracks being drawn.  None when no track carries that metric."""
+    s = c = 0.0
+    for t in tracks:
+        m = t.get(key)
+        if m:
+            s += m[0]
+            c += m[1]
+    return s / c if c else None
+
+
+def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> list[dict]:
+    """Read every *.gpx in gpx_dir; merge its segments into one polyline each.
+    With with_ext, also collect the Wahoo telemetry embedded by
+    `wahoo_to_gpx --ext` (power/speed/cadence) per point, accumulated over every
+    sample (pre-decimation) so the caller can show an accurate average."""
     tracks = []
     for path in sorted(glob.glob(str(gpx_dir / "*.gpx"))):
         with open(path, "rb") as fh:
             gpx = gpxpy.parse(fh)
-        raw = []                          # (lat, lon, ele) for every point
+        raw = []                            # (lat, lon, ele) for every point
+        tele = {k: [0.0, 0] for k in ("power", "speed", "cadence")} if with_ext else None
         for trk in gpx.tracks:
             for seg in trk.segments:
-                for p in seg.points:
-                    raw.append((p.latitude, p.longitude, p.elevation))
+                for pt in seg.points:
+                    raw.append((pt.latitude, pt.longitude, pt.elevation))
+                    if tele is not None:
+                        for key, val in _point_telemetry(pt).items():
+                            tele[key][0] += val
+                            tele[key][1] += 1
         if not raw:
             print(f"  skip (no points): {os.path.basename(path)}")
             continue
@@ -127,9 +169,12 @@ def load_tracks(gpx_dir: Path, decimate_m: float) -> list[dict]:
         name = (gpx.name or (gpx.tracks[0].name if gpx.tracks
                               and gpx.tracks[0].name else None)
                  or Path(path).stem)
-        tracks.append({"path": path, "name": name, "merc": merc, "ele": ele,
-                       "n": len(raw), "ndec": len(dec),
-                       "dist_km": dist_km, "gain_m": gain_m})
+        d = {"path": path, "name": name, "merc": merc, "ele": ele,
+             "n": len(raw), "ndec": len(dec),
+             "dist_km": dist_km, "gain_m": gain_m}
+        if tele is not None:
+            d.update(tele)                  # per-metric [sum, count] pairs
+        tracks.append(d)
     return tracks
 
 
@@ -177,7 +222,8 @@ def _safe_filename(name: str) -> str:
 
 # --------------------------------- rendering ----------------------------------
 def render(tracks, *, style: str, out_path: Path, zoom: int | None,
-           color_by_elev: bool, title: str | None = None) -> None:
+           color_by_elev: bool, title: str | None = None,
+           show_ext: bool = False) -> None:
     if not tracks:
         print("No tracks to render.")
         return
@@ -252,7 +298,22 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
     else:
         suptitle = (f"{len(tracks)} tracks     -     {total_km:,.0f} km"
                     f"     -     ▲ {total_gain:,.0f} m{suffix}")
+    if show_ext:
+        # average power/speed/cadence for a separate, smaller header line below the
+        # title (point-weighted across the tracks drawn here; only metrics present).
+        tele = []
+        for label, key, unit, fmt in (
+             ("power", "power", "W", "5.0f"),
+             ("speed", "speed", "km/h", "4.1f"),
+             ("cadence", "cadence", "rpm", "3.0f")):
+            avg = _metric_avg(tracks, key)
+            if avg is not None:
+                tele.append(f"{label} {avg:{fmt}} {unit}")
     fig.suptitle(suptitle, fontsize=13, fontweight="bold", y=0.985)
+    if show_ext and tele:
+        # second line: a smaller font, a little lower -> reads as a subtitle
+        fig.text(0.5, 0.95, "avg       " + "       ".join(tele), ha="center",
+                 va="top", fontsize=10)
 
     handles = [
         Line2D([0], [0], marker="o", color="w", markerfacecolor="lime",
@@ -319,11 +380,14 @@ def main() -> None:
     ap.add_argument("--no-elev", action="store_true", help="flat colour, not elevation")
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
+    ap.add_argument("--ext", action="store_true",
+                    help="show average power/speed/cadence in the title, read from "
+                           "wahoo_to_gpx --ext telemetry (ignored when absent)")
     args = ap.parse_args()
 
     gpx_dir = Path(args.gpx_dir)
     print(f"trackview - reading *.gpx from {gpx_dir}")
-    tracks = load_tracks(gpx_dir, DECIMATE_M)
+    tracks = load_tracks(gpx_dir, DECIMATE_M, with_ext=args.ext)
     if not tracks:
         print("No *.gpx files found - nothing to render.")
         return
@@ -343,12 +407,12 @@ def main() -> None:
         for t in tracks:
             out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
             render([t], style=args.style, out_path=out_path, zoom=args.zoom,
-                   color_by_elev=color_by_elev)
+                   color_by_elev=color_by_elev, show_ext=args.ext)
     else:
         out_path = (Path(args.out) if args.out is not None
                     else out_dir / f"tracks_overview.{args.format}")
         render(tracks, style=args.style, out_path=out_path, zoom=args.zoom,
-               color_by_elev=color_by_elev)
+               color_by_elev=color_by_elev, show_ext=args.ext)
 
 
 if __name__ == "__main__":

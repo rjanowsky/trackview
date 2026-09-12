@@ -31,6 +31,7 @@ python trackview.py --style sat        # Esri satellite base map
 python trackview.py --style terrain    # Esri shaded-relief
 python trackview.py --zoom 13          # override the auto-chosen zoom
 python trackview.py --no-elev          # flat per-track colour instead of elevation
+python trackview.py --ext              # avg power/speed/cadence in the title
 ```
 
 ## Output
@@ -43,6 +44,9 @@ python trackview.py --no-elev          # flat per-track colour instead of elevat
   onto a single map.
 - The file is `output/tracks_overview.<format>` unless overridden with `--out`;
   with `--split` the per-track files go to the same directory.
+- **Telemetry** `--ext` adds a second title line with the average power /
+  speed / cadence, read from the `<extensions>` that `wahoo_to_gpx --ext`
+  embeds. Tracks without telemetry (e.g. komoot) simply omit the line.
 
 ## Base-map providers (`--style`)
 

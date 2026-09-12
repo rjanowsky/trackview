@@ -36,12 +36,14 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
 .venv/bin/python trackview.py --zoom 13             # override auto-chosen zoom
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
+.venv/bin/python trackview.py --ext                 # avg power/speed/cadence in the title
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
 
 CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
-(auto-named `output/tracks_overview.<format>` when omitted), `--format {png,pdf}`, `--style {topo,sat,terrain,osm}`, `--zoom` (int, else auto), `--no-elev`, `--split`
+(auto-named `output/tracks_overview.<format>` when omitted), `--format {png,pdf}`, `--style {topo,sat,terrain,osm}`, `--zoom` (int, else auto), `--no-elev`, `--ext` (title shows avg
+power/speed/cadence when the GPX carries `wahoo_to_gpx --ext` telemetry), `--split`
 (one file per track, named from the GPX stem; the default renders all tracks
 onto one combined map).
 
@@ -73,6 +75,11 @@ Non-obvious Wahoo quirks the converter handles (and why):
   (`_distance_and_gain`) — keep the two consistent;
 - `gpxpy.parse()` (1.6.2) must be handed a **file object or string, not a path**
   (a path string is parsed *as* XML and fails).
+- the two `--ext` flags are **paired**: `wahoo_to_gpx.py --ext` embeds
+  `power`/`speed_kmh`/`cadence` as un-namespaced `<trkpt><extensions>`
+   children; `trackview.py --ext` reads them back (gpxpy flattens the
+  `<extensions>` children onto `point.extensions`, bare tags) to print an
+   avg power/speed/cadence line in the title; absent telemetry is skipped.
 
 ## Notes / testing
 
