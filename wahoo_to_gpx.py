@@ -109,7 +109,7 @@ def _add_extensions(point, p: dict) -> None:
     """Embed this sample's ride telemetry as <trkpt><extensions> children."""
     ext = point.extensions
     if p["kph"] > 0:
-        e = ET.Element("speed"); e.text = f"{p['kph'] / 3.6:.3f}"; ext.append(e)
+        e = ET.Element("speed_kmh"); e.text = f"{p['kph']:.1f}"; ext.append(e)
     if p["watts"] > 0:
         e = ET.Element("power"); e.text = str(int(p["watts"])); ext.append(e)
     if p["cad"] > 0:
