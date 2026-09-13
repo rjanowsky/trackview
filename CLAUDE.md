@@ -36,14 +36,14 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
 .venv/bin/python trackview.py --zoom 13             # override auto-chosen zoom
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
-.venv/bin/python trackview.py --ext                 # avg power/speed/cadence in the title
+.venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr in the title
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
 
 CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
 (auto-named `output/tracks_overview.<format>` when omitted), `--format {png,pdf}`, `--style {topo,sat,terrain,osm}`, `--zoom` (int, else auto), `--no-elev`, `--ext` (title shows avg
-power/speed/cadence when the GPX carries `wahoo_to_gpx --ext` telemetry), `--split`
+power/speed/cadence/hr when the GPX carries `wahoo_to_gpx --ext` telemetry), `--split`
 (one file per track, named from the GPX stem; the default renders all tracks
 onto one combined map).
 
@@ -56,7 +56,7 @@ shape as the komoot tracks, so `trackview.py` renders them together):
 
 ```bash
 .venv/bin/python wahoo_to_gpx.py                     # ./gc -> ./gpx
-.venv/bin/python wahoo_to_gpx.py --ext                # also embed power/cad/speed(km/h)/grade/temp
+.venv/bin/python wahoo_to_gpx.py --ext                # also embed power/cad/hr/speed(km/h)/grade/temp
 .venv/bin/python wahoo_to_gpx.py --since 2026-09-05            # only rides on/after a date
 .venv/bin/python wahoo_to_gpx.py --until 2026-09-08            # only rides on/before a date
 .venv/bin/python wahoo_to_gpx.py <file.json> --out-dir DIR
@@ -76,10 +76,10 @@ Non-obvious Wahoo quirks the converter handles (and why):
 - `gpxpy.parse()` (1.6.2) must be handed a **file object or string, not a path**
   (a path string is parsed *as* XML and fails).
 - the two `--ext` flags are **paired**: `wahoo_to_gpx.py --ext` embeds
-  `power`/`speed_kmh`/`cadence` as un-namespaced `<trkpt><extensions>`
+  `power`/`speed_kmh`/`cadence`/`heartrate` as un-namespaced `<trkpt><extensions>`
    children; `trackview.py --ext` reads them back (gpxpy flattens the
   `<extensions>` children onto `point.extensions`, bare tags) to print an
-   avg power/speed/cadence line in the title; absent telemetry is skipped.
+   avg power/speed/cadence/hr line in the title; absent telemetry is skipped.
 
 ## Notes / testing
 

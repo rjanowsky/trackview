@@ -13,7 +13,7 @@ Usage:
     python trackview.py --style sat    # Esri satellite base map
     python trackview.py --zoom 15      # override the auto-chosen zoom
     python trackview.py --no-elev      # flat colour instead of elevation shading
-    python trackview.py --ext          # add avg power/speed/cadence to the title
+    python trackview.py --ext          # add avg power/speed/cadence/hr to the title
 """
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ def decimate(points, min_m: float):
 # mapped to the short key trackview averages.  Un-namespaced on purpose (see
 # wahoo_to_gpx.py); gpxpy flattens the <extensions> children straight onto a
 # trackpoint's .extensions list, so each element's bare .tag is the metric.
-_TELE_TAGS = {"power": "power", "speed_kmh": "speed", "cadence": "cadence"}
+_TELE_TAGS = {"power": "power", "speed_kmh": "speed", "cadence": "cadence", "heartrate": "hr"}
 
 
 def _point_telemetry(point) -> dict:
@@ -143,14 +143,14 @@ def _metric_avg(tracks, key) -> float | None:
 def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> list[dict]:
     """Read every *.gpx in gpx_dir; merge its segments into one polyline each.
     With with_ext, also collect the Wahoo telemetry embedded by
-    `wahoo_to_gpx --ext` (power/speed/cadence) per point, accumulated over every
+    `wahoo_to_gpx --ext` (power/speed/cadence/hr) per point, accumulated over every
     sample (pre-decimation) so the caller can show an accurate average."""
     tracks = []
     for path in sorted(glob.glob(str(gpx_dir / "*.gpx"))):
         with open(path, "rb") as fh:
             gpx = gpxpy.parse(fh)
         raw = []                            # (lat, lon, ele) for every point
-        tele = {k: [0.0, 0] for k in ("power", "speed", "cadence")} if with_ext else None
+        tele = {k: [0.0, 0] for k in ("power", "speed", "cadence", "hr")} if with_ext else None
         for trk in gpx.tracks:
             for seg in trk.segments:
                 for pt in seg.points:
@@ -299,13 +299,14 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
         suptitle = (f"{len(tracks)} tracks     -     {total_km:,.0f} km"
                     f"     -     ▲ {total_gain:,.0f} m{suffix}")
     if show_ext:
-        # average power/speed/cadence for a separate, smaller header line below the
+        # average power/speed/cadence/hr for a separate, smaller header line below the
         # title (point-weighted across the tracks drawn here; only metrics present).
         tele = []
         for label, key, unit, fmt in (
              ("power", "power", "W", "5.0f"),
              ("speed", "speed", "km/h", "4.1f"),
-             ("cadence", "cadence", "rpm", "3.0f")):
+             ("cadence", "cadence", "rpm", "3.0f"),
+             ("hr", "hr", "bpm", "3.0f")):
             avg = _metric_avg(tracks, key)
             if avg is not None:
                 tele.append(f"{label} {avg:{fmt}} {unit}")
@@ -381,7 +382,7 @@ def main() -> None:
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
     ap.add_argument("--ext", action="store_true",
-                    help="show average power/speed/cadence in the title, read from "
+                    help="show average power/speed/cadence/hr in the title, read from "
                            "wahoo_to_gpx --ext telemetry (ignored when absent)")
     args = ap.parse_args()
 

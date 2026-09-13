@@ -25,7 +25,7 @@ Wahoo quirks handled:
 Usage:
     .venv/bin/python wahoo_to_gpx.py                      # ./gc -> ./gpx
     .venv/bin/python wahoo_to_gpx.py --gc-dir gc --out-dir gpx
-    .venv/bin/python wahoo_to_gpx.py --ext                  # also embed power/cad/speed(km/h)/grade/temp
+    .venv/bin/python wahoo_to_gpx.py --ext                  # also embed power/cad/hr/speed(km/h)/grade/temp
     .venv/bin/python wahoo_to_gpx.py --since 2026-09-05             # only rides on/after a date
     .venv/bin/python wahoo_to_gpx.py --until 2026-09-08 --ext        # only rides on/before a date
     .venv/bin/python wahoo_to_gpx.py gc/2026_09_01_08_07_05.json    # one explicit file
@@ -138,6 +138,8 @@ def _add_extensions(point, p: dict) -> None:
         e = ET.Element("power"); e.text = str(int(p["watts"])); ext.append(e)
     if p["cad"] > 0:
         e = ET.Element("cadence"); e.text = str(int(p["cad"])); ext.append(e)
+    if p["hr"] > 0:
+        e = ET.Element("heartrate"); e.text = str(int(p["hr"])); ext.append(e)
     if p["slope"]:
         e = ET.Element("grade"); e.text = f"{p['slope']:.1f}"; ext.append(e)
     if p.get("temp"):
@@ -165,6 +167,7 @@ def ride_to_gpx(path: Path, *, with_ext: bool = False):
             "lat":   lat, "lon": lon,
             "alt":   s.get("ALT") or 0,
             "watts": s.get("WATTS") or 0, "cad": s.get("CAD") or 0,
+            "hr":    s.get("HR") or 0,
             "kph":   s.get("KPH") or 0, "slope": s.get("SLOPE") or 0,
             "temp":  s.get("TEMP") or 0,
         })
@@ -222,7 +225,7 @@ def main() -> None:
     ap.add_argument("--out-dir", default=str(OUT_DIR),
                     help="folder for the .gpx output (default: ./gpx)")
     ap.add_argument("--ext", action="store_true",
-                    help="also embed power/cadence/speed/grade/temperature as "
+                    help="also embed power/cadence/heart rate/speed/grade/temperature as "
                          "<trkpt> extensions (off by default: plain lat/lon/ele/time)")
     ap.add_argument("--since", metavar="YYYY-MM-DD", default=None,
                     help="only convert rides on/after this date (local, read from the "
