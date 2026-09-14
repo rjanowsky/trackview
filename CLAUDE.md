@@ -36,14 +36,16 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
 .venv/bin/python trackview.py --zoom 13             # override auto-chosen zoom
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
-.venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr in the title
+.venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr + calories burned (kcal) in the title
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
 
 CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
-(auto-named `output/tracks_overview.<format>` when omitted), `--format {png,pdf}`, `--style {topo,sat,terrain,osm}`, `--zoom` (int, else auto), `--no-elev`, `--ext` (title shows avg
-power/speed/cadence/hr when the GPX carries `wahoo_to_gpx --ext` telemetry), `--split`
+`--ext` (title shows the
+calories-burned total in kcal plus an avg power/speed/cadence/hr line below it, when the
+GPX carries `wahoo_to_gpx --ext` telemetry; calories = avg power x ride duration / ~25%
+efficiency), `--split`
 (one file per track, named from the GPX stem; the default renders all tracks
 onto one combined map).
 
@@ -79,7 +81,9 @@ Non-obvious Wahoo quirks the converter handles (and why):
   `power`/`speed_kmh`/`cadence`/`heartrate` as un-namespaced `<trkpt><extensions>`
    children; `trackview.py --ext` reads them back (gpxpy flattens the
   `<extensions>` children onto `point.extensions`, bare tags) to print an
-   avg power/speed/cadence/hr line in the title; absent telemetry is skipped.
+   avg power/speed/cadence/hr subtitle plus the calories-burned total on the main
+   title line (kcal = avg power x ride duration / 4184 / ~25% efficiency); absent
+   telemetry is skipped.
 
 ## Notes / testing
 

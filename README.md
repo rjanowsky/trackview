@@ -31,7 +31,7 @@ python trackview.py --style sat        # Esri satellite base map
 python trackview.py --style terrain    # Esri shaded-relief
 python trackview.py --zoom 13          # override the auto-chosen zoom
 python trackview.py --no-elev          # flat per-track colour instead of elevation
-python trackview.py --ext              # avg power/speed/cadence/hr in the title
+python trackview.py --ext              # avg power/speed/cadence/hr + calories burned (kcal) in the title
 ```
 
 ## Output
@@ -44,9 +44,12 @@ python trackview.py --ext              # avg power/speed/cadence/hr in the title
   onto a single map.
 - The file is `output/tracks_overview.<format>` unless overridden with `--out`;
   with `--split` the per-track files go to the same directory.
-- **Telemetry** `--ext` adds a second title line with the average power / heart
-  rate / speed / cadence, read from the `<extensions>` that `wahoo_to_gpx --ext`
-  embeds. Tracks without telemetry (e.g. komoot) simply omit the line.
+- **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title
+  line and an average power / heart rate / speed / cadence line just below it, read
+  from the `<extensions>` that `wahoo_to_gpx --ext` embeds. The calories are
+  estimated as average power times the ride's duration, divided by a ~25% efficiency
+    (the rides carry no calorie field). Tracks without telemetry (e.g. komoot)
+    simply omit both.
 
 ## Base-map providers (`--style`)
 

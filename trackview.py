@@ -13,7 +13,7 @@ Usage:
     python trackview.py --style sat    # Esri satellite base map
     python trackview.py --zoom 15      # override the auto-chosen zoom
     python trackview.py --no-elev      # flat colour instead of elevation shading
-    python trackview.py --ext          # add avg power/speed/cadence/hr to the title
+    python trackview.py --ext          # add avg power/speed/cadence/hr + calories burned (kcal) to the title
 """
 from __future__ import annotations
 
@@ -78,6 +78,8 @@ ATTRIBUTION = {
 
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
 EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for zoom
+JOULES_PER_KCAL = 4184.0        # 1 dietary "kcal" (as on food labels) = 4184 J
+METABOLIC_EFFICIENCY = 0.25     # only ~25% of food energy -> pedal work; rest is heat
 
 
 # --------------------------------- helpers -----------------------------------
@@ -140,17 +142,36 @@ def _metric_avg(tracks, key) -> float | None:
     return s / c if c else None
 
 
+def _calories_burned(tracks) -> float | None:
+    """Total "calories burned" (kcal) across the tracks, estimated from average
+    power (W) x ride duration (s): the mechanical work in kcal, then divided by a
+    ~25% muscular efficiency (only ~1 in 4 kcal of food energy becomes pedal work).
+    Summed per track; None when no track has both a power average and a measured
+    duration (e.g. a plain komoot track without Wahoo telemetry)."""
+    total = 0.0
+    have = False
+    for t in tracks:
+        p = t.get("power")                        # [sum, count] power samples
+        dur = t.get("duration_s", 0.0)
+        if p and p[1] and dur:
+            total += (p[0] / p[1]) * dur / JOULES_PER_KCAL / METABOLIC_EFFICIENCY
+            have = True
+    return total if have else None
+
+
 def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> list[dict]:
     """Read every *.gpx in gpx_dir; merge its segments into one polyline each.
     With with_ext, also collect the Wahoo telemetry embedded by
     `wahoo_to_gpx --ext` (power/speed/cadence/hr) per point, accumulated over every
-    sample (pre-decimation) so the caller can show an accurate average."""
+    sample (pre-decimation) so the caller can show an accurate average, and the
+    ride's first->last timestamp span so it can derive the calories burned (kcal)."""
     tracks = []
     for path in sorted(glob.glob(str(gpx_dir / "*.gpx"))):
         with open(path, "rb") as fh:
             gpx = gpxpy.parse(fh)
         raw = []                            # (lat, lon, ele) for every point
         tele = {k: [0.0, 0] for k in ("power", "speed", "cadence", "hr")} if with_ext else None
+        t_first = t_last = None               # ride span (1st -> last timestamp) for calories
         for trk in gpx.tracks:
             for seg in trk.segments:
                 for pt in seg.points:
@@ -159,6 +180,10 @@ def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> lis
                         for key, val in _point_telemetry(pt).items():
                             tele[key][0] += val
                             tele[key][1] += 1
+                        st = pt.time          # ride duration feeds the calories-burned estimate
+                        if st is not None:
+                            t_first = st if t_first is None or st < t_first else t_first
+                            t_last  = st if t_last  is None or st > t_last  else t_last
         if not raw:
             print(f"  skip (no points): {os.path.basename(path)}")
             continue
@@ -174,6 +199,7 @@ def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> lis
              "dist_km": dist_km, "gain_m": gain_m}
         if tele is not None:
             d.update(tele)                  # per-metric [sum, count] pairs
+            d["duration_s"] = (t_last - t_first).total_seconds() if t_first else 0.0
         tracks.append(d)
     return tracks
 
@@ -289,15 +315,19 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
 
     total_km = sum(t["dist_km"] for t in tracks)
     total_gain = sum(t["gain_m"] for t in tracks)
+    # "calories burned" is a total (like distance/gain), so it joins the main
+    # title line, not the "avg" subtitle below.  It needs power telemetry, --ext.
+    cal = _calories_burned(tracks) if show_ext else None
+    cal_seg = f"       -       {cal:,.0f} kcal" if cal is not None else ""
     suffix = "     -  shaded by elevation" if have_elev else ""
     if title is not None:
         suptitle = title
     elif len(tracks) == 1:
         suptitle = (f"{tracks[0]['name']}     -     {total_km:,.0f} km"
-                    f"     -     ▲ {total_gain:,.0f} m{suffix}")
+                    f"     -     ▲ {total_gain:,.0f} m{cal_seg}{suffix}")
     else:
         suptitle = (f"{len(tracks)} tracks     -     {total_km:,.0f} km"
-                    f"     -     ▲ {total_gain:,.0f} m{suffix}")
+                    f"     -     ▲ {total_gain:,.0f} m{cal_seg}{suffix}")
     if show_ext:
         # average power/speed/cadence/hr for a separate, smaller header line below the
         # title (point-weighted across the tracks drawn here; only metrics present).
@@ -382,8 +412,8 @@ def main() -> None:
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
     ap.add_argument("--ext", action="store_true",
-                    help="show average power/speed/cadence/hr in the title, read from "
-                           "wahoo_to_gpx --ext telemetry (ignored when absent)")
+                    help="add the calories-burned total (kcal) to the title and an avg "
+                           "power/speed/cadence/hr line below it, from wahoo_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
     args = ap.parse_args()
 
     gpx_dir = Path(args.gpx_dir)
