@@ -39,6 +39,7 @@ from matplotlib.lines import Line2D
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
 OUTPUT_DIR  = Path(__file__).resolve().parent / "output"
+STATS_DIR   = Path(__file__).resolve().parent / "stats"
 
 DECIMATE_M  = 5.0       # drop track points closer than this (m): keeps the shape,
                         # cuts ~68k points to a few thousand for crisp, fast drawing
@@ -143,6 +144,23 @@ def _metric_avg(tracks, key) -> float | None:
     return s / c if c else None
 
 
+def _metric_avg_track(t, key) -> float | None:
+    """One ride's own average for a per-track [sum, count] metric; None when it has no samples."""
+    m = t.get(key)
+    if m and m[1]:
+        return m[0] / m[1]
+    return None
+
+
+def _track_calories(t) -> float | None:
+    """This ride's 'calories burned' (kcal): avg power (W) x ride duration (s) over 4184 J/kcal and a ~25% efficiency; None without a power average or a ride span."""
+    p = t.get("power")                            # [sum, count] power samples
+    dur = t.get("duration_s", 0.0)
+    if p and p[1] and dur:
+        return (p[0] / p[1]) * dur / JOULES_PER_KCAL / METABOLIC_EFFICIENCY
+    return None
+
+
 def _calories_burned(tracks) -> float | None:
     """Total "calories burned" (kcal) across the tracks, estimated from average
     power (W) x ride duration (s): the mechanical work in kcal, then divided by a
@@ -165,6 +183,16 @@ def _fmt_duration(total_s: float) -> str:
     h, rem = divmod(int(round(total_s)), 3600)
     m = rem // 60
     return f"{h}h {m:02d}m"
+
+
+def _fmt_dur_or_dash(total_s: float) -> str:
+    """Ride time as 'Hh MMm', or a '-' for a track with no measured span."""
+    return _fmt_duration(total_s) if total_s > 0 else "-"
+
+
+def _fmt_num(v, spec: str) -> str:
+    """Format a metric value, or a "-" when it is absent (None)."""
+    return "-" if v is None else f"{v:{spec}}"
 
 
 _NAME_DATE_RE = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?=_|$)")
@@ -396,6 +424,72 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
     print(f"  wrote {out_path}    ({out_path.stat().st_size // 1024} KB)")
 
 
+def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
+    """Write one ride-log table to out_path: a row per ride carrying the two title
+    headers' stats (distance, duration, gain; plus calories + avg power/speed/
+    cadence/hr under --ext), closing with a row that sums them.  A "-" marks a
+    metric a ride does not carry (e.g. a plain komoot track, no telemetry)."""
+    total_km    = sum(t["dist_km"] for t in tracks)
+    total_gain  = sum(t["gain_m"] for t in tracks)
+    total_dur   = sum(t.get("duration_s", 0.0) for t in tracks)
+    total_cal   = _calories_burned(tracks) if show_ext else None
+
+     # (column header, numeric?, per-ride formatter, summary cell)
+    cols = [
+        ("Ride", False, lambda t: _title_name(t["name"]), "Summary"),
+        ("Dist (km)", True,
+         lambda t: f"{t['dist_km']:,.1f}", f"{total_km:,.0f}"),
+        ("Duration", False,
+         lambda t: _fmt_dur_or_dash(t.get("duration_s", 0.0)),
+         _fmt_dur_or_dash(total_dur)),
+        ("Gain (m)", True,
+         lambda t: f"{t['gain_m']:,.0f}", f"{total_gain:,.0f}"),
+    ]
+    if show_ext:
+        cols += [
+            ("Calories (kcal)", True,
+             lambda t: _fmt_num(_track_calories(t), ",.0f"),
+             _fmt_num(total_cal, ",.0f")),
+            ("Avg power (W)", True,
+             lambda t: _fmt_num(_metric_avg_track(t, "power"), "5.0f"),
+             _fmt_num(_metric_avg(tracks, "power"), "5.0f")),
+            ("Avg speed (km/h)", True,
+             lambda t: _fmt_num(_metric_avg_track(t, "speed"), "4.1f"),
+             _fmt_num(_metric_avg(tracks, "speed"), "4.1f")),
+            ("Avg cadence (rpm)", True,
+             lambda t: _fmt_num(_metric_avg_track(t, "cadence"), "3.0f"),
+             _fmt_num(_metric_avg(tracks, "cadence"), "3.0f")),
+            ("Avg HR (bpm)", True,
+             lambda t: _fmt_num(_metric_avg_track(t, "hr"), "3.0f"),
+             _fmt_num(_metric_avg(tracks, "hr"), "3.0f")),
+        ]
+
+    rows    = [[c[2](t) for c in cols] for t in tracks]
+    summary = [c[3] for c in cols]
+
+     # each column is as wide as its widest cell (header, a ride row, the summary)
+    widths = [max(len(c[0]), len(summary[i]), *(len(r[i]) for r in rows))
+              for i, c in enumerate(cols)]
+
+    def fmt_row(cells):
+        out = []
+        for i, (cell, c) in enumerate(zip(cells, cols)):
+            out.append(cell.rjust(widths[i]) if c[1] else cell.ljust(widths[i]))
+        return "      ".join(out)
+
+    head = [c[0] for c in cols]
+    rule = "      ".join("-" * w for w in widths)
+    n = len(tracks)
+    lines = [f"trackview - {n} ride{'s' if n != 1 else ''}", "",
+             fmt_row(head), rule]
+    lines += [fmt_row(r) for r in rows]
+    lines += [rule, fmt_row(summary)]
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  wrote {out_path}")
+
+
 def _load_basemap(ax, bbox, order, zoom, min_var: float = 1.0) -> str:
     """Fall back through tile providers until one shows real tiles.
     A failed or blank fetch (near-zero pixel variance) triggers the
@@ -478,6 +572,13 @@ def main() -> None:
         render(tracks, style=args.style, out_path=out_path, zoom=args.zoom,
                color_by_elev=color_by_elev, show_ext=args.ext)
 
+     # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
+     # the two title headers' stats as a table, one row per ride, plus a totals row
+    first = _title_name(tracks[0]["name"])        # earliest ride (glob is date-sorted)
+    last   = _title_name(tracks[-1]["name"])       # latest ride
+    label  = _safe_filename(f"{first}_{last}")
+    stats_path = STATS_DIR / f"trackview-{label}.txt"
+    write_stats(tracks, stats_path, show_ext=args.ext)
 
 if __name__ == "__main__":
     main()

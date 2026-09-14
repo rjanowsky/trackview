@@ -105,7 +105,8 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 4. `render()` — fetch the raster basemap, overlay each track (white halo underlay
    + colour ramp), add start/stop markers, legend, colourbar, title, attribution,
    and save the PNG.
-5. `main()` — CLI wiring and per-track summary printout.
+5. `main()` — CLI wiring, per-track summary printout, and `write_stats()` which
+   writes a ride-log table to `stats/` (one row per ride + a Summary totals row).
 
 Key non-obvious details:
 
@@ -129,8 +130,15 @@ Key non-obvious details:
 - **Elevation shading** is off when the total elevation range is ≤ 1 m or when
   `--no-elev` is passed; in that case tracks get flat distinct colours from a
   resampled `tab10` cmap instead of a `terrain` ramp + colourbar.
-- The `gpx/` input and `output/` are git-ignored; GPX files here are Strava
-  exports named `YYYY-MM-DD_<id>_<date>.gpx`.
+- The `gpx/` input, `output/` and `stats/` are git-ignored; GPX files here are
+  Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
+- **Ride-log stats table** (`write_stats`): every run writes
+   `stats/trackview-<first>_<last>.txt`, where `<first>`/`<last>` are the earliest
+  and latest ride dates — `tracks[0]`/`tracks[-1]` via `_title_name` (the glob is
+  date-sorted, so these are the first/last rides); one ride's date repeats for a
+  single-track run.  Columns mirror the two title lines; the calories-burned and
+  avg power/speed/cadence/hr columns appear only under `--ext` (and a `-` marks a
+  metric a ride lacks), ending in a `Summary` totals/averages row.
 
 ## Basemap providers (`--style`)
 

@@ -54,6 +54,12 @@ python trackview.py --ext              # avg power/speed/cadence/hr + calories b
     simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
+- Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt`
+  (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row
+  per ride with the same stats as the two title lines (distance, duration, gain — plus
+  the calories-burned total and avg power / speed / cadence / hr when `--ext`), closing
+  with a single **Summary** row of the totals/averages.  A `-` marks a metric a ride
+  doesn't carry.
 
 ## Base-map providers (`--style`)
 
