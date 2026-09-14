@@ -23,6 +23,7 @@ import math
 import os
 import re
 import time
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -159,12 +160,36 @@ def _calories_burned(tracks) -> float | None:
     return total if have else None
 
 
+def _fmt_duration(total_s: float) -> str:
+    """Ride time as 'Hh MMm' (e.g. 3h 05m); '0m' for a ride under a minute."""
+    h, rem = divmod(int(round(total_s)), 3600)
+    m = rem // 60
+    return f"{h}h {m:02d}m"
+
+
+_NAME_DATE_RE = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?=_|$)")
+
+
+def _title_name(name: str) -> str:
+    """For a --split single-track title, show a Wahoo-style date stem
+    (e.g. 2026_09_11_08_07_29) as just its calendar date (2026-09-11); any other
+    name (a descriptive komoot title) passes through unchanged."""
+    m = _NAME_DATE_RE.match(name)
+    if not m:
+        return name
+    try:
+        return date(int(m[1]), int(m[2]), int(m[3])).isoformat()
+    except ValueError:
+        return name
+
+
 def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> list[dict]:
     """Read every *.gpx in gpx_dir; merge its segments into one polyline each.
-    With with_ext, also collect the Wahoo telemetry embedded by
-    `wahoo_to_gpx --ext` (power/speed/cadence/hr) per point, accumulated over every
-    sample (pre-decimation) so the caller can show an accurate average, and the
-    ride's first->last timestamp span so it can derive the calories burned (kcal)."""
+    Always record each ride's first->last timestamp span: its duration, shown on the
+    title and feeding the calories-burned estimate.  With with_ext, also collect the
+    Wahoo telemetry embedded by `wahoo_to_gpx --ext` (power/speed/cadence/hr) per
+    point, accumulated over every sample (pre-decimation) so the caller can show an
+    accurate average."""
     tracks = []
     for path in sorted(glob.glob(str(gpx_dir / "*.gpx"))):
         with open(path, "rb") as fh:
@@ -176,14 +201,14 @@ def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> lis
             for seg in trk.segments:
                 for pt in seg.points:
                     raw.append((pt.latitude, pt.longitude, pt.elevation))
+                    st = pt.time              # ride span -> duration (+ calories when --ext)
+                    if st is not None:
+                        t_first = st if t_first is None or st < t_first else t_first
+                        t_last   = st if t_last  is None or st > t_last  else t_last
                     if tele is not None:
                         for key, val in _point_telemetry(pt).items():
                             tele[key][0] += val
                             tele[key][1] += 1
-                        st = pt.time          # ride duration feeds the calories-burned estimate
-                        if st is not None:
-                            t_first = st if t_first is None or st < t_first else t_first
-                            t_last  = st if t_last  is None or st > t_last  else t_last
         if not raw:
             print(f"  skip (no points): {os.path.basename(path)}")
             continue
@@ -195,11 +220,11 @@ def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> lis
                               and gpx.tracks[0].name else None)
                  or Path(path).stem)
         d = {"path": path, "name": name, "merc": merc, "ele": ele,
-             "n": len(raw), "ndec": len(dec),
-             "dist_km": dist_km, "gain_m": gain_m}
+              "n": len(raw), "ndec": len(dec),
+              "dist_km": dist_km, "gain_m": gain_m,
+              "duration_s": (t_last - t_first).total_seconds() if t_first else 0.0}
         if tele is not None:
-            d.update(tele)                  # per-metric [sum, count] pairs
-            d["duration_s"] = (t_last - t_first).total_seconds() if t_first else 0.0
+            d.update(tele)                    # per-metric [sum, count] pairs
         tracks.append(d)
     return tracks
 
@@ -249,7 +274,7 @@ def _safe_filename(name: str) -> str:
 # --------------------------------- rendering ----------------------------------
 def render(tracks, *, style: str, out_path: Path, zoom: int | None,
            color_by_elev: bool, title: str | None = None,
-           show_ext: bool = False) -> None:
+           show_ext: bool = False, split: bool = False) -> None:
     if not tracks:
         print("No tracks to render.")
         return
@@ -315,19 +340,25 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
 
     total_km = sum(t["dist_km"] for t in tracks)
     total_gain = sum(t["gain_m"] for t in tracks)
-    # "calories burned" is a total (like distance/gain), so it joins the main
-    # title line, not the "avg" subtitle below.  It needs power telemetry, --ext.
+    total_dur = sum(t.get("duration_s", 0.0) for t in tracks)
+     # Duration and "calories burned" are totals (like distance/gain), so they join
+     # the main title line, not the "avg" subtitle.  Calories needs --ext power and
+     # is omitted when absent.
+    sep = "     -     "
+    dur_seg = f"{sep}{_fmt_duration(total_dur)}" if total_dur > 0 else ""
     cal = _calories_burned(tracks) if show_ext else None
-    cal_seg = f"       -       {cal:,.0f} kcal" if cal is not None else ""
+    cal_seg = f"{sep}{cal:,.0f} kcal" if cal is not None else ""
     suffix = "     -  shaded by elevation" if have_elev else ""
+    head = _title_name(tracks[0]["name"]) if (split and len(tracks) == 1) else None
     if title is not None:
         suptitle = title
     elif len(tracks) == 1:
-        suptitle = (f"{tracks[0]['name']}     -     {total_km:,.0f} km"
-                    f"     -     ▲ {total_gain:,.0f} m{cal_seg}{suffix}")
+        name = head or tracks[0]["name"]
+        suptitle = (f"{name}{sep}{total_km:,.0f} km{dur_seg}"
+                    f"{sep}▲ {total_gain:,.0f} m{cal_seg}{suffix}")
     else:
-        suptitle = (f"{len(tracks)} tracks     -     {total_km:,.0f} km"
-                    f"     -     ▲ {total_gain:,.0f} m{cal_seg}{suffix}")
+        suptitle = (f"{len(tracks)} tracks{sep}{total_km:,.0f} km{dur_seg}"
+                    f"{sep}▲ {total_gain:,.0f} m{cal_seg}{suffix}")
     if show_ext:
         # average power/speed/cadence/hr for a separate, smaller header line below the
         # title (point-weighted across the tracks drawn here; only metrics present).
@@ -438,7 +469,7 @@ def main() -> None:
         for t in tracks:
             out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
             render([t], style=args.style, out_path=out_path, zoom=args.zoom,
-                   color_by_elev=color_by_elev, show_ext=args.ext)
+                   color_by_elev=color_by_elev, show_ext=args.ext, split=True)
     else:
         out_path = (Path(args.out) if args.out is not None
                     else out_dir / f"tracks_overview.{args.format}")

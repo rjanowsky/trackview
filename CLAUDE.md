@@ -46,8 +46,10 @@ CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
 calories-burned total in kcal plus an avg power/speed/cadence/hr line below it, when the
 GPX carries `wahoo_to_gpx --ext` telemetry; calories = avg power x ride duration / ~25%
 efficiency), `--split`
-(one file per track, named from the GPX stem; the default renders all tracks
-onto one combined map).
+(one file per track; its title shows the ride date as `YYYY-MM-DD` for a
+  Wahoo-style stem, else the name.  The default renders all tracks onto one
+  combined map).  Ride duration (`Hh MMm`) is always on the title, between the
+  distance and the elevation gain (total across the tracks when combined).
 
 ## Wahoo -> GPX (`wahoo_to_gpx.py`)
 

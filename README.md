@@ -41,7 +41,9 @@ python trackview.py --ext              # avg power/speed/cadence/hr + calories b
 - **Combined vs split** `--split` writes one map file *per track*, named after its
   GPX file with spaces made filesystem-safe (e.g.
   `2026-09-07_3264766585_2026-09-07_11_45.png`). By default every track is drawn
-  onto a single map.
+  onto a single map.  In `--split` mode each map's title shows the ride date as
+  `YYYY-MM-DD` (from a Wahoo-style filename stem, e.g. `2026_09_11_08_07_29`); any
+  other name (e.g. a komoot title) is shown as-is.
 - The file is `output/tracks_overview.<format>` unless overridden with `--out`;
   with `--split` the per-track files go to the same directory.
 - **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title
@@ -50,6 +52,8 @@ python trackview.py --ext              # avg power/speed/cadence/hr + calories b
   estimated as average power times the ride's duration, divided by a ~25% efficiency
     (the rides carry no calorie field). Tracks without telemetry (e.g. komoot)
     simply omit both.
+- The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
+  the distance and the elevation gain — the total across the tracks when combined.
 
 ## Base-map providers (`--style`)
 
