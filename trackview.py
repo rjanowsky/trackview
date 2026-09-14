@@ -324,10 +324,6 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
                    linewidths=0.6, zorder=7)
         ax.scatter([x1], [y1], s=70, color="red", edgecolors="k",
                    linewidths=0.6, zorder=7)
-        ax.annotate(t["name"], (x0, y0), xytext=(8, 6), textcoords="offset points",
-                    fontsize=9, color="#111", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.25", fc="white",
-                              ec="0.6", alpha=0.75))
 
     ax.axis("off")
 
