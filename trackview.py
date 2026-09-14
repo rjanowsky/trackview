@@ -325,6 +325,12 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
         ax.scatter([x1], [y1], s=70, color="red", edgecolors="k",
                    linewidths=0.6, zorder=7)
 
+     # one more start-marker for the overall route start, drawn after every
+     # track so it sits on top of all the per-track lines, halos and markers
+    sx, sy = tracks[0]["merc"][0]
+    ax.scatter([sx], [sy], s=70, color="lime", edgecolors="k",
+               linewidths=0.6, zorder=8)
+
     ax.axis("off")
 
     # colourbar + legend + attribution
