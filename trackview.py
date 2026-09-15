@@ -15,11 +15,12 @@ Usage:
     python trackview.py --no-elev      # flat colour instead of elevation shading
     python trackview.py --ext          # add avg power/speed/cadence/hr + calories burned (kcal) to the title
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
+    python trackview.py --since 2026-09-08    # only tracks on/after a date (from the .gpx filename)
+    python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
 """
 from __future__ import annotations
 
 import argparse
-import glob
 import math
 import os
 import re
@@ -212,15 +213,37 @@ def _title_name(name: str) -> str:
         return name
 
 
-def load_tracks(gpx_dir: Path, decimate_m: float, with_ext: bool = False) -> list[dict]:
-    """Read every *.gpx in gpx_dir; merge its segments into one polyline each.
+def _ride_date(path: Path) -> date | None:
+    """Calendar date of a ride, read from the .gpx filename stem
+    (YYYY_MM_DD_HH_MM_SS, local time) - no GPX parse needed.  None when the
+    name isn't Wahoo-shaped, so a date filter can skip it rather than guess."""
+    m = _NAME_DATE_RE.match(path.stem)
+    if not m:
+        return None
+    try:
+        return date(int(m[1]), int(m[2]), int(m[3]))
+    except ValueError:
+        return None
+
+
+def _parse_argdate(s: str, flag: str) -> date:
+    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
+
+
+def load_tracks(paths, decimate_m: float, with_ext: bool = False) -> list[dict]:
+    """Read every .gpx path (discovered and date-filtered by the caller);
+    merge its segments into one polyline each.
     Always record each ride's first->last timestamp span: its duration, shown on the
     title and feeding the calories-burned estimate.  With with_ext, also collect the
     Wahoo telemetry embedded by `wahoo_to_gpx --ext` (power/speed/cadence/hr) per
     point, accumulated over every sample (pre-decimation) so the caller can show an
     accurate average."""
     tracks = []
-    for path in sorted(glob.glob(str(gpx_dir / "*.gpx"))):
+    for path in sorted(paths):
         with open(path, "rb") as fh:
             gpx = gpxpy.parse(fh)
         raw = []                            # (lat, lon, ele) for every point
@@ -551,6 +574,12 @@ def main() -> None:
         description="Render GPX tracks from a folder onto a static map image "
                      "(PNG or PDF).")
     ap.add_argument("--gpx-dir", default=str(GPX_DIR))
+    ap.add_argument("--since", metavar="YYYY-MM-DD", default=None,
+                    help="only render tracks on/after this date (local, read from the "
+                             ".gpx filename); default: no lower bound")
+    ap.add_argument("--until", metavar="YYYY-MM-DD", default=None,
+                    help="only render tracks on/before this date (local, read from the "
+                             ".gpx filename); default: no upper bound")
     ap.add_argument("--out", default=None,
                     help="output file for the combined map "
                          "(default: output/tracks_overview.<format>)")
@@ -573,7 +602,37 @@ def main() -> None:
 
     gpx_dir = Path(args.gpx_dir)
     print(f"trackview - reading *.gpx from {gpx_dir}")
-    tracks = load_tracks(gpx_dir, DECIMATE_M, with_ext=args.ext)
+    paths = sorted(gpx_dir.glob("*.gpx"))
+
+     # date filter: Wahoo-style .gpx names carry the ride start date (local) in the
+     # stem, so --since/--until select by that (mirrors wahoo_to_gpx.py).  A name with
+     # no date is skipped (never guessed) when a bound is active.
+    lo = _parse_argdate(args.since, "--since") if args.since else None
+    hi = _parse_argdate(args.until, "--until") if args.until else None
+    if lo or hi:
+        lo_s = lo.isoformat() if lo else "any"
+        hi_s = hi.isoformat() if hi else "any"
+        kept, out_of_range, undated = [], [], []
+        for p in paths:
+            rd = _ride_date(p)
+            if rd is None:
+                undated.append(p)
+            elif (lo and rd < lo) or (hi and rd > hi):
+                out_of_range.append(p)
+            else:
+                kept.append(p)
+        paths = kept
+        for p in undated:
+            print(f"  skip (date not in filename): {p.name}")
+        n_total = len(kept) + len(out_of_range) + len(undated)
+        if out_of_range:
+            print(f"    --since/--until: {len(kept)}/{n_total} track(s) in range "
+                  f"{lo_s}..{hi_s}")
+        if not paths:
+            print(f"No tracks within {lo_s}..{hi_s} - nothing to render.")
+            return
+
+    tracks = load_tracks(paths, DECIMATE_M, with_ext=args.ext)
     if not tracks:
         print("No *.gpx files found - nothing to render.")
         return

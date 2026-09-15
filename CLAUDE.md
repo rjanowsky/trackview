@@ -38,6 +38,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
 .venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr + calories burned (kcal) in the title
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
+.venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
+.venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -51,6 +53,9 @@ efficiency), `--split`
   Wahoo-style stem, else the name.  The default renders all tracks onto one
   combined map).  Ride duration (`Hh MMm`) is always on the title, between the
   distance and the elevation gain (total across the tracks when combined).
+  `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose ride date
+  (read from the Wahoo-style filename stem) falls in the range — mirroring
+  `wahoo_to_gpx --since/--until`; a filename with no date is skipped when a bound is set.
 
 ## Wahoo -> GPX (`wahoo_to_gpx.py`)
 
@@ -98,7 +103,9 @@ syntax-check with `.venv/bin/python -c "import ast; ast.parse(open('trackview.py
 
 Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 
-1. `load_tracks()` — parse each `*.gpx` with `gpxpy`, flatten all
+1. `main()` discovers `*.gpx` and applies the `--since`/`--until` date filter
+   (by filename stem, via `_ride_date`/`_parse_argdate`); `load_tracks(paths)`
+   then parses each remaining file with `gpxpy`, flattening all
    track→segment→point into one `(lat, lon, ele)` list per file.
 2. `decimate()` — drop points closer than `DECIMATE_M` (5 m) apart to cut
    ~68k points/file down to a few thousand. First and last points are always kept.

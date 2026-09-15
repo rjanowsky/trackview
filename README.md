@@ -33,6 +33,8 @@ python trackview.py --zoom 13          # override the auto-chosen zoom
 python trackview.py --no-elev          # flat per-track colour instead of elevation
 python trackview.py --ext              # avg power/speed/cadence/hr + calories burned (kcal) in the title
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
+python trackview.py --since 2026-09-08     # only tracks on/after a date (from the .gpx filename)
+python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
 ```
 
 ## Output
@@ -63,6 +65,11 @@ python trackview.py --no-map             # skip the map image; just compute the 
   doesn't carry.
 
 - `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
+- **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose
+  ride date falls in the range — read from the Wahoo-style filename stem (e.g.
+  `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`
+  filters.  A track whose filename carries no date is skipped (never guessed) whenever a
+  bound is active.
 
 ## Base-map providers (`--style`)
 
