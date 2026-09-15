@@ -32,6 +32,7 @@ python trackview.py --style terrain    # Esri shaded-relief
 python trackview.py --zoom 13          # override the auto-chosen zoom
 python trackview.py --no-elev          # flat per-track colour instead of elevation
 python trackview.py --ext              # avg power/speed/cadence/hr + calories burned (kcal) in the title
+python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
 ```
 
 ## Output
@@ -60,6 +61,8 @@ python trackview.py --ext              # avg power/speed/cadence/hr + calories b
   the calories-burned total and avg power / speed / cadence / hr when `--ext`), closing
   with a single **Summary** row of the totals/averages.  A `-` marks a metric a ride
   doesn't carry.
+
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
 
 ## Base-map providers (`--style`)
 

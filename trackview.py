@@ -14,6 +14,7 @@ Usage:
     python trackview.py --zoom 15      # override the auto-chosen zoom
     python trackview.py --no-elev      # flat colour instead of elevation shading
     python trackview.py --ext          # add avg power/speed/cadence/hr + calories burned (kcal) to the title
+    python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
 """
 from __future__ import annotations
 
@@ -563,6 +564,11 @@ def main() -> None:
     ap.add_argument("--ext", action="store_true",
                     help="add the calories-burned total (kcal) to the title and an avg "
                            "power/speed/cadence/hr line below it, from wahoo_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
+    ap.add_argument("--no-map", action="store_true",
+                    help="skip map/image generation (no basemap fetch or output "
+                            "image); just compute the stats and write the ride-log to "
+                            "stats/.   The map-only flags --out/--format/--style/--zoom/"
+                            "--split/--no-elev are then ignored)")
     args = ap.parse_args()
 
     gpx_dir = Path(args.gpx_dir)
@@ -579,20 +585,23 @@ def main() -> None:
         print(f"    - {t['name']:<20s} {t['dist_km']:6.1f} km    "
               f"+{t['gain_m']:6.0f} m    {t['n']:>6,} -> {t['ndec']:>5,} pts")
 
-    color_by_elev = not args.no_elev
-    out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.split:
-        for t in tracks:
-            out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
-            render([t], style=args.style, out_path=out_path, zoom=args.zoom,
-                   color_by_elev=color_by_elev, show_ext=args.ext, split=True)
+    if args.no_map:
+        print("      --no-map: skipping map generation (stats + ride-log only)")
     else:
-        out_path = (Path(args.out) if args.out is not None
-                    else out_dir / f"tracks_overview.{args.format}")
-        render(tracks, style=args.style, out_path=out_path, zoom=args.zoom,
-               color_by_elev=color_by_elev, show_ext=args.ext)
+        color_by_elev = not args.no_elev
+        out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        if args.split:
+            for t in tracks:
+                out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
+                render([t], style=args.style, out_path=out_path, zoom=args.zoom,
+                       color_by_elev=color_by_elev, show_ext=args.ext, split=True)
+        else:
+            out_path = (Path(args.out) if args.out is not None
+                        else out_dir / f"tracks_overview.{args.format}")
+            render(tracks, style=args.style, out_path=out_path, zoom=args.zoom,
+                   color_by_elev=color_by_elev, show_ext=args.ext)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
      # the two title headers' stats as a table, one row per ride, plus a totals row
