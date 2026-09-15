@@ -268,7 +268,8 @@ def _distance_and_gain(points) -> tuple[float, float]:
         dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
         dy = (la1 - la0) * 110540.0
         dist += math.hypot(dx, dy)
-        gain += max(0.0, e1 - e0)
+        if e0 is not None and e1 is not None:   # some GPX points omit elevation
+            gain += max(0.0, e1 - e0)
     return dist / 1000.0, gain
 
 
@@ -315,7 +316,7 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
     if zoom is None:
         zoom = choose_zoom(bbox)
 
-    elev = [e for t in tracks for e in t["ele"]]
+    elev = [e for t in tracks for e in t["ele"] if e is not None]
     elev_min, elev_max = (min(elev), max(elev)) if elev else (0.0, 1.0)
     have_elev = (elev_max - elev_min) > 1.0 and color_by_elev
 
@@ -336,8 +337,14 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
         halo.set_zorder(4)
         ax.add_collection(halo)
         if have_elev:
-            ec = [(t["ele"][j] + t["ele"][j + 1]) / 2 for j in range(len(t["ele"]) - 1)]
-            lc = LineCollection(seg, cmap=CMAPEL, norm=norm, linewidths=2.4, alpha=0.95)
+             # some GPX points omit elevation -> shade only the segments that
+             # have it on both ends (the white halo still covers the whole track)
+            ok = [j for j in range(len(t["ele"]) - 1)
+                  if t["ele"][j] is not None and t["ele"][j + 1] is not None]
+            seg_e = [[t["merc"][j], t["merc"][j + 1]] for j in ok]
+            ec = [(t["ele"][j] + t["ele"][j + 1]) / 2 for j in ok]
+            lc = LineCollection(seg_e, cmap=CMAPEL, norm=norm,
+                               linewidths=2.4, alpha=0.95)
             lc.set_array(ec)
         else:
             # bold, distinct colour per track so routes stand out on the basemap
