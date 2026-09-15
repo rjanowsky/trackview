@@ -497,23 +497,38 @@ def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
     print(f"  wrote {out_path}")
 
 
-def _load_basemap(ax, bbox, order, zoom, min_var: float = 1.0) -> str:
+def _load_basemap(ax, bbox, order, zoom, min_var: float = 1.0,
+                  retries: int = 3, backoff_s: float = 2.0) -> str:
     """Fall back through tile providers until one shows real tiles.
-    A failed or blank fetch (near-zero pixel variance) triggers the
-    next provider after a short, polite delay."""
+    A transient fetch failure (a reset or closed connection, common when many
+    tiles are pulled at once) is retried a few times with growing backoff; a
+    blank fetch (near-zero pixel variance) or an empty response then moves on to
+    the next provider, each after a short, polite delay."""
     for key in order:
         ax.clear()
         ax.set_xlim(bbox[0], bbox[2])
         ax.set_ylim(bbox[1], bbox[3])
         ax.set_aspect("equal")
-        try:
-            cx.add_basemap(ax, zoom=zoom, source=SOURCES[key],
-                           headers={"User-Agent": USER_AGENT},
-                           reset_extent=False)
-        except Exception as exc:                      # pragma: no cover
-            print(f"  base-map '{key}' failed: {type(exc).__name__}: {exc}")
+        loaded = False
+        for attempt in range(1, retries + 1):
+            try:
+                cx.add_basemap(ax, zoom=zoom, source=SOURCES[key],
+                               headers={"User-Agent": USER_AGENT},
+                               reset_extent=False)
+                loaded = True
+                break
+            except Exception as exc:                # pragma: no cover
+                if attempt < retries:
+                    delay = backoff_s * (2 ** (attempt - 1))
+                    print(f"  base-map '{key}' attempt {attempt}/{retries} failed "
+                          f"({type(exc).__name__}); retrying in {delay:.0f}s")
+                    time.sleep(delay)
+                else:
+                    print(f"  base-map '{key}' failed after {retries} attempts: "
+                          f"{type(exc).__name__}: {exc}")
+        if not loaded:
             time.sleep(2)
-            continue
+            continue                               # give up on this provider, try the next
         if ax.images:
             arr = np.asarray(ax.images[0].get_array()).astype(float)
             var = float(arr.var())
