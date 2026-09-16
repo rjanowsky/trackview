@@ -35,6 +35,8 @@ python trackview.py --ext              # avg power/speed/cadence/hr + calories b
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
 python trackview.py --since 2026-09-08     # only tracks on/after a date (from the .gpx filename)
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
+python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
+python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 ```
 
 ## Output
@@ -63,6 +65,12 @@ python trackview.py --until 2026-09-05     # only tracks on/before a date (from 
   the calories-burned total and avg power / speed / cadence / hr when `--ext`), closing
   with a single **Summary** row of the totals/averages.  A `-` marks a metric a ride
   doesn't carry.
+- With `--csv`, the same columns are also written to `stats/trackview-<first>_<last>.csv`
+  — a header row plus one data row per ride, but **no** title or Summary row (header and
+  data only).  The field delimiter is `--csv-delimiter` (default `;`, the European/Excel
+  default; e.g. `,`).  Numbers are decimal-normalised for the CSV (no padding, no
+  thousands grouping, unlike the `.txt` table); any field that genuinely contains the
+  delimiter (e.g. a comma in a ride name) is quoted, keeping the file valid CSV.
 
 - `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
 - **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose

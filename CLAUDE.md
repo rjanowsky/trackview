@@ -40,6 +40,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
 .venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
+.venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
+.venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -115,6 +117,8 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
    and save the PNG.
 5. `main()` — CLI wiring, per-track summary printout, and `write_stats()` which
    writes a ride-log table to `stats/` (one row per ride + a Summary totals row).
+   With `--csv`, `write_csv()` also writes the same columns to a `stats/` CSV — a
+   header row plus one data row per ride, but *no* Summary row.
 
 Key non-obvious details:
 
@@ -150,6 +154,14 @@ Key non-obvious details:
   skips the `render()`/basemap step (no image, no network fetch — the map-only
   flags `--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev` are then
   no-ops) but still runs this stats write, so a stats-only run is possible.
+- **CSV ride-log** (`--csv`, `write_csv`): also writes
+   `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
+   (shared via `_stats_columns`), but just a header row + one data row per ride,
+   with **no** title/rules/Summary row.  The field delimiter is `--csv-delimiter`
+   (default `;`, the European/Excel default; e.g. `,`).  Numbers are decimal-
+   normalised for the CSV (no column padding, no thousands grouping — the shared
+   formatters keep both for the `.txt` table), so the stdlib `csv` module only ever
+   quotes a field that genuinely contains the delimiter (e.g. a comma in a ride name).
 
 ## Basemap providers (`--style`)
 

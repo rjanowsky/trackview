@@ -17,10 +17,13 @@ Usage:
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
     python trackview.py --since 2026-09-08    # only tracks on/after a date (from the .gpx filename)
     python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
+    python trackview.py --csv                # also write a CSV ride-log (header + rows, no totals) to stats/
+    python trackview.py --csv --csv-delimiter ,    # comma-separated instead of the default ';'
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import os
 import re
@@ -455,17 +458,17 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
     print(f"  wrote {out_path}    ({out_path.stat().st_size // 1024} KB)")
 
 
-def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
-    """Write one ride-log table to out_path: a row per ride carrying the two title
-    headers' stats (distance, duration, gain; plus calories + avg power/speed/
-    cadence/hr under --ext), closing with a row that sums them.  A "-" marks a
-    metric a ride does not carry (e.g. a plain komoot track, no telemetry)."""
-    total_km    = sum(t["dist_km"] for t in tracks)
-    total_gain  = sum(t["gain_m"] for t in tracks)
-    total_dur   = sum(t.get("duration_s", 0.0) for t in tracks)
-    total_cal   = _calories_burned(tracks) if show_ext else None
+def _stats_columns(tracks, show_ext: bool) -> list:
+    """The ride-log columns shared by write_stats() and write_csv(): each is a
+    (header, numeric?, per-ride formatter, summary cell) tuple.  The calories-burned
+    and avg power/speed/cadence/hr columns appear only under --ext; a per-ride cell of
+    "-" still marks a metric that ride lacks (e.g. a plain komoot track)."""
+    total_km = sum(t["dist_km"] for t in tracks)
+    total_gain = sum(t["gain_m"] for t in tracks)
+    total_dur = sum(t.get("duration_s", 0.0) for t in tracks)
+    total_cal = _calories_burned(tracks) if show_ext else None
 
-     # (column header, numeric?, per-ride formatter, summary cell)
+    # (column header, numeric?, per-ride formatter, summary cell)
     cols = [
         ("Ride", False, lambda t: _title_name(t["name"]), "Summary"),
         ("Dist (km)", True,
@@ -494,11 +497,19 @@ def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
              lambda t: _fmt_num(_metric_avg_track(t, "hr"), "3.0f"),
              _fmt_num(_metric_avg(tracks, "hr"), "3.0f")),
         ]
+    return cols
 
-    rows    = [[c[2](t) for c in cols] for t in tracks]
+
+def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
+    """Write one ride-log table to out_path: a row per ride carrying the two title
+    headers' stats (distance, duration, gain; plus calories + avg power/speed/
+    cadence/hr under --ext), closing with a row that sums them.  A "-" marks a
+    metric a ride does not carry (e.g. a plain komoot track, no telemetry)."""
+    cols = _stats_columns(tracks, show_ext)
+    rows = [[c[2](t) for c in cols] for t in tracks]
     summary = [c[3] for c in cols]
 
-     # each column is as wide as its widest cell (header, a ride row, the summary)
+    # each column is as wide as its widest cell (header, a ride row, the summary)
     widths = [max(len(c[0]), len(summary[i]), *(len(r[i]) for r in rows))
               for i, c in enumerate(cols)]
 
@@ -518,6 +529,33 @@ def write_stats(tracks, out_path: Path, show_ext: bool) -> None:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  wrote {out_path}")
+
+
+def write_csv(tracks, out_path: Path, show_ext: bool, delimiter: str = ";") -> None:
+    """Write a CSV ride-log to out_path: just a header row and one data row per
+    ride - the same columns as the stats ride-log, but with no title, rules or
+    totals row.   Numeric fields are decimal-normalised for the CSV (no column
+    padding, no thousands grouping), unlike the .txt table; a field that contains
+    `delimiter` (default ';', the European/Excel default) is still quoted by the csv
+    module, and a "-" still marks a metric a ride lacks."""
+    cols = _stats_columns(tracks, show_ext)
+    head = [c[0] for c in cols]
+
+      # the shared per-ride formatters are tuned for the .txt table (column padding +
+      # a thousands comma); the CSV wants bare decimals, so drop the padding and the
+      # grouping comma from the numeric cells only, keeping the "-" marker for a ride
+      # that lacks a metric (ride names / the duration string are left as-is).
+    def clean(cell: str, numeric: bool) -> str:
+        return cell if (not numeric or cell == "-") else cell.replace(",", "").strip()
+
+    rows = [[clean(c[2](t), c[1]) for c in cols] for t in tracks]
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh, delimiter=delimiter, lineterminator="\n")
+        w.writerow(head)
+        w.writerows(rows)
     print(f"  wrote {out_path}")
 
 
@@ -598,7 +636,17 @@ def main() -> None:
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--zoom/"
                             "--split/--no-elev are then ignored)")
+    ap.add_argument("--csv", action="store_true",
+                    help="also write a CSV ride-log to stats/ (a header row + one row "
+                              "per ride, the same columns as the ride-log but no totals "
+                              "row); its field delimiter is --csv-delimiter")
+    ap.add_argument("--csv-delimiter", default=";",
+                    help="field delimiter for the --csv file (default ';', the "
+                              "European/Excel default); e.g. ',' for comma-separated")
     args = ap.parse_args()
+
+    if args.csv and not args.csv_delimiter:
+        raise SystemExit("error: --csv-delimiter must be a non-empty character")
 
     gpx_dir = Path(args.gpx_dir)
     print(f"trackview - reading *.gpx from {gpx_dir}")
@@ -669,6 +717,12 @@ def main() -> None:
     label  = _safe_filename(f"{first}_{last}")
     stats_path = STATS_DIR / f"trackview-{label}.txt"
     write_stats(tracks, stats_path, show_ext=args.ext)
+
+     # --csv: the same ride-log as CSV (header + one row per ride, no totals row),
+     # written next to the .txt; the field delimiter is --csv-delimiter (default ';')
+    if args.csv:
+        csv_path = STATS_DIR / f"trackview-{label}.csv"
+        write_csv(tracks, csv_path, show_ext=args.ext, delimiter=args.csv_delimiter)
 
 if __name__ == "__main__":
     main()
