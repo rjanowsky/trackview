@@ -19,6 +19,7 @@ Usage:
     python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
     python trackview.py --csv                # also write a CSV ride-log (header + rows, no totals) to stats/
     python trackview.py --csv --csv-delimiter ,    # comma-separated instead of the default ';'
+    python trackview.py --sparse               # quiet stdout: skip the per-track stats listing
 """
 from __future__ import annotations
 
@@ -695,6 +696,11 @@ def main() -> None:
     ap.add_argument("--csv-delimiter", default=";",
                     help="field delimiter for the --csv file (default ';', the "
                               "European/Excel default); e.g. ',' for comma-separated")
+    ap.add_argument("--sparse", action="store_true",
+                    help="quiet stdout: skip the per-track stats listing (one line per "
+                             "read ride); print only the summary lines - where it reads, "
+                             "the track count, and the files written (plus any date-filter "
+                              "skips when --since/--until is active)")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
@@ -740,9 +746,10 @@ def main() -> None:
     print(f"   {len(tracks)} track(s), "
           f"{sum(t['n'] for t in tracks):,} pts -> "
           f"{sum(t['ndec'] for t in tracks):,} after {DECIMATE_M:.0f} m decimation")
-    for t in tracks:
-        print(f"    - {t['name']:<20s} {t['dist_km']:6.1f} km    "
-              f"+{t['gain_m']:6.0f} m    {t['n']:>6,} -> {t['ndec']:>5,} pts")
+    if not args.sparse:
+        for t in tracks:
+            print(f"     - {t['name']:<20s} {t['dist_km']:6.1f} km     "
+                  f"+{t['gain_m']:6.0f} m     {t['n']:>6,} -> {t['ndec']:>5,} pts")
 
     if args.no_map:
         print("      --no-map: skipping map generation (stats + ride-log only)")

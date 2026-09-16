@@ -37,6 +37,7 @@ python trackview.py --since 2026-09-08     # only tracks on/after a date (from t
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
+python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
 ## Output
@@ -76,6 +77,10 @@ python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the d
   is quoted, keeping the file valid CSV.
 
 - `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
+- **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
+  one line per read ride) and prints only the summary lines — where it reads, the track
+  count / point totals, the files written, and any `--since`/`--until` skips.  The
+  ride-log and CSV files are unaffected.
 - **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose
   ride date falls in the range — read from the Wahoo-style filename stem (e.g.
   `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`

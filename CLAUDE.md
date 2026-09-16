@@ -42,6 +42,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
 .venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
+.venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -115,11 +116,12 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 4. `render()` — fetch the raster basemap, overlay each track (white halo underlay
    + colour ramp), add start/stop markers, legend, colourbar, title, attribution,
    and save the PNG.
-5. `main()` — CLI wiring, per-track summary printout, and `write_stats()` which
-   writes a ride-log table to `stats/` (one row per ride, each tagged with its device
-   type, plus one `Summary` totals row per device type).  With `--csv`, `write_csv()`
-   also writes the same columns to a `stats/` CSV — a header row plus one data row per
-   ride, but *no* per-device Summary rows.
+5. `main()` — CLI wiring, per-track summary printout (`--sparse` skips it, leaving just
+   the summary lines: where it reads, the track/point totals, files written, and any date-filter skips), and
+   `write_stats()` which writes a ride-log table to `stats/` (one row per ride, each
+   tagged with its device type, plus one `Summary` totals row per device type).  With
+   `--csv`, `write_csv()` also writes the same columns to a `stats/` CSV — a header row
+   plus one data row per ride, but *no* per-device Summary rows.
 
 Key non-obvious details:
 
