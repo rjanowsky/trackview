@@ -86,6 +86,8 @@ ATTRIBUTION = {
 
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
 EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for zoom
+ZOOM_MIN  = 10                       # auto-chosen zoom never zooms out below this level
+ZOOM_MAX  = 16                       # auto-chosen zoom never zooms in past this level
 JOULES_PER_KCAL = 4184.0        # 1 dietary "kcal" (as on food labels) = 4184 J
 METABOLIC_EFFICIENCY = 0.25     # only ~25% of food energy -> pedal work; rest is heat
 
@@ -334,7 +336,7 @@ def _distance_and_gain(points) -> tuple[float, float]:
     return dist / 1000.0, gain
 
 
-def choose_zoom(bbox, target_px: float = 1600.0, zmin: int = 10, zmax: int = 16) -> int:
+def choose_zoom(bbox, target_px: float = 1600.0, zmin: int = ZOOM_MIN, zmax: int = ZOOM_MAX) -> int:
     """Pick a tile zoom so the bbox spans roughly target_px pixels."""
     w_m = bbox[2] - bbox[0]
     z = math.log2(EQUATOR * target_px / (256.0 * w_m))
@@ -677,7 +679,11 @@ def main() -> None:
     ap.add_argument("--format", choices=["png", "pdf"], default="png",
                     help="image format for the auto-named / split outputs")
     ap.add_argument("--style", choices=list(SOURCES), default="osm")
-    ap.add_argument("--zoom", type=int, default=None, help="override auto zoom")
+    ap.add_argument("--zoom", type=int, default=None,
+                    help=f"basemap tile zoom: higher = closer / more detail, lower = "
+                             f"wider / less detail.  Default: auto-chosen so the track's "
+                             f"bbox fills the image, clamped to levels {ZOOM_MIN}-{ZOOM_MAX} "
+                             f"(pass an int to override the auto choice)")
     ap.add_argument("--no-elev", action="store_true", help="flat colour, not elevation")
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
