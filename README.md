@@ -60,17 +60,20 @@ python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the d
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
 - Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt`
-  (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row
+   (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row
   per ride with the same stats as the two title lines (distance, duration, gain — plus
-  the calories-burned total and avg power / speed / cadence / hr when `--ext`), closing
-  with a single **Summary** row of the totals/averages.  A `-` marks a metric a ride
-  doesn't carry.
-- With `--csv`, the same columns are also written to `stats/trackview-<first>_<last>.csv`
-  — a header row plus one data row per ride, but **no** title or Summary row (header and
-  data only).  The field delimiter is `--csv-delimiter` (default `;`, the European/Excel
-  default; e.g. `,`).  Numbers are decimal-normalised for the CSV (no padding, no
-  thousands grouping, unlike the `.txt` table); any field that genuinely contains the
-  delimiter (e.g. a comma in a ride name) is quoted, keeping the file valid CSV.
+  the calories-burned total and avg power / speed / cadence / hr when `--ext`), plus its
+  **device type** (from the GPX `Device:` line) as the last column, closing with a
+  totals/averages **per device type** (device name in the Device column).  A `-` marks a
+  metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot
+  track) reads as `unknown`.
+- With `--csv`, the same columns (the ride stats plus a trailing device type) are also written to
+  `stats/trackview-<first>_<last>.csv` — a header row plus one data row per ride, but
+  **no** title or per-device Summary rows (header and data only).  The field delimiter
+  is `--csv-delimiter` (default `;`, the European/Excel default; e.g. `,`).  Numbers are
+  decimal-normalised for the CSV (no padding, no thousands grouping, unlike the `.txt`
+  table); any field that genuinely contains the delimiter (e.g. a comma in a ride name)
+  is quoted, keeping the file valid CSV.
 
 - `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
 - **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose

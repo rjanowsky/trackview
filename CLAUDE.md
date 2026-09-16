@@ -116,9 +116,10 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
    + colour ramp), add start/stop markers, legend, colourbar, title, attribution,
    and save the PNG.
 5. `main()` — CLI wiring, per-track summary printout, and `write_stats()` which
-   writes a ride-log table to `stats/` (one row per ride + a Summary totals row).
-   With `--csv`, `write_csv()` also writes the same columns to a `stats/` CSV — a
-   header row plus one data row per ride, but *no* Summary row.
+   writes a ride-log table to `stats/` (one row per ride, each tagged with its device
+   type, plus one `Summary` totals row per device type).  With `--csv`, `write_csv()`
+   also writes the same columns to a `stats/` CSV — a header row plus one data row per
+   ride, but *no* per-device Summary rows.
 
 Key non-obvious details:
 
@@ -145,19 +146,24 @@ Key non-obvious details:
 - The `gpx/` input, `output/` and `stats/` are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
 - **Ride-log stats table** (`write_stats`): every run writes
-   `stats/trackview-<first>_<last>.txt`, where `<first>`/`<last>` are the earliest
+    `stats/trackview-<first>_<last>.txt`, where `<first>`/`<last>` are the earliest
   and latest ride dates — `tracks[0]`/`tracks[-1]` via `_title_name` (the glob is
   date-sorted, so these are the first/last rides); one ride's date repeats for a
-  single-track run.  Columns mirror the two title lines; the calories-burned and
-  avg power/speed/cadence/hr columns appear only under `--ext` (and a `-` marks a
-  metric a ride lacks), ending in a `Summary` totals/averages row.  `--no-map`
+  single-track run.  Each ride row carries the ride stats plus its **device type**, the
+  last column (from the GPX `Device:` line, parsed by `_device_type`; a track with none
+  reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
+  device type** (`_device_groups` groups the rides; that device's name, shown last, in the
+  Device column).  Columns mirror the two title
+  lines; the calories-burned and avg power/speed/cadence/hr columns appear only under
+    `--ext` (and a `-` marks a metric a ride lacks).    `--no-map`
   skips the `render()`/basemap step (no image, no network fetch — the map-only
   flags `--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev` are then
   no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
-   (shared via `_stats_columns`), but just a header row + one data row per ride,
-   with **no** title/rules/Summary row.  The field delimiter is `--csv-delimiter`
+   (incl. the Device column, shared via `_stats_columns`), but just a header row + one
+   data row per ride, with **no** title/rules/per-device Summary rows (those totals live
+   only in the `.txt`).  The field delimiter is `--csv-delimiter`
    (default `;`, the European/Excel default; e.g. `,`).  Numbers are decimal-
    normalised for the CSV (no column padding, no thousands grouping — the shared
    formatters keep both for the `.txt` table), so the stdlib `csv` module only ever
