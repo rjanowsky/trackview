@@ -145,6 +145,14 @@ Key non-obvious details:
 - **Elevation shading** is off when the total elevation range is ≤ 1 m or when
   `--no-elev` is passed; in that case tracks get flat distinct colours from a
   resampled `tab10` cmap instead of a `terrain` ramp + colourbar.
+- **Stationary-trainer tracks are suppressed from the map only.** Before
+   `render()`, `main()` drops any track whose `Device:` line matches
+   `SUPPRESSED_RENDER_DEVICES` (currently `{"Kickr Snap"}` — a smart trainer logs a
+   fixed location, not a route, so it would just clutter the basemap). The split is
+   computed once: the image (combined and `--split`) is built from the remaining
+   tracks, while `write_stats()`/`write_csv()` still use the full set, so a trainer
+   ride is always listed in the ride-log/CSV. A `suppressing N 'Kickr Snap'` line is
+   printed when any are dropped.
 - The `gpx/` input, `output/` and `stats/` are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
 - **Ride-log stats table** (`write_stats`): every run writes

@@ -264,6 +264,13 @@ def _device_groups(tracks) -> list[tuple[str, list]]:
     return [(lbl, groups[lbl]) for lbl in order]
 
 
+# A "Kickr Snap" is a stationary smart trainer: its session has no route of its
+# own, so its points would just clutter the basemap.  Keep such tracks off the
+# rendered image, matched case-sensitively against the trimmed 'Device:' line -
+# they are still listed in the ride-log/CSV (a trainer ride is still a ride).
+SUPPRESSED_RENDER_DEVICES = {"Kickr Snap"}
+
+
 def _parse_argdate(s: str, flag: str) -> date:
     """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
     try:
@@ -764,15 +771,26 @@ def main() -> None:
         out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        if args.split:
-            for t in tracks:
+        # a stationary-trainer 'Kickr Snap' session has no route of its own, so
+        # it would just clutter the basemap; keep such tracks off the image while
+        # the ride-log/CSV still list them (a trainer ride is still a ride)
+        suppressed = [t for t in tracks if t.get("device") in SUPPRESSED_RENDER_DEVICES]
+        render_tracks = [t for t in tracks if t.get("device") not in SUPPRESSED_RENDER_DEVICES]
+        if suppressed:
+            print(f"      suppressing {len(suppressed)} 'Kickr Snap' track(s) from the map "
+                  f"(still in the ride-log)")
+
+        if not render_tracks:
+            print("      no tracks left to render after suppression.")
+        elif args.split:
+            for t in render_tracks:
                 out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
                 render([t], style=args.style, out_path=out_path, zoom=args.zoom,
                        color_by_elev=color_by_elev, show_ext=args.ext, split=True)
         else:
             out_path = (Path(args.out) if args.out is not None
                         else out_dir / f"tracks_overview.{args.format}")
-            render(tracks, style=args.style, out_path=out_path, zoom=args.zoom,
+            render(render_tracks, style=args.style, out_path=out_path, zoom=args.zoom,
                    color_by_elev=color_by_elev, show_ext=args.ext)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
