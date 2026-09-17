@@ -11,7 +11,7 @@ Usage:
     python trackview.py --format pdf      # write a vector PDF instead of PNG
     python trackview.py --split           # one map file per track (default: all in one)
     python trackview.py --style sat    # Esri satellite base map
-    python trackview.py --zoom 15      # override the auto-chosen zoom
+    python trackview.py --detail 15      # override the auto-chosen detail
     python trackview.py --no-elev      # flat colour instead of elevation shading
     python trackview.py --ext          # add avg power/speed/cadence/hr + calories burned (kcal) to the title
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
@@ -85,9 +85,9 @@ ATTRIBUTION = {
 }
 
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
-EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for zoom
-ZOOM_MIN  = 10                       # auto-chosen zoom never zooms out below this level
-ZOOM_MAX  = 16                       # auto-chosen zoom never zooms in past this level
+EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for detail
+DETAIL_MIN = 10                      # auto-chosen detail never drops below this level
+DETAIL_MAX = 16                      # auto-chosen detail never rises past this level
 JOULES_PER_KCAL = 4184.0        # 1 dietary "kcal" (as on food labels) = 4184 J
 METABOLIC_EFFICIENCY = 0.25     # only ~25% of food energy -> pedal work; rest is heat
 
@@ -343,11 +343,11 @@ def _distance_and_gain(points) -> tuple[float, float]:
     return dist / 1000.0, gain
 
 
-def choose_zoom(bbox, target_px: float = 1600.0, zmin: int = ZOOM_MIN, zmax: int = ZOOM_MAX) -> int:
-    """Pick a tile zoom so the bbox spans roughly target_px pixels."""
+def choose_detail(bbox, target_px: float = 1600.0, dmin: int = DETAIL_MIN, dmax: int = DETAIL_MAX) -> int:
+    """Pick a tile detail level so the bbox spans roughly target_px pixels."""
     w_m = bbox[2] - bbox[0]
-    z = math.log2(EQUATOR * target_px / (256.0 * w_m))
-    return int(round(min(zmax, max(zmin, z))))
+    d = math.log2(EQUATOR * target_px / (256.0 * w_m))
+    return int(round(min(dmax, max(dmin, d))))
 
 
 def fit_aspect(bbox, aspect_wh: float) -> tuple:
@@ -371,7 +371,7 @@ def _safe_filename(name: str) -> str:
 
 
 # --------------------------------- rendering ----------------------------------
-def render(tracks, *, style: str, out_path: Path, zoom: int | None,
+def render(tracks, *, style: str, out_path: Path, detail: int | None,
            color_by_elev: bool, title: str | None = None,
            show_ext: bool = False, split: bool = False) -> None:
     if not tracks:
@@ -383,8 +383,8 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
                       all_merc[:, 0].max(), all_merc[:, 1].max())
     dx, dy = (e0 - w0) * PAD_FRAC, (n0 - s0) * PAD_FRAC
     bbox = fit_aspect((w0 - dx, s0 - dy, e0 + dx, n0 + dy), FIGURE_IN[0] / FIGURE_IN[1])
-    if zoom is None:
-        zoom = choose_zoom(bbox)
+    if detail is None:
+        detail = choose_detail(bbox)
 
     elev = [e for t in tracks for e in t["ele"] if e is not None]
     elev_min, elev_max = (min(elev), max(elev)) if elev else (0.0, 1.0)
@@ -394,7 +394,7 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
 
     # --- base map (tried in fallback order) ---
     ordered = [style] + [k for k in SOURCES if k != style]
-    loaded = _load_basemap(ax, bbox, ordered, zoom)
+    loaded = _load_basemap(ax, bbox, ordered, detail)
     attr = ATTRIBUTION.get(loaded, "© OpenStreetMap contributors")
 
     # --- overlay tracks ---
@@ -493,7 +493,7 @@ def render(tracks, *, style: str, out_path: Path, zoom: int | None,
     ax.legend(handles=handles, loc="lower left", framealpha=0.85, fontsize=9)
 
     fig.text(0.006, 0.004, attr, fontsize=7, color="#555")
-    fig.text(0.994, 0.004, f"zoom {zoom}", fontsize=7, color="#555", ha="right")
+    fig.text(0.994, 0.004, f"detail {detail}", fontsize=7, color="#555", ha="right")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=DPI, facecolor="white")
@@ -621,7 +621,7 @@ def write_csv(tracks, out_path: Path, show_ext: bool, delimiter: str = ";") -> N
     print(f"  wrote {out_path}")
 
 
-def _load_basemap(ax, bbox, order, zoom, min_var: float = 1.0,
+def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
                   retries: int = 3, backoff_s: float = 2.0) -> str:
     """Fall back through tile providers until one shows real tiles.
     A transient fetch failure (a reset or closed connection, common when many
@@ -636,7 +636,7 @@ def _load_basemap(ax, bbox, order, zoom, min_var: float = 1.0,
         loaded = False
         for attempt in range(1, retries + 1):
             try:
-                cx.add_basemap(ax, zoom=zoom, source=SOURCES[key],
+                cx.add_basemap(ax, zoom=detail, source=SOURCES[key],    # contextily's kwarg is "zoom" (tile level)
                                headers={"User-Agent": USER_AGENT},
                                reset_extent=False)
                 loaded = True
@@ -686,10 +686,10 @@ def main() -> None:
     ap.add_argument("--format", choices=["png", "pdf"], default="png",
                     help="image format for the auto-named / split outputs")
     ap.add_argument("--style", choices=list(SOURCES), default="osm")
-    ap.add_argument("--zoom", type=int, default=None,
-                    help=f"basemap tile zoom: higher = closer / more detail, lower = "
+    ap.add_argument("--detail", type=int, default=None,
+                    help=f"basemap detail level: higher = closer / more detail, lower = "
                              f"wider / less detail.  Default: auto-chosen so the track's "
-                             f"bbox fills the image, clamped to levels {ZOOM_MIN}-{ZOOM_MAX} "
+                             f"bbox fills the image, clamped to levels {DETAIL_MIN}-{DETAIL_MAX} "
                              f"(pass an int to override the auto choice)")
     ap.add_argument("--no-elev", action="store_true", help="flat colour, not elevation")
     ap.add_argument("--split", action="store_true",
@@ -700,7 +700,7 @@ def main() -> None:
     ap.add_argument("--no-map", action="store_true",
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
-                            "stats/.   The map-only flags --out/--format/--style/--zoom/"
+                            "stats/.   The map-only flags --out/--format/--style/--detail/"
                             "--split/--no-elev are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
@@ -785,12 +785,12 @@ def main() -> None:
         elif args.split:
             for t in render_tracks:
                 out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
-                render([t], style=args.style, out_path=out_path, zoom=args.zoom,
+                render([t], style=args.style, out_path=out_path, detail=args.detail,
                        color_by_elev=color_by_elev, show_ext=args.ext, split=True)
         else:
             out_path = (Path(args.out) if args.out is not None
                         else out_dir / f"tracks_overview.{args.format}")
-            render(render_tracks, style=args.style, out_path=out_path, zoom=args.zoom,
+            render(render_tracks, style=args.style, out_path=out_path, detail=args.detail,
                    color_by_elev=color_by_elev, show_ext=args.ext)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding

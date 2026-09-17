@@ -34,7 +34,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --format pdf            # vector PDF instead of PNG
 .venv/bin/python trackview.py --split                 # one map file per track (default: all in one)
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
-.venv/bin/python trackview.py --zoom 13             # override auto-chosen zoom
+.venv/bin/python trackview.py --detail 13             # override auto-chosen detail
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
 .venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr + calories burned (kcal) in the title
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
@@ -128,7 +128,7 @@ Key non-obvious details:
 - **Two different projection constants are used on purpose.** `PI_R`
   (`20037508.34` = π·R) scales the x/y Mercator coordinates; `EQUATOR`
   (`40075016.68` = 2π·R, the equatorial circumference) is used *only* for the
-  zoom calculation in `choose_zoom()`. Do not "unify" them — the coordinate
+  detail calculation in `choose_detail()`. Do not "unify" them — the coordinate
   scaling must use π·R, not 2π·R.
 - **Distance and elevation gain** (`_distance_and_gain`, and `decimate`) use an
   **equirectangular approximation** (local lat/lon → metre conversion with a
@@ -167,7 +167,7 @@ Key non-obvious details:
   lines; the calories-burned and avg power/speed/cadence/hr columns appear only under
     `--ext` (and a `-` marks a metric a ride lacks).    `--no-map`
   skips the `render()`/basemap step (no image, no network fetch — the map-only
-  flags `--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev` are then
+  flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev` are then
   no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log

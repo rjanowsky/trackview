@@ -29,7 +29,7 @@ python trackview.py --format pdf           # vector PDF instead of PNG
 python trackview.py --split                # one map file per track (default: all in one)
 python trackview.py --style sat        # Esri satellite base map
 python trackview.py --style terrain    # Esri shaded-relief
-python trackview.py --zoom 13          # override the auto-chosen zoom
+python trackview.py --detail 13          # override the auto-chosen detail
 python trackview.py --no-elev          # flat per-track colour instead of elevation
 python trackview.py --ext              # avg power/speed/cadence/hr + calories burned (kcal) in the title
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
@@ -43,7 +43,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
 ## Output
 
 - **Format** `--format {png,pdf}` (default `png`): PNG is a raster image; PDF is a
-  vector file (crisp at any zoom, small, good for print).
+  vector file (crisp at any detail, small, good for print).
 - **Combined vs split** `--split` writes one map file *per track*, named after its
   GPX file with spaces made filesystem-safe (e.g.
   `2026-09-07_3264766585_2026-09-07_11_45.png`). By default every track is drawn
@@ -76,7 +76,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   table); any field that genuinely contains the delimiter (e.g. a comma in a ride name)
   is quoted, keeping the file valid CSV.
 
-- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--zoom`/`--split`/`--no-elev`) are ignored when it is set.
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`) are ignored when it is set.
 - **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The
