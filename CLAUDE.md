@@ -36,7 +36,9 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
 .venv/bin/python trackview.py --detail 13             # override auto-chosen detail
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
-.venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr + calories burned (kcal) in the title
+.venv/bin/python trackview.py --color-by grade      # shade the route by slope (climbs hot, descents cold)
+.venv/bin/python trackview.py --profile --split     # add an elevation + grade profile panel under each map
+.venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr/temperature + calories burned (kcal)
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
 .venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
@@ -49,13 +51,17 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 
 CLI flags (`argparse`, in `main()`): `--gpx-dir` (default `./gpx`), `--out`
 `--ext` (title shows the
-calories-burned total in kcal plus an avg power/speed/cadence/hr line below it, when the
+calories-burned total in kcal plus an avg power/speed/cadence/hr/temperature line below it, when the
 GPX carries `wahoo_to_gpx --ext` telemetry; calories = avg power x ride duration / ~25%
 efficiency), `--split`
 (one file per track; its title shows the ride date as `YYYY-MM-DD` for a
   Wahoo-style stem, else the name.  The default renders all tracks onto one
   combined map).  Ride duration (`Hh MMm`) is always on the title, between the
   distance and the elevation gain (total across the tracks when combined).
+ `--color-by {elev,grade,flat}` (default `elev`; `--no-elev` is a shorthand for `flat`)
+  shades each route by the chosen metric (elevation ramp, a symmetric diverging grade
+  ramp with climbs hot / descents cold, or flat distinct colours); `--profile` adds an
+  elevation + grade vs. distance panel under each map (needs `--split`, or a single track).
   `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose ride date
   (read from the Wahoo-style filename stem) falls in the range — mirroring
   `wahoo_to_gpx --since/--until`; a filename with no date is skipped when a bound is set.
@@ -89,12 +95,9 @@ Non-obvious Wahoo quirks the converter handles (and why):
 - `gpxpy.parse()` (1.6.2) must be handed a **file object or string, not a path**
   (a path string is parsed *as* XML and fails).
 - the two `--ext` flags are **paired**: `wahoo_to_gpx.py --ext` embeds
-  `power`/`speed_kmh`/`cadence`/`heartrate` as un-namespaced `<trkpt><extensions>`
-   children; `trackview.py --ext` reads them back (gpxpy flattens the
-  `<extensions>` children onto `point.extensions`, bare tags) to print an
-   avg power/speed/cadence/hr subtitle plus the calories-burned total on the main
-   title line (kcal = avg power x ride duration / 4184 / ~25% efficiency); absent
-   telemetry is skipped.
+ `power`/`speed_kmh`/`cadence`/`heartrate`/`temperature` (and a `grade` tag the map does *not* use — see below) as un-namespaced `<trkpt><extensions>`
+  children; `trackview.py --ext` reads them back (gpxpy flattens the `<extensions>` children onto `point.extensions`, bare tags) to print an avg power/speed/cadence/hr/temperature subtitle plus the calories-burned total on the main title line (kcal = avg power x ride duration / 4184 / ~25% efficiency); absent telemetry is skipped.
+  Grade, by contrast, is *geometry-derived* (see Colouring modes below), so `--color-by grade` and `--profile` need no telemetry at all.
 
 ## Notes / testing
 
@@ -115,7 +118,9 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 3. `latlon_to_merc()` — project to Web Mercator (EPSG:3857) for plotting.
 4. `render()` — fetch the raster basemap, overlay each track (white halo underlay
    + colour ramp), add start/stop markers, legend, colourbar, title, attribution,
-   and save the PNG.
+   and save the PNG.  With `--profile` a single-track figure instead grows into a
+   2-row `GridSpec` (`height_ratios=[3,1]`): the map on top and a `_draw_profile()`
+   elevation + grade-vs-distance silhouette in a slim panel below.
 5. `main()` — CLI wiring, per-track summary printout (`--sparse` skips it, leaving just
    the summary lines: where it reads, the track/point totals, files written, and any date-filter skips), and
    `write_stats()` which writes a ride-log table to `stats/` (one row per ride, each
@@ -142,9 +147,7 @@ Key non-obvious details:
 - **Rendering is headless** — `matplotlib.use("Agg")` is set before importing
   `pyplot`. The figure is square (`FIGURE_IN = (11, 11)`) and `fit_aspect()`
   grows the bounding box to match the figure aspect so the map is never letter-boxed.
-- **Elevation shading** is off when the total elevation range is ≤ 1 m or when
-  `--no-elev` is passed; in that case tracks get flat distinct colours from a
-  resampled `tab10` cmap instead of a `terrain` ramp + colourbar.
+- **Colouring modes** (`--color-by {elev,grade,flat}`, default `elev`; `--no-elev` is a visible alias for `flat`): each track is shaded by a metric along its path.  Elevation uses the perceptually-uniform `viridis` ramp (`CMAPEL`, dark low end and bright high end both read on a pale basemap, unlike the old light `terrain`); grade uses a **grey-centred** diverging ramp (`CMAPGRADE`, `GRADE_STOPS`) — steep descents blue, steep climbs red, and the 0 % neutral a visible mid-**grey** rather than white, so a flat route stays visible.  The grade norm is **capped robustly** (the `GRADE_CAP_PCT` percentile of |grade|, clamped to `GRADE_CAP_FLOOR`/`GRADE_CAP_CEIL`) so a lone GPS-noise spike can't squash the ramp to its neutral centre.  Every metric-shaded route is under-laid with a subtle **dark outline** (a touch wider than the line) so it pops on the busy basemap; the flat mode keeps a white halo.  `--color-by flat`/`--no-elev` (or `elev` when the total elevation range is ≤ 1 m) gives one bold distinct colour per track instead.  The active mode sets the colourbar and the title's `shaded by …` suffix.
 - **Stationary-trainer tracks are suppressed from the map only.** Before
    `render()`, `main()` drops any track whose `Device:` line matches
    `SUPPRESSED_RENDER_DEVICES` (currently `{"Kickr Snap"}` — a smart trainer logs a
@@ -163,12 +166,8 @@ Key non-obvious details:
   last column (from the GPX `Device:` line, parsed by `_device_type`; a track with none
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
   device type** (`_device_groups` groups the rides; that device's name, shown last, in the
-  Device column).  Columns mirror the two title
-  lines; the calories-burned and avg power/speed/cadence/hr columns appear only under
-    `--ext` (and a `-` marks a metric a ride lacks).    `--no-map`
-  skips the `render()`/basemap step (no image, no network fetch — the map-only
-  flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev` are then
-  no-ops) but still runs this stats write, so a stats-only run is possible.
+  Device column).  Columns mirror the two title lines; under `--ext` two more appear — a **Max grade (%)** (the ride's steepest segment, geometry-derived rather than read from the `grade` extension) and an **Avg temperature (°C)** (from the `temperature` extension) — alongside the calories-burned total and avg power/speed/cadence/hr.  A `-` marks a metric a ride does not carry.  `--no-map`
+  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--profile` are then no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
    (incl. the Device column, shared via `_stats_columns`), but just a header row + one

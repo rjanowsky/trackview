@@ -31,7 +31,9 @@ python trackview.py --style sat        # Esri satellite base map
 python trackview.py --style terrain    # Esri shaded-relief
 python trackview.py --detail 13          # override the auto-chosen detail
 python trackview.py --no-elev          # flat per-track colour instead of elevation
-python trackview.py --ext              # avg power/speed/cadence/hr + calories burned (kcal) in the title
+python trackview.py --color-by grade        # shade the route by slope (climbs red, descents blue, flat grey)
+python trackview.py --profile --split        # add an elevation + grade profile panel under each map
+python trackview.py --ext                  # avg power/speed/cadence/hr/temperature + calories burned (kcal) in the title
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
 python trackview.py --since 2026-09-08     # only tracks on/after a date (from the .gpx filename)
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
@@ -52,22 +54,11 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   other name (e.g. a komoot title) is shown as-is.
 - The file is `output/tracks_overview.<format>` unless overridden with `--out`;
   with `--split` the per-track files go to the same directory.
-- **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title
-  line and an average power / heart rate / speed / cadence line just below it, read
-  from the `<extensions>` that `wahoo_to_gpx --ext` embeds. The calories are
-  estimated as average power times the ride's duration, divided by a ~25% efficiency
-    (the rides carry no calorie field). Tracks without telemetry (e.g. komoot)
-    simply omit both.
+- **Shading / profile** `--color-by {elev,grade,flat}` (default `elev`; `--no-elev` is a shorthand for `flat`) colours each route along its path: an elevation ramp (the perceptually-uniform `viridis`, dark low / bright high so both ends read on a pale basemap) by default, a **grey-centred** diverging grade ramp (steep descents blue, steep climbs red, 0% a visible mid-grey neutral) otherwise, or a flat distinct colour per track.  The grade colour scale is capped at a high percentile of the data so a lone GPS-noise spike can't squash the ramp to its neutral centre, and every metric-shaded route is under-laid with a subtle dark outline so it pops on the busy basemap.  `--profile` adds an elevation + grade vs. distance panel beneath each map (it needs `--split`, or a single track; grade is computed from the track geometry, so it needs no telemetry).
+- **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `wahoo_to_gpx --ext` embeds.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
-- Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt`
-   (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row
-  per ride with the same stats as the two title lines (distance, duration, gain — plus
-  the calories-burned total and avg power / speed / cadence / hr when `--ext`), plus its
-  **device type** (from the GPX `Device:` line) as the last column, closing with a
-  totals/averages **per device type** (device name in the Device column).  A `-` marks a
-  metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot
-  track) reads as `unknown`.
+- Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt` (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row per ride with the same stats as the two title lines (distance, duration, gain — plus the calories-burned total and avg power / speed / cadence / hr / temperature when `--ext`, and a **max grade** column), plus its **device type** (from the GPX `Device:` line) as the last column, closing with a totals/averages **per device type** (device name in the Device column).  A `-` marks a metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot track) reads as `unknown`.
 - With `--csv`, the same columns (the ride stats plus a trailing device type) are also written to
   `stats/trackview-<first>_<last>.csv` — a header row plus one data row per ride, but
   **no** title or per-device Summary rows (header and data only).  The field delimiter
@@ -76,7 +67,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   table); any field that genuinely contains the delimiter (e.g. a comma in a ride name)
   is quoted, keeping the file valid CSV.
 
-- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`) are ignored when it is set.
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--profile`) are ignored when it is set.
 - **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The
