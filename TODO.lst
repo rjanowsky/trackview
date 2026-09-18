@@ -1,0 +1,27 @@
+TODO — planned enhancements for trackview.py
+(short list; not yet implemented)
+
+[1] Honour the --out *filename* in --split mode.
+    Today --split only takes the --out *directory* (out_dir = parent of --out);
+    each per-track file is always named after its GPX stem.  Either use the --out
+    stem as a prefix/pattern, or warn that the filename is ignored in --split mode.
+    (trackview.py: out_dir at ~L918, split branch at ~L938.)
+
+[2] Smooth the per-segment grade line in the profile panel.
+    _draw_profile() plots the raw per-segment grade, which jitters on a noisy GPS
+    trace.  Add a light moving-average (e.g. a few-segment window) or a CLI toggle
+    so the climb/descent silhouette reads cleanly.  (trackview.py: _draw_profile.)
+
+[3] Expose the grade-colour cap as a CLI flag.
+    GRADE_CAP_PCT / GRADE_CAP_FLOOR / GRADE_CAP_CEIL are hardcoded (~L73).  A
+    --grade-cap N (max |grade| %, default the current 3-15 clamp) would let a steep
+    route use its full range without a global percentile fighting a flat one.
+
+[4] Replace the placeholder contact in USER_AGENT.
+    USER_AGENT carries "contact: user@example.com" (~L90) — a real address (or a
+    project URL) would make tile rate-limit complaints actionable.
+
+[5] (optional) Per-track grade colouring on a combined map.
+    The grade norm is computed once across every track in a combined render, so a
+    single very steep ride can desaturate the others.  Consider a per-track norm
+    (or a per-track colourbar) when --color-by grade is used without --split.
