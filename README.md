@@ -32,6 +32,7 @@ python trackview.py --style terrain    # Esri shaded-relief
 python trackview.py --detail 13          # override the auto-chosen detail
 python trackview.py --no-elev          # flat per-track colour instead of elevation
 python trackview.py --color-by grade        # shade the route by slope (climbs red, descents blue, flat grey)
+python trackview.py --color-by grade --grade-cap 8   # pin the grade colour range to +/-8% instead of auto
 python trackview.py --profile --split        # add an elevation + grade profile panel under each map
 python trackview.py --ext                  # avg power/speed/cadence/hr/temperature + calories burned (kcal) in the title
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
@@ -53,8 +54,11 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   `YYYY-MM-DD` (from a Wahoo-style filename stem, e.g. `2026_09_11_08_07_29`); any
   other name (e.g. a komoot title) is shown as-is.
 - The file is `output/tracks_overview.<format>` unless overridden with `--out`;
-  with `--split` the per-track files go to the same directory.
-- **Shading / profile** `--color-by {elev,grade,flat}` (default `elev`; `--no-elev` is a shorthand for `flat`) colours each route along its path: an elevation ramp (the perceptually-uniform `viridis`, dark low / bright high so both ends read on a pale basemap) by default, a **grey-centred** diverging grade ramp (steep descents blue, steep climbs red, 0% a visible mid-grey neutral) otherwise, or a flat distinct colour per track.  The grade colour scale is capped at a high percentile of the data so a lone GPS-noise spike can't squash the ramp to its neutral centre, and every metric-shaded route is under-laid with a subtle dark outline so it pops on the busy basemap.  `--profile` adds an elevation + grade vs. distance panel beneath each map (it needs `--split`, or a single track; grade is computed from the track geometry, so it needs no telemetry).
+  with `--split` the per-track files go to the same directory.  When `--out` is
+  also given in `--split` mode its name is used as a *prefix* for the per-track
+   files (e.g. `--out rides.png` → `rides_<ride>.png`); without `--out` they are
+  just named after the GPX stem.
+- **Shading / profile** `--color-by {elev,grade,flat}` (default `elev`; `--no-elev` is a shorthand for `flat`) colours each route along its path: an elevation ramp (the perceptually-uniform `viridis`, dark low / bright high so both ends read on a pale basemap) by default, a **grey-centred** diverging grade ramp (steep descents blue, steep climbs red, 0% a visible mid-grey neutral) otherwise, or a flat distinct colour per track.  The grade colour scale is capped at a high percentile of the data so a lone GPS-noise spike can't squash the ramp to its neutral centre, and every metric-shaded route is under-laid with a subtle dark outline so it pops on the busy basemap.  On a combined grade map a few rides (≤ 4) each get their *own* colourbar at their own cap, so a single steep ride can't desaturate the others; with more rides, or when you pin the range with `--grade-cap N`, a single shared colourbar is used (a line on stdout says so).  `--profile` adds an elevation + grade vs. distance panel beneath each map (it needs `--split`, or a single track; grade is computed from the track geometry and lightly smoothed, so it needs no telemetry).
 - **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `wahoo_to_gpx --ext` embeds.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
@@ -67,7 +71,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   table); any field that genuinely contains the delimiter (e.g. a comma in a ride name)
   is quoted, keeping the file valid CSV.
 
-- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--profile`) are ignored when it is set.
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`) are ignored when it is set.
 - **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The

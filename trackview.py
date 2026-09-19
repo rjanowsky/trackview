@@ -73,6 +73,10 @@ CMAPGRADE = LinearSegmentedColormap.from_list("grade", GRADE_STOPS)
 GRADE_CAP_PCT    = 98.0     # % of segments inside the (capped) colour range
 GRADE_CAP_FLOOR = 3.0      # min range: an all-flat ride still shows colour
 GRADE_CAP_CEIL   = 15.0     # max range: steeper is rare, clamp the rest
+GRADE_CBAR_MAX = 4.0      # max rides that each get their own grade colourbar on a
+                              # combined map; beyond it a single shared scale is used (and noted)
+GRADE_SMOOTH   = 5.0       # centred moving-average window (segments) for the profile's
+                              # per-segment grade line: GPS jitter makes it noisy otherwise
 # Bold, saturated hues used per track when NOT shaded by elevation, so several
 # routes stay distinct against a busy basemap (paired with the white halo).
 STRONG_COLORS = [
@@ -87,7 +91,10 @@ STRONG_COLORS = [
       "#ffff33",   # yellow
       "#999999",   # grey
 ]
-USER_AGENT  = "trackview/1.0 (static GPX->map renderer; contact: user@example.com)"
+USER_AGENT    = "trackview/1.0 (static GPX->map renderer)"
+ # A contact/URL can be appended here (e.g. " ...; contact: you@...") so a
+ # a tile provider can reach out about rate-limiting; left blank on purpose
+ # rather than ship a dead placeholder address nobody will read.
 
 # Base-map tile providers, tried in order until one loads. OpenStreetMap is the
 # default; the others are fallbacks (OpenTopoMap's contours suit MTB/cycling).
@@ -192,6 +199,14 @@ def _max_grade_group(tracks) -> float | None:
     gs = [v for v in (_max_grade(t) for t in tracks) if v is not None]
     return max(gs) if gs else None
 
+
+def _grade_cap(grades, grade_cap: float | None) -> float:
+    """|grade| colour-range cap: an explicit --grade-cap wins, else the GRADE_CAP_PCT percentile of |grade| clamped to [FLOOR, CEIL] (a GPS-noise spike can't squash the ramp, an all-flat ride still shows colour)."""
+    if grade_cap and grade_cap > 0:
+        return float(grade_cap)
+    a = np.array([abs(g) for g in grades], dtype=float)
+    cap = float(np.percentile(a, GRADE_CAP_PCT)) if a.size else GRADE_CAP_FLOOR
+    return min(max(cap, GRADE_CAP_FLOOR), GRADE_CAP_CEIL)
 
 def _track_calories(t) -> float | None:
     """This ride's 'calories burned' (kcal): avg power (W) x ride duration (s) over 4184 J/kcal and a ~25% efficiency; None without a power average or a ride span."""
@@ -431,6 +446,18 @@ def _safe_filename(name: str) -> str:
 
 
 # --------------------------------- rendering ----------------------------------
+def _moving_avg(arr, window: int) -> "np.ndarray":
+    """Centred moving average over a fixed (odd) window, skipping NaN so a gap just shortens the window (quiet the GPS jitter in a per-segment grade line)."""
+    w = max(1, int(window))
+    half = w // 2
+    out = np.full(len(arr), np.nan)
+    for i in range(len(arr)):
+        seg = arr[max(0, i - half): i + half + 1]
+        good = seg[np.isfinite(seg)]
+        if good.size:
+            out[i] = good.mean()
+    return out
+
 def _draw_profile(ax, t) -> None:
     """Elevation + grade vs. cumulative distance for one track (grade on a twin
       axis): the classic ride-profile silhouette drawn under the map."""
@@ -446,19 +473,53 @@ def _draw_profile(ax, t) -> None:
     ax.set_xlabel("Distance (km)", fontsize=9)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(km[0], km[-1])
-       # grade on a right-hand axis (per-segment, so one fewer point than the profile)
+        # grade on a right-hand axis (per-segment, so one fewer point than the
+        # profile).  A raw per-segment grade jitters on GPS noise, so it is a light
+        # centred moving average over GRADE_SMOOTH segments before it is plotted.
     gr = t.get("grade") or []
-    pairs = [(x, g) for x, g in zip(km[:-1], gr) if g is not None]
-    if pairs:
-        gx, gg = zip(*pairs)
-        axg = ax.twinx()
-        axg.plot(gx, gg, color="#c0392b", lw=0.9, alpha=0.85)
-        axg.set_ylabel("Grade (%)", fontsize=9, color="#c0392b")
+    garr = np.array([(g if g is not None else np.nan) for g in gr], dtype=float)
+    if garr.size and np.isfinite(garr).any():
+        gs = _moving_avg(garr, GRADE_SMOOTH)
+        pairs = [(x, g) for x, g in zip(km[:-1], gs) if np.isfinite(g)]
+        if pairs:
+            gx, gg = zip(*pairs)
+            axg = ax.twinx()
+            axg.plot(gx, gg, color="#c0392b", lw=0.9, alpha=0.85)
+            axg.set_ylabel("Grade (%)", fontsize=9, color="#c0392b")
+
+
+def _short_label(name, width=16) -> str:
+    """Compact per-ride label for a stacked colourbar: _title_name, truncated with an ellipsis so the bar stays narrow."""
+    s = _title_name(name) or str(name)
+    return s if len(s) <= width else s[: width - 1] + "…"
+
+def _stack_grade_colorbars(fig, ax, cmap, norms, labels, unit="Grade (%)"):
+    """One compact vertical colourbar per ride, stacked on the right of the map, each labelled with its ride and a 3-tick range -- a combined grade map shows every ride's own cap."""
+    ap = ax.get_position()
+    n = len(norms)
+    left = ap.x1 + 0.012
+    width = min(0.02, ap.width * 0.03)
+    step = (ap.y1 - ap.y0) / n
+    fig.text(left + width / 2, ap.y1 + 0.018, unit, ha="center", va="bottom",
+             fontsize=8, color="#555")
+    for k, (norm, lab) in enumerate(zip(norms, labels)):
+        y0 = ap.y0 + k * step + step * 0.15
+        h = step * 0.70
+        cax = fig.add_axes([left, y0, width, h])
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cb = fig.colorbar(sm, cax=cax, orientation="vertical",
+                          ticks=[-norm.vmax, 0.0, norm.vmax])
+        cb.outline.set_visible(False)
+        cb.ax.tick_params(labelsize=6)
+        cb.ax.set_yticklabels([f"{norm.vmin:.0f}", "0", f"{norm.vmax:.0f}"])
+        cb.ax.set_title(lab, fontsize=6, pad=3)
 
 
 def render(tracks, *, style: str, out_path: Path, detail: int | None,
            color_by: str = "elev", title: str | None = None,
-           show_ext: bool = False, split: bool = False, profile: bool = False) -> None:
+           show_ext: bool = False, split: bool = False, profile: bool = False,
+           grade_cap: float | None = None) -> None:
     if not tracks:
         print("No tracks to render.")
         return
@@ -494,19 +555,32 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
          # colouring mode: 'elev' shades by elevation, 'grade' by per-segment slope on a
          # diverging ramp (steep climbs hot, descents cold), 'flat' = one bold hue per
          # track.  Each mode precomputes a shared norm + cmap across all the tracks.
+    per_track_norms = None
     if color_by == "grade":
-        # a robust cap on |grade| (a high percentile, clamped to a
-        # floor/ceiling) keeps a lone GPS-noise spike from squashing the
-        # ramp to its neutral centre; clip=True pins steeper blips to the
-        # cap colour instead of widening the whole scale.
+         # Per-ride colouring (each route on its own cap) makes sense only when the
+         # cap is *auto* -- an explicit --grade-cap means one shared scale.  It is
+         # used for a combined multi-track map so a single steep ride can't
+         # desaturate the others; a single or --split map is already per-track.  A
+         # few rides get their own colourbar; beyond GRADE_CBAR_MAX we fall back to
+         # one shared scale and say so.
         grades_all = [g for t in tracks for g in t.get("grade", []) if g is not None]
-        gabs = np.array([abs(g) for g in grades_all], dtype=float)
-        gcap = (float(np.percentile(gabs, GRADE_CAP_PCT)) if gabs.size
-                else GRADE_CAP_FLOOR)
-        gcap = min(max(gcap, GRADE_CAP_FLOOR), GRADE_CAP_CEIL)
-        norm = Normalize(vmin=-gcap, vmax=gcap, clip=True)
-        cmap, cbar_label = CMAPGRADE, "Grade (%)"
         have_metric = bool(grades_all)
+        cmap, cbar_label = CMAPGRADE, "Grade (%)"
+        per_track = (grade_cap is None and len(tracks) > 1
+                     and len(tracks) <= GRADE_CBAR_MAX)
+        if per_track:
+            per_track_norms = []
+            for t in tracks:
+                cap = _grade_cap([x for x in t.get("grade", []) if x is not None], grade_cap)
+                per_track_norms.append(Normalize(vmin=-cap, vmax=cap, clip=True))
+            norm = None
+        else:
+            gcap = _grade_cap(grades_all, grade_cap)
+            norm = Normalize(vmin=-gcap, vmax=gcap, clip=True)
+            if grade_cap is None and len(tracks) > GRADE_CBAR_MAX and grades_all:
+                print(f"      grade: {len(tracks)} tracks share one colour scale "
+                         f"(more than {int(GRADE_CBAR_MAX)}); use --split or --grade-cap "
+                         f"for a per-ride / fixed range")
     elif color_by == "elev":
         norm = Normalize(vmin=elev_min, vmax=elev_max)
         cmap, cbar_label = CMAPEL, "Elevation (m)"
@@ -540,7 +614,8 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
                       if t["ele"][j] is not None and t["ele"][j + 1] is not None]
                 mc = [(t["ele"][j] + t["ele"][j + 1]) / 2 for j in ok]
             seg_m = [[t["merc"][j], t["merc"][j + 1]] for j in ok]
-            lc = LineCollection(seg_m, cmap=cmap, norm=norm,
+            norm_i = per_track_norms[i] if per_track_norms is not None else norm
+            lc = LineCollection(seg_m, cmap=cmap, norm=norm_i,
                                 linewidths=3.2, alpha=0.98)
             lc.set_array(mc)
         else:
@@ -567,10 +642,16 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
 
     # colourbar + legend + attribution
     if have_metric:
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-        cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02, location="right")
-        cb.set_label(cbar_label, fontsize=10)
+        if per_track_norms is not None:
+           # one compact colourbar per ride, stacked on the right, each labelled with
+           # its ride -- a combined grade map, so every ride shows its own cap
+            _stack_grade_colorbars(fig, ax, cmap, per_track_norms,
+                                   [_short_label(t["name"]) for t in tracks])
+        else:
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02, location="right")
+            cb.set_label(cbar_label, fontsize=10)
 
     total_km = sum(t["dist_km"] for t in tracks)
     total_gain = sum(t["gain_m"] for t in tracks)
@@ -835,6 +916,10 @@ def main() -> None:
                                "ramp), 'grade' (a diverging ramp, steep climbs hot and "
                                "descents cold), or 'flat' (one distinct colour per track); "
                                "--no-elev is shorthand for 'flat'")
+    ap.add_argument("--grade-cap", type=float, default=None, metavar="N",
+                    help="pin the grade colour range to +/-N%% (overrides the auto "
+                              "percentile cap); a few rides then get their own "
+                              "colourbar, beyond which one shared scale is used")
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
     ap.add_argument("--profile", action="store_true",
@@ -848,7 +933,7 @@ def main() -> None:
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--detail/"
-                            "--split/--no-elev/--color-by/--profile are then ignored)")
+                            "--split/--no-elev/--color-by/--grade-cap/--profile are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
                               "per ride, the same columns as the ride-log but no totals "
@@ -917,6 +1002,7 @@ def main() -> None:
         color_by = "flat" if args.no_elev else args.color_by
         out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
+        split_prefix = (f"{_safe_filename(Path(args.out).stem)}_" if args.out else "")
 
         # a stationary-trainer 'Kickr Snap' session has no route of its own, so
         # it would just clutter the basemap; keep such tracks off the image while
@@ -936,16 +1022,19 @@ def main() -> None:
         if not render_tracks:
             print("      no tracks left to render after suppression.")
         elif args.split:
+            if args.out:
+                print(f"        --split + --out: each file -> '{split_prefix}<ride>.{args.format}' in {out_dir}")
             for t in render_tracks:
-                out_path = out_dir / f"{_safe_filename(Path(t['path']).stem)}.{args.format}"
+                out_path = out_dir / f"{split_prefix}{_safe_filename(Path(t['path']).stem)}.{args.format}"
                 render([t], style=args.style, out_path=out_path, detail=args.detail,
                        color_by=color_by, show_ext=args.ext, split=True,
-                       profile=profile)
+                       profile=profile, grade_cap=args.grade_cap)
         else:
             out_path = (Path(args.out) if args.out is not None
                         else out_dir / f"tracks_overview.{args.format}")
             render(render_tracks, style=args.style, out_path=out_path, detail=args.detail,
-                   color_by=color_by, show_ext=args.ext, profile=profile)
+                   color_by=color_by, show_ext=args.ext, profile=profile,
+                   grade_cap=args.grade_cap)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
      # the two title headers' stats as a table, one row per ride, plus a totals row

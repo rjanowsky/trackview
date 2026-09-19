@@ -36,7 +36,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --style sat           # Esri satellite basemap
 .venv/bin/python trackview.py --detail 13             # override auto-chosen detail
 .venv/bin/python trackview.py --no-elev             # flat per-track colour, not elevation
-.venv/bin/python trackview.py --color-by grade      # shade the route by slope (climbs hot, descents cold)
+.venv/bin/python trackview.py --color-by grade      # shade the route by slope (climbs red, descents blue, flat grey)
+.venv/bin/python trackview.py --color-by grade --grade-cap 8      # pin the grade colour range to +/-8% (not auto)
 .venv/bin/python trackview.py --profile --split     # add an elevation + grade profile panel under each map
 .venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr/temperature + calories burned (kcal)
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
@@ -59,8 +60,9 @@ efficiency), `--split`
   combined map).  Ride duration (`Hh MMm`) is always on the title, between the
   distance and the elevation gain (total across the tracks when combined).
  `--color-by {elev,grade,flat}` (default `elev`; `--no-elev` is a shorthand for `flat`)
-  shades each route by the chosen metric (elevation ramp, a symmetric diverging grade
-  ramp with climbs hot / descents cold, or flat distinct colours); `--profile` adds an
+   shades each route by the chosen metric (the `viridis` elevation ramp, a
+   grey-centred diverging grade ramp with a robust percentile cap — `--grade-cap N`
+   pins it and a few combined rides get their own colourbar — or flat distinct colours); `--profile` adds an
   elevation + grade vs. distance panel under each map (needs `--split`, or a single track).
   `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose ride date
   (read from the Wahoo-style filename stem) falls in the range — mirroring
@@ -147,7 +149,7 @@ Key non-obvious details:
 - **Rendering is headless** — `matplotlib.use("Agg")` is set before importing
   `pyplot`. The figure is square (`FIGURE_IN = (11, 11)`) and `fit_aspect()`
   grows the bounding box to match the figure aspect so the map is never letter-boxed.
-- **Colouring modes** (`--color-by {elev,grade,flat}`, default `elev`; `--no-elev` is a visible alias for `flat`): each track is shaded by a metric along its path.  Elevation uses the perceptually-uniform `viridis` ramp (`CMAPEL`, dark low end and bright high end both read on a pale basemap, unlike the old light `terrain`); grade uses a **grey-centred** diverging ramp (`CMAPGRADE`, `GRADE_STOPS`) — steep descents blue, steep climbs red, and the 0 % neutral a visible mid-**grey** rather than white, so a flat route stays visible.  The grade norm is **capped robustly** (the `GRADE_CAP_PCT` percentile of |grade|, clamped to `GRADE_CAP_FLOOR`/`GRADE_CAP_CEIL`) so a lone GPS-noise spike can't squash the ramp to its neutral centre.  Every metric-shaded route is under-laid with a subtle **dark outline** (a touch wider than the line) so it pops on the busy basemap; the flat mode keeps a white halo.  `--color-by flat`/`--no-elev` (or `elev` when the total elevation range is ≤ 1 m) gives one bold distinct colour per track instead.  The active mode sets the colourbar and the title's `shaded by …` suffix.
+- **Colouring modes** (`--color-by {elev,grade,flat}`, default `elev`; `--no-elev` is a visible alias for `flat`): each track is shaded by a metric along its path.  Elevation uses the perceptually-uniform `viridis` ramp (`CMAPEL`, dark low end and bright high end both read on a pale basemap, unlike the old light `terrain`); grade uses a **grey-centred** diverging ramp (`CMAPGRADE`, `GRADE_STOPS`) — steep descents blue, steep climbs red, and the 0 % neutral a visible mid-**grey** rather than white, so a flat route stays visible.  The grade norm is **capped robustly** (the `GRADE_CAP_PCT` percentile of |grade|, clamped to `GRADE_CAP_FLOOR`/`GRADE_CAP_CEIL`) so a lone GPS-noise spike can't squash the ramp to its neutral centre, and `--grade-cap N` pins that range instead of the auto cap.   On a *combined* grade map a few rides (≤ `GRADE_CBAR_MAX`) each get their **own** colourbar at their own cap (via `_stack_grade_colorbars`/`_short_label`) so one steep ride can't desaturate the others; beyond that, or when a cap is pinned, a single shared colourbar is used and a line on stdout says so.   In `--profile`, the per-segment grade line is lightly smoothed (`_moving_avg`, `GRADE_SMOOTH`) to quiet GPS jitter.  Every metric-shaded route is under-laid with a subtle **dark outline** (a touch wider than the line) so it pops on the busy basemap; the flat mode keeps a white halo.  `--color-by flat`/`--no-elev` (or `elev` when the total elevation range is ≤ 1 m) gives one bold distinct colour per track instead.  The active mode sets the colourbar and the title's `shaded by …` suffix.
 - **Stationary-trainer tracks are suppressed from the map only.** Before
    `render()`, `main()` drops any track whose `Device:` line matches
    `SUPPRESSED_RENDER_DEVICES` (currently `{"Kickr Snap"}` — a smart trainer logs a
@@ -167,7 +169,7 @@ Key non-obvious details:
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
   device type** (`_device_groups` groups the rides; that device's name, shown last, in the
   Device column).  Columns mirror the two title lines; under `--ext` two more appear — a **Max grade (%)** (the ride's steepest segment, geometry-derived rather than read from the `grade` extension) and an **Avg temperature (°C)** (from the `temperature` extension) — alongside the calories-burned total and avg power/speed/cadence/hr.  A `-` marks a metric a ride does not carry.  `--no-map`
-  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--profile` are then no-ops) but still runs this stats write, so a stats-only run is possible.
+  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile` are then no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
    (incl. the Device column, shared via `_stats_columns`), but just a header row + one
