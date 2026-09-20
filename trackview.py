@@ -22,6 +22,9 @@ Usage:
     python trackview.py --csv                # also write a CSV ride-log (header + rows, no totals) to stats/
     python trackview.py --csv --csv-delimiter ,    # comma-separated instead of the default ';'
     python trackview.py --sparse               # quiet stdout: skip the per-track stats listing
+    python trackview.py --gain-noise 1.5       # ignore GPS vertical jitter (a dip must exceed 1.5 m) when summing ascent
+    python trackview.py --climbs 10            # also write a climb ranking (top N by gain x avg grade) to stats/
+    python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
 """
 from __future__ import annotations
 
@@ -43,6 +46,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 from matplotlib.lines import Line2D
+from matplotlib.patheffects import withStroke as _with_stroke
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -77,6 +81,13 @@ GRADE_CBAR_MAX = 4.0      # max rides that each get their own grade colourbar on
                               # combined map; beyond it a single shared scale is used (and noted)
 GRADE_SMOOTH   = 5.0       # centred moving-average window (segments) for the profile's
                               # per-segment grade line: GPS jitter makes it noisy otherwise
+# A "climb" (see _ride_climbs) is a sustained run of segments whose *smoothed* grade stays
+# above CLIMB_MIN_GR over at least CLIMB_MIN_LEN of horizontal run; the grade is smoothed
+# over CLIMB_SMOOTH segments (as the profile is) so GPS jitter can't break a run.  A climb's
+# 'score' (gain x its average grade) ranks a long moderate climb against a short steep one.
+CLIMB_MIN_GR    = 4.0         # smoothed grade (%) a segment must clear to count as "climbing"
+CLIMB_MIN_LEN    = 250.0      # min horizontal length (m) of a run to count as a climb
+CLIMB_SMOOTH     = 9.0        # centred moving-avg window (segments) for the climb grade scan
 # Bold, saturated hues used per track when NOT shaded by elevation, so several
 # routes stay distinct against a busy basemap (paired with the white halo).
 STRONG_COLORS = [
@@ -327,14 +338,16 @@ def _parse_argdate(s: str, flag: str) -> date:
         raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
 
 
-def load_tracks(paths, decimate_m: float, with_ext: bool = False) -> list[dict]:
+def load_tracks(paths, decimate_m: float, with_ext: bool = False,
+                noise_m: float = 0.0) -> list[dict]:
     """Read every .gpx path (discovered and date-filtered by the caller);
     merge its segments into one polyline each.
     Always record each ride's first->last timestamp span: its duration, shown on the
     title and feeding the calories-burned estimate.  With with_ext, also collect the
     Wahoo telemetry embedded by `wahoo_to_gpx --ext` (power/speed/cadence/hr) per
     point, accumulated over every sample (pre-decimation) so the caller can show an
-    accurate average."""
+    accurate average.  With noise_m > 0 each ride's gain ignores GPS vertical jitter
+    below noise_m (see _distance_and_gain); 0 (the default) sums every rising segment."""
     tracks = []
     for path in sorted(paths):
         with open(path, "rb") as fh:
@@ -357,7 +370,7 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False) -> list[dict]:
         if not raw:
             print(f"  skip (no points): {os.path.basename(path)}")
             continue
-        dist_km, gain_m = _distance_and_gain(raw)
+        dist_km, gain_m = _distance_and_gain(raw, noise_m)
         dec = decimate(raw, decimate_m)
         merc = [latlon_to_merc(la, lo) for (la, lo, _e) in dec]
         ele = [e for (_la, _lo, e) in dec]
@@ -377,10 +390,14 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False) -> list[dict]:
     return tracks
 
 
-def _distance_and_gain(points) -> tuple[float, float]:
-    """Total distance (km) and positive elevation gain (m)."""
+def _distance_and_gain(points, noise_m: float = 0.0) -> tuple[float, float]:
+    """Total distance (km) and positive elevation gain (m).  The gain is the sum of the
+    rises; a descent ends the climb in progress (resetting its base) only once it exceeds
+    noise_m metres, so a few cm of GPS vertical jitter can't be counted as fresh ascent on
+    the way back up.  noise_m = 0 counts every rising segment - the raw ascent."""
     dist = 0.0
     gain = 0.0
+    base = last = None                        # base/last (m) of the climb in progress
     for i in range(1, len(points)):
         la0, lo0, e0 = points[i - 1]
         la1, lo1, e1 = points[i]
@@ -388,8 +405,19 @@ def _distance_and_gain(points) -> tuple[float, float]:
         dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
         dy = (la1 - la0) * 110540.0
         dist += math.hypot(dx, dy)
-        if e0 is not None and e1 is not None:   # some GPX points omit elevation
-            gain += max(0.0, e1 - e0)
+        if e0 is None or e1 is None:          # some GPX points omit elevation
+            base = last = None
+            continue
+        if base is None:
+            base = last = e0
+        if e1 > last:
+            last = e1                         # track the top of the climb
+        elif last - e1 >= noise_m:            # a descent past the band ends the climb
+            gain += last - base
+            base = e1
+            last = e1
+    if base is not None:
+        gain += last - base                   # commit the climb still open at the end
     return dist / 1000.0, gain
 
 
@@ -516,10 +544,63 @@ def _stack_grade_colorbars(fig, ax, cmap, norms, labels, unit="Grade (%)"):
         cb.ax.set_title(lab, fontsize=6, pad=3)
 
 
+def _nice_m(raw_m: float) -> float:
+    """Round a target length (m) up to the nearest 1/2/5 x 10^k for a tidy scale bar."""
+    if raw_m <= 0 or not math.isfinite(raw_m):
+        return 0.0
+    mag = 10.0 ** math.floor(math.log10(raw_m))
+    for m in (1.0, 2.0, 5.0, 10.0):
+        if m * mag >= raw_m:
+            return m * mag
+    return 10.0 * mag
+
+
+def _fmt_len(m: float) -> str:
+    """A scale-bar length: whole metres ('N m') under a kilometre, else kilometres
+    (one decimal under 10 km)."""
+    if m < 1000.0:
+        return f"{m:.0f} m"
+    km = m / 1000.0
+    return f"{km:.0f} km" if km >= 10.0 else f"{km:.1f} km"
+
+
+def _draw_scale_bar(ax, bbox) -> None:
+    """A '0 .. N km/m' scale bar in the map's lower-right corner.  The axes is in
+    Web-Mercator metres with an 'equal' aspect, so a line of length nice_m in data units
+    is exactly that many metres on screen; a 'nice' length (a fraction of the visible width)
+    is picked, with end caps, a white casing (so it reads on a busy basemap) and a distance
+    label above it.  Skipped when the box has no width (a single point)."""
+    w_m = bbox[2] - bbox[0]
+    n_m = bbox[3] - bbox[1]
+    if w_m <= 0 or n_m <= 0:
+        return
+    nice = _nice_m(w_m * 0.15)
+    if nice <= 0:
+        return
+    bx1 = bbox[2] - w_m * 0.04           # 4% in from the right edge, clear of the colourbar
+    bx0 = bx1 - nice
+    by     = bbox[1] + n_m * 0.06         # 6% up from the bottom, clear of the corner text
+    cap = nice * 0.06
+    # a white casing under the bar and its end caps, then the dark bar on top, so it stays
+    # visible over a busy basemap (the same halo trick as the route lines)
+    ax.plot([bx0, bx1], [by, by], color="white", linewidth=4.0, solid_capstyle="butt",
+             zorder=8)
+    ax.plot([bx0, bx1], [by, by], color="#222", linewidth=2.2, solid_capstyle="butt",
+             zorder=9)
+    for x in (bx0, bx1):
+        ax.plot([x, x], [by, by + cap], color="white", linewidth=4.0, solid_capstyle="butt",
+                 zorder=8)
+        ax.plot([x, x], [by, by + cap], color="#222", linewidth=2.2, solid_capstyle="butt",
+                 zorder=9)
+    ax.text((bx0 + bx1) / 2, by + cap * 1.8, _fmt_len(nice), ha="center", va="bottom",
+             fontsize=8, color="#222", zorder=9,
+             path_effects=[_with_stroke(linewidth=2.5, foreground="white")])
+
+
 def render(tracks, *, style: str, out_path: Path, detail: int | None,
            color_by: str = "elev", title: str | None = None,
            show_ext: bool = False, split: bool = False, profile: bool = False,
-           grade_cap: float | None = None) -> None:
+           grade_cap: float | None = None, scale: bool = True) -> None:
     if not tracks:
         print("No tracks to render.")
         return
@@ -705,6 +786,11 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
     ]
     ax.legend(handles=handles, loc="lower left", framealpha=0.85, fontsize=9)
 
+    # a scale bar in the lower-right: the axes is in metres with an 'equal' aspect, so a
+    # data-length line reads as a true distance on the (otherwise scale-less) static map
+    if scale:
+        _draw_scale_bar(ax, bbox)
+
     fig.text(0.006, 0.004, attr, fontsize=7, color="#555")
     fig.text(0.994, 0.004, f"detail {detail}", fontsize=7, color="#555", ha="right")
 
@@ -840,6 +926,99 @@ def write_csv(tracks, out_path: Path, show_ext: bool, delimiter: str = ";") -> N
     print(f"  wrote {out_path}")
 
 
+def _ride_climbs(t, min_gr=CLIMB_MIN_GR, min_len_m=CLIMB_MIN_LEN,
+                 smooth=CLIMB_SMOOTH) -> list[dict]:
+    """Sustained climbs in one ride: maximal runs of segments whose *smoothed* grade
+    stays >= min_gr and whose horizontal length reaches min_len_m.  Raw GPS grade jitters
+    (as the profile's), so a centred moving average over `smooth` segments (as in
+    _draw_profile) is run first; a run's gain is the positive elevation rise across it, its
+    average grade the distance-weighted slope (gain / length), its max grade the steepest
+    smoothed segment, and a 'score' (gain x average grade) ranks a long climb against a short
+    steep one.   [] when the ride carries no grade (some tracks omit elevation)."""
+    gr = t.get("grade") or []
+    cum = t.get("cum_km") or []
+    ele = t.get("ele") or []
+    if len(gr) < 1 or len(cum) < 2 or len(ele) < 2:
+        return []
+    garr = np.array([(g if g is not None else np.nan) for g in gr], dtype=float)
+    if not np.isfinite(garr).any():
+        return []
+    gs = _moving_avg(garr, smooth)
+    n = len(gr)
+    climbs = []
+    j = 0
+    while j < n:
+        if not np.isfinite(gs[j]) or gs[j] < min_gr:
+            j += 1
+            continue
+        k = j
+        while k + 1 < n and np.isfinite(gs[k + 1]) and gs[k + 1] >= min_gr:
+            k += 1
+             # run [j, k] spans points j..k+1: length from the cumulative km, the gain from
+             # the positive elevation rise across it (the ascent of that climb)
+        len_km = cum[k + 1] - cum[j]
+        if len_km * 1000.0 >= min_len_m:
+            gain_m = sum(max(0.0, (ele[j + 1] or 0.0) - (ele[j] or 0.0))
+                         for j2 in range(j, k + 1))
+            avg_gr = 100.0 * gain_m / (len_km * 1000.0) if len_km > 0 else 0.0
+            max_gr = float(np.nanmax(gs[j:k + 1]))
+            climbs.append({
+                  "ride": t["name"], "device": t.get("device"),
+                  "start_km": cum[j], "end_km": cum[k + 1], "len_km": len_km,
+                  "gain_m": gain_m, "avg_gr": avg_gr, "max_gr": max_gr,
+                  "score": gain_m * avg_gr,
+             })
+        j = k + 1
+    return climbs
+
+
+def _all_climbs(tracks) -> list[dict]:
+    """Every climb across the tracks, ranked most-significant first (by score)."""
+    allc = []
+    for t in tracks:
+        allc.extend(_ride_climbs(t))
+    allc.sort(key=lambda c: c["score"], reverse=True)
+    return allc
+
+
+def write_climbs(tracks, out_path: Path, top_n: int,
+                 min_gr: float = CLIMB_MIN_GR, min_len_m: float = CLIMB_MIN_LEN) -> None:
+    """Write a climb ranking to out_path: the top_n most-significant sustained climbs
+    (runs of smoothed grade >= min_gr over at least min_len_m of horizontal run, found by
+    _ride_climbs), one row each - the ride, where it sits (start->end km), its length, gain,
+    average and steepest grade, and a 'score' (gain x average grade).  The header names the
+    detection thresholds so the list is self-describing; an empty run writes a note."""
+    climbs = _all_climbs(tracks)[:top_n]
+    lines = [f"trackview - top {len(climbs)} climb"
+             f"{'s' if len(climbs) != 1 else ''}  "
+             f"(grade >= {min_gr:.0f}%, run >= {min_len_m:.0f} m)",
+              ""]
+    if not climbs:
+        lines.append("  no sustained climbs found.")
+    else:
+        head = ["#", "Ride", "From (km)", "To (km)", "Len (km)", "Gain (m)",
+                 "Avg %", "Max %", "Score"]
+        align = [True, False, True, True, True, True, True, True, True]
+        rows = [[str(i), _title_name(c["ride"]), f"{c['start_km']:.1f}",
+                  f"{c['end_km']:.1f}", f"{c['len_km']:.1f}", f"{c['gain_m']:,.0f}",
+                  f"{c['avg_gr']:.1f}", f"{c['max_gr']:.1f}", f"{c['score']:,.0f}"]
+                 for i, c in enumerate(climbs, 1)]
+        widths = [max(len(head[i]), *(len(r[i]) for r in rows)) for i in range(len(head))]
+        sep = "         "
+        def fmt(cells):
+            out = []
+            for i, (cell, a) in enumerate(zip(cells, align)):
+                out.append(cell.rjust(widths[i]) if a else cell.ljust(widths[i]))
+            return sep.join(out)
+        rule = sep.join("-" * w for w in widths)
+        lines.append(fmt(head))
+        lines.append(rule)
+        lines += [fmt(r) for r in rows]
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  wrote {out_path}")
+
+
 def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
                   retries: int = 3, backoff_s: float = 2.0) -> str:
     """Fall back through tile providers until one shows real tiles.
@@ -933,7 +1112,7 @@ def main() -> None:
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--detail/"
-                            "--split/--no-elev/--color-by/--grade-cap/--profile are then ignored)")
+                            "--split/--no-elev/--color-by/--grade-cap/--profile/--no-scale are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
                               "per ride, the same columns as the ride-log but no totals "
@@ -946,6 +1125,17 @@ def main() -> None:
                              "read ride); print only the summary lines - where it reads, "
                              "the track count, and the files written (plus any date-filter "
                               "skips when --since/--until is active)")
+    ap.add_argument("--no-scale", action="store_true",
+                    help="omit the map's scale bar (a 'N km' bar in the lower-right, "
+                               "on by default); a map-only flag, ignored with --no-map")
+    ap.add_argument("--gain-noise", type=float, default=0.0, metavar="M",
+                    help="ignore GPS vertical jitter when summing ascent: a descent must "
+                               "exceed M metres (default 0 = raw, every rising segment) "
+                               "before it ends the climb in progress")
+    ap.add_argument("--climbs", nargs="?", const=10, type=int, default=None, metavar="N",
+                    help="also write a climb ranking (top N by gain x avg grade, default "
+                               "10) to stats/trackview-<range>_climbs.txt; grade is "
+                               "geometry-derived, so it works even with --no-map")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
@@ -983,7 +1173,7 @@ def main() -> None:
             print(f"No tracks within {lo_s}..{hi_s} - nothing to render.")
             return
 
-    tracks = load_tracks(paths, DECIMATE_M, with_ext=args.ext)
+    tracks = load_tracks(paths, DECIMATE_M, with_ext=args.ext, noise_m=args.gain_noise)
     if not tracks:
         print("No *.gpx files found - nothing to render.")
         return
@@ -1028,13 +1218,14 @@ def main() -> None:
                 out_path = out_dir / f"{split_prefix}{_safe_filename(Path(t['path']).stem)}.{args.format}"
                 render([t], style=args.style, out_path=out_path, detail=args.detail,
                        color_by=color_by, show_ext=args.ext, split=True,
-                       profile=profile, grade_cap=args.grade_cap)
+                       profile=profile, grade_cap=args.grade_cap,
+                       scale=not args.no_scale)
         else:
             out_path = (Path(args.out) if args.out is not None
                         else out_dir / f"tracks_overview.{args.format}")
             render(render_tracks, style=args.style, out_path=out_path, detail=args.detail,
                    color_by=color_by, show_ext=args.ext, profile=profile,
-                   grade_cap=args.grade_cap)
+                   grade_cap=args.grade_cap, scale=not args.no_scale)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
      # the two title headers' stats as a table, one row per ride, plus a totals row
@@ -1049,6 +1240,13 @@ def main() -> None:
     if args.csv:
         csv_path = STATS_DIR / f"trackview-{label}.csv"
         write_csv(tracks, csv_path, show_ext=args.ext, delimiter=args.csv_delimiter)
+
+       # --climbs: a climb ranking -> ./stats/trackview-<first>_<last ride date>_climbs.txt,
+       # the top N most-significant sustained climbs (gain x avg grade); pure geometry, so
+       # it works even with --no-map
+    if args.climbs is not None:
+        climbs_path = STATS_DIR / f"trackview-{label}_climbs.txt"
+        write_climbs(tracks, climbs_path, top_n=args.climbs)
 
 if __name__ == "__main__":
     main()

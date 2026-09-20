@@ -46,6 +46,9 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
+.venv/bin/python trackview.py --no-scale                 # omit the map's lower-right scale bar (on by default)
+.venv/bin/python trackview.py --gain-noise 1.5           # ignore GPS vertical jitter when summing ascent
+.venv/bin/python trackview.py --climbs 10                # also write a climb ranking to stats/
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -140,6 +143,23 @@ Key non-obvious details:
 - **Distance and elevation gain** (`_distance_and_gain`, and `decimate`) use an
   **equirectangular approximation** (local lat/lon → metre conversion with a
   mid-latitude cosine), not Haversine. Keep them consistent when changing one.
+- **Ascent noise, climbs, scale bar** (TODO items [15]/[10]/[7]):
+   * `--gain-noise M` (default `0`) trims GPS vertical jitter from the ascent.
+     `_distance_and_gain` tracks a *running climb's* top and commits its ascent
+     (top − base) only when a descent exceeds `M` metres (a vertical dead-band), so
+    centimetre fix-to-fix noise stops inflating the figure while real climbs/descents
+    are untouched.   `M=0` reproduces the old "sum of every rising segment" exactly
+    (verified: the 115-ride total is 44,533 m); the wahoo_to_gpx.py copy stays
+    unchanged (default `0` keeps the two identical).
+   * `--climbs [N]` (default `10`) writes `stats/trackview-<range>_climbs.txt`: the N
+     most-significant *sustained* climbs across all rides — a maximal run of segments whose
+     *smoothed* grade (`_moving_avg`, `CLIMB_SMOOTH`) stays ≥ `CLIMB_MIN_GR` (4 %) over ≥
+     `CLIMB_MIN_LEN` (250 m), ranked by a "climb score" = gain × average grade.  Pure
+     geometry, so it works with `--no-map`; `_ride_climbs`/`_all_climbs`/`write_climbs`.
+   * A scale bar (`_draw_scale_bar`, `_nice_m`, `_fmt_len`) is drawn in every map's
+     lower-right corner (`--no-scale` omits it): a "nice" 1/2/5×10ᵏ length of ~15 % of the
+     visible width, in Web-Mercator metres (the `equal`-aspect axes makes a data-length line
+     a true on-screen distance), with a white casing so it reads over a busy basemap.
 - **Basemap fallback** (`_load_basemap`): providers are tried in order
   (`--style` first, then the rest of `SOURCES`). It catches fetch exceptions
   *and* detects blank/rate-limited tiles by checking that the returned image's
@@ -169,7 +189,7 @@ Key non-obvious details:
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
   device type** (`_device_groups` groups the rides; that device's name, shown last, in the
   Device column).  Columns mirror the two title lines; under `--ext` two more appear — a **Max grade (%)** (the ride's steepest segment, geometry-derived rather than read from the `grade` extension) and an **Avg temperature (°C)** (from the `temperature` extension) — alongside the calories-burned total and avg power/speed/cadence/hr.  A `-` marks a metric a ride does not carry.  `--no-map`
-  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile` are then no-ops) but still runs this stats write, so a stats-only run is possible.
+  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--no-scale` are then no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
    (incl. the Device column, shared via `_stats_columns`), but just a header row + one

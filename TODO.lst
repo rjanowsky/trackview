@@ -32,4 +32,118 @@ Line references below are to trackview.py as of that commit.
     cap, or when --grade-cap is pinned, a single shared colourbar is used and a
     line on stdout says so.  (--split is already per-track, one colourbar each.)
 
-No open items.
+Open proposals (re-analysed 2026-09-19).  [7] (scale bar), [10] (climb ranking) and
+[15] (gain-noise) are done that day (see each item's "DONE" note); the rest below are
+still open.  Line references below
+are to trackview.py as of that date; flag names are suggestions.  Ordered roughly
+by value; each notes the cheapest implementation hook.
+
+Colouring, the map & the panels
+[6]  Extend --color-by with {speed,power}.  The four telemetry metrics are already
+     read in load_tracks (t["speed"]/t["power"], as [sum,count]); add them as
+     shading modes (fast / high = hot, on a perceptually-uniform ramp) so a rider
+     can read pacing and effort at a glance.  Caveat: per-segment colouring needs
+     the per-point value, not just the [sum,count] average the tele dict keeps, so
+     speed/power/temp would have to be retained as per-point arrays the way grade
+     and ele already are (line 369); absent --ext they fall back to flat.
+
+[7] [done] A scale bar on every map.  render() already holds the Mercator bbox
+     (w0,s0,e0,n0) and the chosen detail, so a labelled "0 .. N km" bar (a "nice"
+     1/2/5 x 10^k length, drawn in a corner) is cheap.  A static map with no scale
+     is the one thing a viewer can otherwise never read off the image.
+     DONE (2026-09-19): _draw_scale_bar + _nice_m/_fmt_len put a "0 .. N km" bar in
+     every map's lower-right corner (a nice 1/2/5 x 10^k of ~15 % of the width, in
+     Web-Mercator metres; a white casing so it reads on a busy basemap).  --no-scale
+     omits it; it is a map-only flag (ignored under --no-map).  Smoke-tested headlessly
+     (no network) and confirmed on a real basemap render.
+
+[8]  A density / "time-on-route" overlay.  Instead of one LineCollection per track,
+     weight each segment by the time spent on it (or plot a 2-D histogram of the
+     points) so a combined map of many rides shows *where you ride*, not just every
+     route as one line - a --heat switch or a 5th --color-by mode.
+
+[9]  Ride labels on a combined map.  A short name + distance near each start
+     marker (a halo'd text label; _short_label already exists) makes routes
+     identifiable without the colourbar, so a many-ride overview reads without a
+     legend key.
+
+Analysis
+[10] [done] Climb detection & ranking.  Scan each ride's t["grade"]/t["cum_km"] for
+     sustained climbs (a min length + min average grade), score them a
+     Strava/Komoot-style "climb score" (gain x a grade-weighted factor) and list
+     the top N to stats/.  "Steepest / hardest climb" is the single most-wanted
+     cycling stat and needs no telemetry.
+     DONE (2026-09-19): _ride_climbs/_all_climbs/write_climbs + the --climbs [N] flag
+      (default 10).  A "climb" is a maximal run of segments whose *smoothed* grade
+       (_moving_avg, CLIMB_SMOOTH) stays >= CLIMB_MIN_GR (4 %) over >= CLIMB_MIN_LEN
+       (250 m); ranked by a climb score = gain x average grade so a long moderate climb
+     beats a short steep one.  Writes stats/trackview-<range>_climbs.txt (a self-
+     describing header naming the thresholds).  Pure geometry, so it runs under --no-map.
+
+[11] More profile lines.  _draw_profile() today draws only elevation + grade.  Add
+     speed / power / HR / cadence as further lines (a 3rd twin axis, or a slim
+     stacked mini-panel per metric) from the same telemetry, so one figure is a full
+     "ride card".  Needs the per-point arrays from item [6].
+
+[12] Time-series / trend chart.  A per-ride line chart of distance, gain, duration
+     and calories *over time* (all rides on one axis), written to output/ or
+     stats/.  Makes training-volume trends and the 2019->2026 span visible.
+
+[13] Calendar / activity heatmap.  A GitHub-contribution-style grid of the year,
+     each day coloured by that ride's distance (or gain / ride count).  A --calendar
+     PNG is the best "year at a glance"; reuses _ride_date() per ride.
+
+[14] Annual / monthly summary report.  Aggregate the ride-log per year (and per
+     month): total distance, gain, rides, hours, avg power - appended to the stats/
+     table or a new per-year report file.  The history spans many years, so a
+     year-in-review is currently only possible by hand.
+
+Correctness & data quality
+[15] [done] Elevation-gain noise handling.  _distance_and_gain() sums *every* positive
+     segment (line 392), so GPS vertical jitter (a few cm) inflates the ascent; add
+     a small vertical dead-band or a short elevation smoothing (as for grade, via
+     _moving_avg) before gain and the profile fill, behind a flag, so gain_m and any
+     climb numbers ([10]) are realistic rather than noise-driven.
+     DONE (2026-09-19, fixed same day): --gain-noise M (default 0).  _distance_and_gain
+     now sums the rises of a *running climb* - it tracks the climb's top and commits the
+     ascent (top - base) only when a descent exceeds M metres, so cm-scale GPS jitter stops
+     inflating the figure while real climbs/descents are untouched.  M=0 reproduces the
+     classic "sum of every rising segment" exactly (verified: the 115-ride total is 44,533 m,
+     matching a hand positive-sum).  The first cut had a 'floor' that never reset on a
+     rise, so every point above the running minimum re-added its height above it - over-
+     counting ascent by ~800x (a 22,007,339 m total) - and was corrected the same day.
+     The wahoo_to_gpx.py copy is left unchanged (its default 0 keeps the two identical).
+
+[16] On-disk tile cache.  contextily refetches tiles on every run; cache the
+     per-detail tiles to disk (keyed by z/x/y) so re-renders and offline runs work,
+     and the rate-limit pressure the fallback/backoff in _load_basemap() is already
+     trying to absorb disappears.  Pairs naturally with [7]/[8].
+
+Selection, filtering & workflow
+[17] Device / sport filters.  The ride-log already groups by Device
+     (_device_groups); add --device NAME / --sport NAME (from the GPX <desc>
+     "Device:"/"Sport:" lines) to restrict which rides are drawn and listed,
+     complementing the --since/--until date filter for mixed-device/sport folders.
+
+[18] --top N.  Render/stat only the N longest, highest-gain, or most-recent rides
+     (a "best-of" map, or to keep a huge combined map legible): a --top N --by
+     {km,gain,recent} switch, applied after the date filter.
+
+[19] Recurse / multiple input dirs.  main() does gpx_dir.glob("*.gpx") (flat, line
+     956); allow nested folders (rglob) or a repeatable --gpx-dir so rides can be
+     organised by year/device under subfolders.
+
+[20] --list dry-run.  Print the rides that *would* be processed after all filters
+     (names, dates, dist/gain) and stop - no basemap fetch, no image.  A cheap way
+     to preview a --since/--until or --top selection.
+
+Output & sharing
+[21] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks
+     as inline GeoJSON/SVG) that is zoomable and shareable, complementing the static
+     PNG/PDF.  Note the parent repo has a separate interactive gpx_viewer.py
+     (Streamlit+Folium); this would be a *static, dependency-light, single-file*
+     variant (no server) - a different deliverable.
+
+[22] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
+     image (e.g. a 3x3 of the most recent rides) - a "recent rides" overview without
+     opening N files; a --gallery N switch.
