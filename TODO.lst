@@ -32,20 +32,33 @@ Line references below are to trackview.py as of that commit.
     cap, or when --grade-cap is pinned, a single shared colourbar is used and a
     line on stdout says so.  (--split is already per-track, one colourbar each.)
 
-Open proposals (re-analysed 2026-09-19).  [7] (scale bar), [10] (climb ranking) and
-[15] (gain-noise) are done that day (see each item's "DONE" note); the rest below are
-still open.  Line references below
-are to trackview.py as of that date; flag names are suggestions.  Ordered roughly
-by value; each notes the cheapest implementation hook.
+Open proposals (re-analysed 2026-09-19).   [7] (scale bar), [10] (climb ranking) and
+[15] (gain-noise) are done that day (see each item's "DONE" note).   [6] (speed/power
+shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
+2026-09-20 (see their "DONE" notes below); the rest below are still open.  Line
+references below are to trackview.py as of each item's date; flag names are
+suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
 Colouring, the map & the panels
-[6]  Extend --color-by with {speed,power}.  The four telemetry metrics are already
-     read in load_tracks (t["speed"]/t["power"], as [sum,count]); add them as
-     shading modes (fast / high = hot, on a perceptually-uniform ramp) so a rider
-     can read pacing and effort at a glance.  Caveat: per-segment colouring needs
-     the per-point value, not just the [sum,count] average the tele dict keeps, so
-     speed/power/temp would have to be retained as per-point arrays the way grade
-     and ele already are (line 369); absent --ext they fall back to flat.
+[6] [done] Extend --color-by with {speed,power}.  The four telemetry metrics are
+     already read in load_tracks (t["speed"]/t["power"], as [sum,count]); add them
+     as shading modes (fast / high = hot, on a perceptually-uniform ramp) so a rider
+     can read pacing and effort at a glance.  Per-segment colouring needs the per-
+     point value, not just the [sum,count] average the tele dict keeps, so the values
+     are retained as per-point arrays (the way grade and ele already are); absent
+     --ext they fall back to flat.
+     DONE (2026-09-20): `--color-by {speed,power}` joined the existing elev/grade/flat
+     choices.  load_tracks now keeps per-decimated-point arrays d["speed_pts"] /
+     d["power_pts"] (and d["tsec"]) by carrying a per-point record through
+     decimate(carry=...), aligned with merc/ele/grade.  Each segment is shaded by the
+     average of its two endpoint values on the perceptually-uniform CMAPEED="inferno"
+     ramp (fast / high = hot); the norm is _metric_norm(), a robust [2 %, 98 %] range so
+     one GPS spike can't squash the ramp (as the grade cap does for grade).  The
+     colourbar reads "Speed (km/h)" / "Power (W)" and the title "shaded by speed/power".
+     Telemetry is auto-collected (with_ext) when --color-by speed/power or --heat is set
+     even without --ext (which still gates the avg-telemetry title line + ride-log
+     columns); a ride with no per-point values falls back to its flat per-track colour
+     and a note is printed.
 
 [7] [done] A scale bar on every map.  render() already holds the Mercator bbox
      (w0,s0,e0,n0) and the chosen detail, so a labelled "0 .. N km" bar (a "nice"
@@ -57,15 +70,35 @@ Colouring, the map & the panels
      omits it; it is a map-only flag (ignored under --no-map).  Smoke-tested headlessly
      (no network) and confirmed on a real basemap render.
 
-[8]  A density / "time-on-route" overlay.  Instead of one LineCollection per track,
-     weight each segment by the time spent on it (or plot a 2-D histogram of the
-     points) so a combined map of many rides shows *where you ride*, not just every
-     route as one line - a --heat switch or a 5th --color-by mode.
+[8] [done] A density / "time-on-route" overlay.  Instead of one LineCollection per
+     track, weight each segment by the time spent on it (or plot a 2-D histogram of
+     the points) so a combined map of many rides shows *where you ride*, not just
+     every route as one line - a --heat switch or a 5th --color-by mode.
+     DONE (2026-09-20): the `--heat` switch (a map-only flag, ignored under --no-map)
+     draws a 2-D "time on route" density *under* the route lines: a HEAT_GRID x
+     HEAT_GRID (300x300) np.histogram2d over the bbox, each cell weighted by the time
+     spent on the segments through it (so a slow climb / rest stop / traffic glows
+     more than a fast pass), on a YlOrRd ramp at HEAT_ALPHA (0.55) opacity with empty
+     cells masked so the basemap shows through, capped at HEAT_CAP_PCT (98 %).  Per-
+     point dwell (seconds) comes from _dwell_times(d["tsec"], n) - point j carries the
+     time on the segment leaving it, the last point its incoming one; a ride with no
+     usable timestamps falls back to a uniform point-count weight (so --heat works
+     without --ext too, and --heat auto-enables the timestamp collection).  It gets its
+     own "Time on route" colourbar, ticks formatted as a duration by _fmt_heat_time
+     (N s / N m / Nh Mm) via a FuncFormatter; when a metric colourbar (elev/grade/
+     speed/power) already sits on the right edge the heat bar is suppressed with a note
+     (one bar there).
 
-[9]  Ride labels on a combined map.  A short name + distance near each start
+[9] [done] Ride labels on a combined map.  A short name + distance near each start
      marker (a halo'd text label; _short_label already exists) makes routes
      identifiable without the colourbar, so a many-ride overview reads without a
      legend key.
+     DONE (2026-09-20): the `--labels` switch (a map-only flag, ignored under --no-map)
+     tags each route's start marker (on a combined map, len(tracks) > 1; a single
+     ride's name is already in its title) with a halo'd "name      N km" line via
+     ax.annotate(_short_label(name) + distance, offset, withStroke white halo).  Loop
+     rides share one start, so the tag is staggered vertically by the track index
+     (i % 12 * 3 pt) to keep a handful of co-located starts legible.
 
 Analysis
 [10] [done] Climb detection & ranking.  Scan each ride's t["grade"]/t["cum_km"] for
@@ -147,3 +180,8 @@ Output & sharing
 [22] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
      image (e.g. a 3x3 of the most recent rides) - a "recent rides" overview without
      opening N files; a --gallery N switch.
+
+
+
+
+

@@ -15,6 +15,9 @@ Usage:
     python trackview.py --detail 15      # override the auto-chosen detail
     python trackview.py --no-elev      # flat colour instead of elevation shading
     python trackview.py --color-by grade       # shade the route by slope (climbs hot, descents cold)
+    python trackview.py --color-by power        # shade by effort (fast/high = hot; needs --ext)
+    python trackview.py --heat                   # overlay a 2-D "time on route" density under the routes
+    python trackview.py --labels                 # label each route by name + distance (a combined map)
     python trackview.py --ext          # add avg power/speed/cadence/hr/temperature + calories burned (kcal) to the title
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
     python trackview.py --since 2026-09-08    # only tracks on/after a date (from the .gpx filename)
@@ -47,6 +50,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patheffects import withStroke as _with_stroke
+from matplotlib.ticker import FuncFormatter
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -70,6 +74,11 @@ GRADE_STOPS = [
      "#f6a895", "#d73027", "#7f0000",    # gentle -> steep climb (red)
 ]
 CMAPGRADE = LinearSegmentedColormap.from_list("grade", GRADE_STOPS)
+# A sequential "effort" ramp for the telemetry colourings (--color-by speed/power):
+# low = cold/dark, high = hot/bright, perceptually uniform so a rider reads pacing
+# and effort at a glance (fast / high power at the hot end).  Paired with the same
+# dark under-lay as the grade shading so even the cold low end pops on a pale basemap.
+CMAPEED = "inferno"
 # The grade norm is capped robustly (a high percentile of |grade|, clamped
 # to a floor/ceiling) so a lone GPS-noise spike (e.g. a spurious 20 % blip)
 # can't squash the whole ramp to its neutral centre and leave the route
@@ -88,6 +97,13 @@ GRADE_SMOOTH   = 5.0       # centred moving-average window (segments) for the pr
 CLIMB_MIN_GR    = 4.0         # smoothed grade (%) a segment must clear to count as "climbing"
 CLIMB_MIN_LEN    = 250.0      # min horizontal length (m) of a run to count as a climb
 CLIMB_SMOOTH     = 9.0        # centred moving-avg window (segments) for the climb grade scan
+# The --heat density overlay: a 2-D "time on route" histogram of the routes' points,
+# drawn under the lines.  Empty cells are masked to zero (the basemap shows through)
+# and the colour is capped at a high percentile, so a single hot cell (a spot ridden
+# many times, or a rest stop) can't wash out the rest of the map.
+HEAT_GRID         = 300            # cells across the bbox (a HEAT_GRID x HEAT_GRID histogram)
+HEAT_CAP_PCT      = 98.0           # colour cap: % of non-empty cells inside the (capped) range
+HEAT_ALPHA        = 0.55           # overlay opacity (the route lines stay readable on top)
 # Bold, saturated hues used per track when NOT shaded by elevation, so several
 # routes stay distinct against a busy basemap (paired with the white halo).
 STRONG_COLORS = [
@@ -138,23 +154,29 @@ def latlon_to_merc(lat: float, lon: float) -> tuple[float, float]:
     return x, y
 
 
-def decimate(points, min_m: float):
-    """Keep only points spaced >= min_m apart (equirectangular distance)."""
+def decimate(points, min_m: float, carry=None):
+    """Keep only points spaced >= min_m apart (equirectangular distance).  Returns the kept
+    points; when `carry` (a parallel sequence, one entry per point -- e.g. the per-point
+    telemetry) is given, its kept entries are returned too, aligned with the kept points."""
     if len(points) < 2:
-        return points
-    out = [points[0]]
+        return points, (carry if carry is not None else None)
+    n = len(points)
+    keep = [0]
     last_lat, last_lon = points[0][0], points[0][1]
     min_m2 = min_m * min_m
-    for p in points[1:]:
-        lat, lon = p[0], p[1]
+    for i in range(1, n):
+        lat, lon = points[i][0], points[i][1]
         lat_mid = math.radians((lat + last_lat) / 2.0)
         dx = (lon - last_lon) * 111320.0 * math.cos(lat_mid)
         dy = (lat - last_lat) * 110540.0
         if dx * dx + dy * dy >= min_m2:
-            out.append(p)
+            keep.append(i)
             last_lat, last_lon = lat, lon
-    out.append(points[-1])               # always keep the last point
-    return out
+    keep.append(n - 1)                     # always keep the last point
+    out = [points[i] for i in keep]
+    if carry is not None:
+        return out, [carry[i] for i in keep]
+    return out, None
 
 
 # Wahoo telemetry embedded under <trkpt><extensions> by `wahoo_to_gpx --ext`,
@@ -218,6 +240,22 @@ def _grade_cap(grades, grade_cap: float | None) -> float:
     a = np.array([abs(g) for g in grades], dtype=float)
     cap = float(np.percentile(a, GRADE_CAP_PCT)) if a.size else GRADE_CAP_FLOOR
     return min(max(cap, GRADE_CAP_FLOOR), GRADE_CAP_CEIL)
+
+
+def _metric_norm(vals, lo_pct: float = 2.0, hi_pct: float = 98.0):
+    """A robust sequential colour norm for a telemetry metric (--color-by speed/power):
+    the [lo_pct, hi_pct] percentiles of the per-segment values, so a lone outlier (a GPS
+    speed spike, a one-off sprint) can't squash the ramp the way an un-capped min/max would.
+    Returns None when there are no values (the caller then falls back to flat colour)."""
+    if not vals:
+        return None
+    a = np.asarray(vals, dtype=float)
+    lo = float(np.percentile(a, lo_pct))
+    hi = float(np.percentile(a, hi_pct))
+    if hi <= lo:
+        hi = lo + 1.0
+    return Normalize(vmin=lo, vmax=hi, clip=True)
+
 
 def _track_calories(t) -> float | None:
     """This ride's 'calories burned' (kcal): avg power (W) x ride duration (s) over 4184 J/kcal and a ~25% efficiency; None without a power average or a ride span."""
@@ -354,6 +392,7 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
             gpx = gpxpy.parse(fh)
         raw = []                            # (lat, lon, ele) for every point
         tele = {k: [0.0, 0] for k in ("power", "speed", "cadence", "hr", "temp")} if with_ext else None
+        records = [] if with_ext else None     # per-point {time, speed, power}, carried through decimation
         t_first = t_last = None               # ride span (1st -> last timestamp) for calories
         for trk in gpx.tracks:
             for seg in trk.segments:
@@ -363,15 +402,19 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
                     if st is not None:
                         t_first = st if t_first is None or st < t_first else t_first
                         t_last   = st if t_last  is None or st > t_last  else t_last
-                    if tele is not None:
+                    if with_ext:
+                          # a per-point record: the timestamp plus any telemetry on the point
+                        rec = {"t": st}
                         for key, val in _point_telemetry(pt).items():
+                            rec[key] = val
                             tele[key][0] += val
                             tele[key][1] += 1
+                        records.append(rec)
         if not raw:
             print(f"  skip (no points): {os.path.basename(path)}")
             continue
         dist_km, gain_m = _distance_and_gain(raw, noise_m)
-        dec = decimate(raw, decimate_m)
+        dec, dec_records = decimate(raw, decimate_m, carry=records)
         merc = [latlon_to_merc(la, lo) for (la, lo, _e) in dec]
         ele = [e for (_la, _lo, e) in dec]
         grade, cum_km = _grade_and_cumkm(dec)
@@ -386,6 +429,11 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
               "duration_s": (t_last - t_first).total_seconds() if t_first else 0.0}
         if tele is not None:
             d.update(tele)                    # per-metric [sum, count] pairs
+        if records is not None:
+            # per-decimated-point arrays, aligned with merc/ele/grade
+            d["tsec"] = [r.get("t") for r in dec_records]
+            d["speed_pts"] = [r.get("speed") for r in dec_records]
+            d["power_pts"] = [r.get("power") for r in dec_records]
         tracks.append(d)
     return tracks
 
@@ -597,10 +645,78 @@ def _draw_scale_bar(ax, bbox) -> None:
              path_effects=[_with_stroke(linewidth=2.5, foreground="white")])
 
 
+def _dwell_times(tsec, n: int):
+    """Per-point 'time on route' (seconds): point j carries the time on the segment *leaving*
+    it (j -> j+1); the final point takes its incoming segment.  A point with no timestamp (a GPS
+    gap) adds 0 for that segment.  None when the ride has no usable timestamps, so the caller
+    can fall back to weighting by point count."""
+    if not tsec or all(x is None for x in tsec):
+        return None
+    seg = [ (tsec[j + 1] - tsec[j]).total_seconds()
+            if tsec[j] is not None and tsec[j + 1] is not None else 0.0
+            for j in range(n - 1) ]
+    dwell = seg + ([seg[-1]] if seg else [])      # the last point reuses its incoming segment
+    return [max(0.0, d) for d in dwell]
+
+
+def _fmt_heat_time(sec, pos=0.0) -> str:
+    """A --heat colourbar tick: a time-on-route value (seconds), shown as 'N s', 'N m', or
+    'Nh Mm' -- the total time can span many hours across all the rides."""
+    sec = int(round(sec))
+    if sec < 60:
+        return f"{sec} s"
+    m = sec // 60
+    if m < 60:
+        return f"{m} m"
+    h, m = divmod(m, 60)
+    return f"{h} h" if m == 0 else f"{h} h {m} m"
+
+
+def _draw_heat(ax, tracks, bbox, grid: int = HEAT_GRID, cap_pct: float = HEAT_CAP_PCT,
+               alpha: float = HEAT_ALPHA):
+    """A 2-D 'time on route' density of the routes' decimated points, drawn *under* the route
+    lines: a grid x grid histogram over the bbox, each cell weighted by the time spent on the
+    segments through it (so overlapping and slow routes -- climbs, rest stops, traffic -- glow
+    most; a ride with no timestamps is weighted by point count).  The colour is capped at a high
+    percentile so one hot cell can't wash out the rest, and empty cells are masked so the basemap
+    shows through.  Returns the AxesImage (for a colourbar), or None when there is nothing to plot."""
+    import matplotlib.colors as mcolors
+    w, s, e, n = bbox
+    if e <= w or n <= s:
+        return None
+    xs, ys, wts = [], [], []
+    for t in tracks:
+        merc = t.get("merc") or []
+        if len(merc) < 2:
+            continue
+        dwell = _dwell_times(t.get("tsec"), len(merc))
+        for j, (x, y) in enumerate(merc):
+            xs.append(x)
+            ys.append(y)
+            wts.append(1.0 if dwell is None else dwell[j])
+    if not xs:
+        return None
+    H, _xe, _ye = np.histogram2d(xs, ys, bins=grid,
+                                 range=[[w, e], [s, n]], weights=wts)
+    H = np.ma.masked_equal(H, 0.0)             # empty cells: let the basemap show through
+    vals = H.compressed()
+    cap = float(np.percentile(vals, cap_pct)) if vals.size else 0.0
+    norm = mcolors.Normalize(vmin=0.0, vmax=max(cap, 1e-9), clip=True)
+    # imshow(aspect="auto") flips the *axes* to auto; restore the map's equal aspect
+    # so the routes and the scale bar (a true on-screen distance) stay undistorted.
+    prev_aspect = ax.get_aspect()
+    im = ax.imshow(H, extent=[w, s, e, n], origin="lower", aspect="auto",
+                   cmap="YlOrRd", norm=norm, alpha=alpha, zorder=3,
+                   interpolation="bilinear")
+    ax.set_aspect(prev_aspect)
+    return im
+
+
 def render(tracks, *, style: str, out_path: Path, detail: int | None,
            color_by: str = "elev", title: str | None = None,
            show_ext: bool = False, split: bool = False, profile: bool = False,
-           grade_cap: float | None = None, scale: bool = True) -> None:
+           grade_cap: float | None = None, scale: bool = True,
+           heat: bool = False, labels: bool = False) -> None:
     if not tracks:
         print("No tracks to render.")
         return
@@ -631,6 +747,9 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
     ordered = [style] + [k for k in SOURCES if k != style]
     loaded = _load_basemap(ax, bbox, ordered, detail)
     attr = ATTRIBUTION.get(loaded, "© OpenStreetMap contributors")
+
+    # --- heat overlay: a 2-D "time on route" density, drawn under the route lines ---
+    heat_im = _draw_heat(ax, tracks, bbox) if heat else None
 
     # --- overlay tracks ---
          # colouring mode: 'elev' shades by elevation, 'grade' by per-segment slope on a
@@ -666,9 +785,26 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
         norm = Normalize(vmin=elev_min, vmax=elev_max)
         cmap, cbar_label = CMAPEL, "Elevation (m)"
         have_metric = (elev_max - elev_min) > 1.0
+    elif color_by in ("speed", "power"):
+          # per-segment telemetry shading: each segment takes the average of its two
+          # endpoint values (both must be present).  The norm is a robust percentile
+          # range so one spike can't squash the ramp; absent per-point telemetry
+          # (e.g. no --ext / a non-Wahoo ride) there are no values and the route
+          # falls back to its flat per-track colour (have_metric stays False).
+        key = "speed_pts" if color_by == "speed" else "power_pts"
+        vals = [ (t[key][j] + t[key][j + 1]) / 2 for t in tracks
+                 for j in range(len(t.get(key, [])) - 1)
+                 if t[key][j] is not None and t[key][j + 1] is not None ]
+        norm = _metric_norm(vals)
+        cmap = CMAPEED
+        cbar_label = "Speed (km/h)" if color_by == "speed" else "Power (W)"
+        have_metric = norm is not None
     else:
         norm = cmap = cbar_label = None
         have_metric = False
+    if color_by in ("speed", "power") and not have_metric:
+        print(f"      --color-by {color_by}: no per-point {color_by} telemetry "
+                "(need wahoo_to_gpx --ext); drawing a flat per-track colour instead")
     for i, t in enumerate(tracks):
         seg = np.array([[t["merc"][j], t["merc"][j + 1]]
                         for j in range(len(t["merc"]) - 1)])
@@ -689,6 +825,11 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
                 gr = t.get("grade", [])
                 ok = [j for j in range(len(gr)) if gr[j] is not None]
                 mc = [gr[j] for j in ok]
+            elif color_by in ("speed", "power"):
+                arr = t.get("speed_pts" if color_by == "speed" else "power_pts", [])
+                ok = [j for j in range(len(arr) - 1)
+                      if arr[j] is not None and arr[j + 1] is not None]
+                mc = [(arr[j] + arr[j + 1]) / 2 for j in ok]
             else:
                      # elevation: a segment needs it on both ends (some GPX omit it)
                 ok = [j for j in range(len(t["ele"]) - 1)
@@ -712,6 +853,15 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
                    linewidths=0.6, zorder=7)
         ax.scatter([x1], [y1], s=70, color="red", edgecolors="k",
                    linewidths=0.6, zorder=7)
+        if labels and len(tracks) > 1:
+               # a halo'd 'name  N km' near the start marker, so a many-ride map
+               # reads without a legend key (a single ride's name is in the title).  Loop
+               # rides often share one start, so stagger each label by its index to keep a
+               # handful of co-located starts legible.
+            lab = f"{_short_label(t['name'])}      {t['dist_km']:,.0f} km"
+            ax.annotate(lab, (x0, y0), xytext=(7.0, 7.0 + (i % 12) * 3.0),
+                        textcoords="offset points", fontsize=8, color="#111", zorder=8,
+                        path_effects=[_with_stroke(linewidth=2.5, foreground="white")])
 
      # one more start-marker for the overall route start, drawn after every
      # track so it sits on top of all the per-track lines, halos and markers
@@ -733,6 +883,15 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
             sm.set_array([])
             cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02, location="right")
             cb.set_label(cbar_label, fontsize=10)
+    elif heat_im is not None:
+           # a 'time on route' colourbar, its ticks formatted as a duration
+        cb = fig.colorbar(heat_im, ax=ax, fraction=0.03, pad=0.02, location="right")
+        cb.set_label("Time on route", fontsize=10)
+        cb.formatter = FuncFormatter(_fmt_heat_time)
+        cb.update_ticks()
+    if heat_im is not None and have_metric:
+        print("      heat: a metric colourbar is shown instead of the "
+                 "'Time on route' one (both are right-edge bars)")
 
     total_km = sum(t["dist_km"] for t in tracks)
     total_gain = sum(t["gain_m"] for t in tracks)
@@ -748,6 +907,8 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
         suffix = "     -  shaded by grade" if have_metric else ""
     elif color_by == "elev":
         suffix = "     -  shaded by elevation" if have_metric else ""
+    elif color_by in ("speed", "power"):
+        suffix = f"     -  shaded by {color_by}" if have_metric else ""
     else:
         suffix = ""
     head = _title_name(tracks[0]["name"]) if (split and len(tracks) == 1) else None
@@ -1090,10 +1251,12 @@ def main() -> None:
                              f"bbox fills the image, clamped to levels {DETAIL_MIN}-{DETAIL_MAX} "
                              f"(pass an int to override the auto choice)")
     ap.add_argument("--no-elev", action="store_true", help="flat colour, not elevation")
-    ap.add_argument("--color-by", choices=["elev", "grade", "flat"], default="elev",
+    ap.add_argument("--color-by", choices=["elev", "grade", "flat", "speed", "power"],
+                    default="elev",
                     help="what shades the route line: 'elev' (default, the elevation "
                                "ramp), 'grade' (a diverging ramp, steep climbs hot and "
-                               "descents cold), or 'flat' (one distinct colour per track); "
+                               "descents cold), 'speed'/'power' (a telemetry ramp, fast/high = hot; needs "
+                               "wahoo_to_gpx --ext, else flat), or 'flat' (one distinct colour per track); "
                                "--no-elev is shorthand for 'flat'")
     ap.add_argument("--grade-cap", type=float, default=None, metavar="N",
                     help="pin the grade colour range to +/-N%% (overrides the auto "
@@ -1112,7 +1275,8 @@ def main() -> None:
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--detail/"
-                            "--split/--no-elev/--color-by/--grade-cap/--profile/--no-scale are then ignored)")
+                            "--split/--no-elev/--color-by/--grade-cap/--profile/--heat/"
+                             "--labels/--no-scale are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
                               "per ride, the same columns as the ride-log but no totals "
@@ -1128,6 +1292,17 @@ def main() -> None:
     ap.add_argument("--no-scale", action="store_true",
                     help="omit the map's scale bar (a 'N km' bar in the lower-right, "
                                "on by default); a map-only flag, ignored with --no-map")
+    ap.add_argument("--heat", action="store_true",
+                    help="overlay a 2-D 'time on route' density under the routes (a "
+                                "YlOrRd heatmap, brighter where you spend the most time or "
+                                "ride most; weighted by point timestamps when --ext, else by "
+                                "point count); a map-only flag, ignored with --no-map")
+    ap.add_argument("--labels", action="store_true",
+                    help="label each route with its name + distance near its start marker "
+                                "(a halo'd tag, for a combined multi-ride map); ignored when "
+                                "one track (the name is already in its title); a map-only flag, "
+                                "ignored with --no-map")
+
     ap.add_argument("--gain-noise", type=float, default=0.0, metavar="M",
                     help="ignore GPS vertical jitter when summing ascent: a descent must "
                                "exceed M metres (default 0 = raw, every rising segment) "
@@ -1173,7 +1348,13 @@ def main() -> None:
             print(f"No tracks within {lo_s}..{hi_s} - nothing to render.")
             return
 
-    tracks = load_tracks(paths, DECIMATE_M, with_ext=args.ext, noise_m=args.gain_noise)
+    color_by = "flat" if args.no_elev else args.color_by
+     # --color-by speed/power need per-point telemetry; --heat wants point
+      # timestamps -- both auto-enable the per-point collection (with_ext),
+      # unless --no-map (a stats-only run ignores the map-only flags)
+    want_ext = args.ext or (not args.no_map
+                  and (color_by in ("speed", "power") or args.heat))
+    tracks = load_tracks(paths, DECIMATE_M, with_ext=want_ext, noise_m=args.gain_noise)
     if not tracks:
         print("No *.gpx files found - nothing to render.")
         return
@@ -1189,7 +1370,6 @@ def main() -> None:
     if args.no_map:
         print("      --no-map: skipping map generation (stats + ride-log only)")
     else:
-        color_by = "flat" if args.no_elev else args.color_by
         out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
         split_prefix = (f"{_safe_filename(Path(args.out).stem)}_" if args.out else "")
@@ -1219,13 +1399,15 @@ def main() -> None:
                 render([t], style=args.style, out_path=out_path, detail=args.detail,
                        color_by=color_by, show_ext=args.ext, split=True,
                        profile=profile, grade_cap=args.grade_cap,
-                       scale=not args.no_scale)
+                       scale=not args.no_scale,
+                       heat=args.heat, labels=args.labels)
         else:
             out_path = (Path(args.out) if args.out is not None
                         else out_dir / f"tracks_overview.{args.format}")
             render(render_tracks, style=args.style, out_path=out_path, detail=args.detail,
                    color_by=color_by, show_ext=args.ext, profile=profile,
-                   grade_cap=args.grade_cap, scale=not args.no_scale)
+                   grade_cap=args.grade_cap, scale=not args.no_scale,
+                   heat=args.heat, labels=args.labels)
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
      # the two title headers' stats as a table, one row per ride, plus a totals row
