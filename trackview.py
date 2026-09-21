@@ -10,7 +10,7 @@ Usage:
     python trackview.py                # ./gpx -> ./output/tracks_overview.png
     python trackview.py --format pdf      # write a vector PDF instead of PNG
     python trackview.py --split           # one map file per track (default: all in one)
-    python trackview.py --profile --split    # add an elevation + grade profile under each map
+    python trackview.py --profile --split    # an elevation + grade + telemetry ride card under each map
     python trackview.py --style sat    # Esri satellite base map
     python trackview.py --detail 15      # override the auto-chosen detail
     python trackview.py --no-elev      # flat colour instead of elevation shading
@@ -27,6 +27,7 @@ Usage:
     python trackview.py --sparse               # quiet stdout: skip the per-track stats listing
     python trackview.py --gain-noise 1.5       # ignore GPS vertical jitter (a dip must exceed 1.5 m) when summing ascent
     python trackview.py --climbs 10            # also write a climb ranking (top N by gain x avg grade) to stats/
+    python trackview.py --trend                  # a per-ride training-trend chart over ride date -> output/
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
 """
 from __future__ import annotations
@@ -51,6 +52,7 @@ from matplotlib.colors import Normalize, LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patheffects import withStroke as _with_stroke
 from matplotlib.ticker import FuncFormatter
+import matplotlib.dates as mdates
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -104,6 +106,17 @@ CLIMB_SMOOTH     = 9.0        # centred moving-avg window (segments) for the cli
 HEAT_GRID         = 300            # cells across the bbox (a HEAT_GRID x HEAT_GRID histogram)
 HEAT_CAP_PCT      = 98.0           # colour cap: % of non-empty cells inside the (capped) range
 HEAT_ALPHA        = 0.55           # overlay opacity (the route lines stay readable on top)
+# The --profile "ride card" adds a slim telemetry mini-panel below the elevation + grade
+# silhouette, one per metric the ride carries (its per-point array, aligned with cum_km),
+# each on its own strip and colour so a single figure reads like a full ride card.  Order
+# and colour are fixed so a card looks the same every time; a panel is skipped when the ride
+# carries no value for that metric (a komoot track, or a ride with no HR strap).
+PROF_METRICS = [
+         ("power_pts",    "Power (W)",      "#d73027"),
+         ("speed_pts",    "Speed (km/h)",   "#1f78b4"),
+         ("hr_pts",       "HR (bpm)",       "#2a9d8f"),
+         ("cadence_pts", "Cadence (rpm)",  "#8c564b"),
+]
 # Bold, saturated hues used per track when NOT shaded by elevation, so several
 # routes stay distinct against a busy basemap (paired with the white halo).
 STRONG_COLORS = [
@@ -434,6 +447,8 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
             d["tsec"] = [r.get("t") for r in dec_records]
             d["speed_pts"] = [r.get("speed") for r in dec_records]
             d["power_pts"] = [r.get("power") for r in dec_records]
+            d["cadence_pts"] = [r.get("cadence") for r in dec_records]
+            d["hr_pts"] = [r.get("hr") for r in dec_records]
         tracks.append(d)
     return tracks
 
@@ -534,9 +549,10 @@ def _moving_avg(arr, window: int) -> "np.ndarray":
             out[i] = good.mean()
     return out
 
-def _draw_profile(ax, t) -> None:
+def _draw_profile(ax, t, x_label: bool = True) -> None:
     """Elevation + grade vs. cumulative distance for one track (grade on a twin
-      axis): the classic ride-profile silhouette drawn under the map."""
+      axis): the classic ride-profile silhouette drawn under the map; the distance
+      x-label is shown on this panel only when it is the bottom one (x_label)."""
     km = np.array(t.get("cum_km") or [0.0], dtype=float)
     ele = t.get("ele") or []
     if km.size < 2:
@@ -546,7 +562,8 @@ def _draw_profile(ax, t) -> None:
     base = np.nanmin(el) if np.isfinite(el).any() else 0.0
     ax.fill_between(km, base, el, color="#444", alpha=0.18, zorder=1)
     ax.set_ylabel("Elevation (m)", fontsize=9)
-    ax.set_xlabel("Distance (km)", fontsize=9)
+    if x_label:
+        ax.set_xlabel("Distance (km)", fontsize=9)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(km[0], km[-1])
         # grade on a right-hand axis (per-segment, so one fewer point than the
@@ -564,6 +581,33 @@ def _draw_profile(ax, t) -> None:
             axg.set_ylabel("Grade (%)", fontsize=9, color="#c0392b")
 
 
+
+
+def _has_metric_pts(t, key) -> bool:
+    """True when a ride carries at least one value for a per-point telemetry array
+    (power/speed/hr/cadence, aligned with cum_km): the --profile card draws a mini-panel
+    for a metric only then, so a ride missing it (no HR strap, a plain komoot track) skips it."""
+    return any(v is not None for v in (t.get(key) or []))
+
+
+def _draw_profile_metric(ax, t, key, label, color) -> None:
+    """One telemetry mini-panel of the --profile "ride card": the ride's per-point
+    `key` (power/speed/hr/cadence, aligned with cum_km) as a light filled line vs. distance,
+    on its own strip and colour, so a single figure reads like a full ride card.  The raw
+    per-point values are plotted (a card should show real effort -- a sprint's peak power
+    -- not a smoothed trace); the distance x-label is left to the bottom panel the caller
+    draws.  A no-op when the ride carries no value for the metric."""
+    km = np.array(t.get("cum_km") or [0.0], dtype=float)
+    arr = t.get(key) or []
+    y = np.array([(v if v is not None else np.nan) for v in arr], dtype=float)
+    if y.size == 0 or not np.isfinite(y).any():
+        return
+    ax.plot(km, y, color=color, lw=0.9, alpha=0.9, zorder=2)
+    ax.fill_between(km, 0.0, y, color=color, alpha=0.12, zorder=1)
+    ax.set_ylabel(label, fontsize=8, color=color)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(km[0], km[-1])
+    ax.tick_params(axis="y", labelsize=7, colors=color)
 def _short_label(name, width=16) -> str:
     """Compact per-ride label for a stacked colourbar: _title_name, truncated with an ellipsis so the bar stays narrow."""
     s = _title_name(name) or str(name)
@@ -725,21 +769,44 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
     w0, s0, e0, n0 = (all_merc[:, 0].min(), all_merc[:, 1].min(),
                       all_merc[:, 0].max(), all_merc[:, 1].max())
     dx, dy = (e0 - w0) * PAD_FRAC, (n0 - s0) * PAD_FRAC
-    bbox = fit_aspect((w0 - dx, s0 - dy, e0 + dx, n0 + dy), FIGURE_IN[0] / FIGURE_IN[1])
-    if detail is None:
-        detail = choose_detail(bbox)
+    raw_bbox = (w0 - dx, s0 - dy, e0 + dx, n0 + dy)
 
     elev = [e for t in tracks for e in t["ele"] if e is not None]
     elev_min, elev_max = (min(elev), max(elev)) if elev else (0.0, 1.0)
 
     if profile and len(tracks) == 1:
-         # a distance profile (elevation + grade) rides in a slim panel below the map
-        fig = plt.figure(figsize=(FIGURE_IN[0], FIGURE_IN[1] * 1.35), dpi=DPI)
-        gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.12)
+         # a "ride card": the elevation + grade silhouette plus one slim telemetry
+         # mini-panel (power/speed/hr/cadence) per metric the ride carries, each its own
+         # strip below the map.  The layout is data-driven, so the figure grows only when
+         # telemetry is present; a plain ride (no --ext) keeps just the elevation + grade panel.
+        t0 = tracks[0]
+        prof_metrics = [m for m in PROF_METRICS if _has_metric_pts(t0, m[0])]
+        n_prof = len(prof_metrics)
+        fig_h = FIGURE_IN[1] * (1.25 + 0.22 * n_prof)
+        fig = plt.figure(figsize=(FIGURE_IN[0], fig_h), dpi=DPI)
+        gs = fig.add_gridspec(2 + n_prof, 1,
+                              height_ratios=[3.0, 1.3] + [0.5] * n_prof, hspace=0.13)
         ax = fig.add_subplot(gs[0])
+         # a tall ride-card figure would letter-box the near-square basemap (white side-
+         # bars), so refit the map's bbox to the map axes' own (narrower) aspect
+        fig.canvas.draw()
+        pos = ax.get_position()
+        map_aspect = (pos.width * FIGURE_IN[0]) / (pos.height * fig_h)
+        bbox = fit_aspect(raw_bbox, map_aspect)
+        if detail is None:
+            detail = choose_detail(bbox)
         ax_prof = fig.add_subplot(gs[1])
-        _draw_profile(ax_prof, tracks[0])
+        _draw_profile(ax_prof, t0, x_label=False)
+        last = ax_prof
+        for k, (key, label, color) in enumerate(prof_metrics):
+            axm = fig.add_subplot(gs[2 + k])
+            _draw_profile_metric(axm, t0, key, label, color)
+            last = axm
+        last.set_xlabel("Distance (km)", fontsize=9)
     else:
+        bbox = fit_aspect(raw_bbox, FIGURE_IN[0] / FIGURE_IN[1])
+        if detail is None:
+            detail = choose_detail(bbox)
         fig, ax = plt.subplots(figsize=FIGURE_IN, dpi=DPI)
         ax_prof = None
 
@@ -1178,6 +1245,77 @@ def write_climbs(tracks, out_path: Path, top_n: int,
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"  wrote {out_path}")
+def _trend_panels(tracks) -> tuple[list, int]:
+    """The --trend chart's panels: one per metric over ride date -- distance, elevation
+    gain and ride duration for every ride (each placed on its Wahoo-filename date),
+    plus a calories-burned panel when any ride carries a power average.  A ride with no
+    date in its filename can't be placed in time, so it is skipped (and counted).  Each
+    panel is (y-label, [dates], [values]); the rides are sorted by date so a panel reads
+    left-to-right in time."""
+    dated = []
+    skipped = 0
+    for t in tracks:
+        rd = _ride_date(t["path"])
+        if rd is None:
+            skipped += 1
+            continue
+        dated.append((rd, t))
+    dated.sort(key=lambda pair: pair[0])
+    dates = [d for d, _ in dated]
+    panels = [
+          ("Distance (km)", dates, [t["dist_km"] for _, t in dated]),
+          ("Elevation gain (m)", dates, [t["gain_m"] for _, t in dated]),
+          ("Duration (h)", dates, [t.get("duration_s", 0.0) / 3600.0 for _, t in dated]),
+    ]
+    cals = []
+    for d, t in dated:
+        cal = _track_calories(t)
+        if cal is not None:
+            cals.append((d, cal))
+    if cals:
+        panels.append(("Calories (kcal)", [d for d, _ in cals], [v for _, v in cals]))
+    return panels, skipped
+
+
+_TREND_COLORS = ["#1f78b4", "#2ca02c", "#ff7f0e", "#984ea3"]
+
+
+def write_trend(tracks, out_path: Path) -> None:
+    """Write a per-ride 'training trend' chart to out_path: one panel per metric
+    (distance, gain, duration, and a calories-burned panel when any ride carries a power
+    average) plotted over ride date, so training volume and the span of the log read at a
+    glance.  A standalone chart (no basemap, no network), so it writes even under --no-map;
+    rides with no date in the filename are skipped (they can't be placed in time)."""
+    panels, skipped = _trend_panels(tracks)
+    if not panels or not panels[0][1]:
+        print("          --trend: no dated rides to chart.")
+        return
+    n = len(panels)
+    fig, axes = plt.subplots(n, 1, figsize=(11, 1.6 + 1.1 * n), dpi=DPI,
+                             sharex=True, squeeze=False)
+    for k, (label, xs, ys) in enumerate(panels):
+        ax = axes[k][0]
+        c = _TREND_COLORS[k % len(_TREND_COLORS)]
+        ax.plot(xs, ys, color=c, lw=1.0, alpha=0.9, marker="o", ms=3.0)
+        ax.fill_between(xs, 0.0, ys, color=c, alpha=0.10)
+        ax.set_ylabel(label, fontsize=9, color=c)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis="y", labelsize=8)
+        ax.tick_params(axis="x", labelsize=8)
+    axes[-1][0].xaxis.set_major_locator(mdates.AutoDateLocator())
+    axes[-1][0].xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    first_d, last_d = panels[0][1][0], panels[0][1][-1]
+    n_rides = len(panels[0][1])
+    title = (f"trackview - training trend       {n_rides} ride{'s' if n_rides != 1 else ''}"
+             f"       {first_d:%Y-%m-%d} .. {last_d:%Y-%m-%d}")
+    if skipped:
+        title += f"       ({skipped} undated ride{'s' if skipped != 1 else ''} skipped)"
+    fig.suptitle(title, fontsize=12, fontweight="bold", y=0.985)
+    fig.subplots_adjust(hspace=0.45, top=0.93, bottom=0.05)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
+    plt.close(fig)
+    print(f"  wrote {out_path}       ({out_path.stat().st_size // 1024} KB)")
 
 
 def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
@@ -1265,9 +1403,11 @@ def main() -> None:
     ap.add_argument("--split", action="store_true",
                     help="one map file per track (default: all tracks in one file)")
     ap.add_argument("--profile", action="store_true",
-                    help="add an elevation + grade vs. distance profile panel below "
-                            "the map (needs --split, or a single track: one profile "
-                            "per ride)")
+                    help="add a 'ride card' below the map: an elevation + grade vs. "
+                            "distance panel plus a slim mini-panel each for power, "
+                            "speed, HR and cadence when the ride carries telemetry "
+                            "(auto-collected -- no --ext on the line needed); needs "
+                            "--split, or a single track -- one card per ride)")
     ap.add_argument("--ext", action="store_true",
                     help="add the calories-burned total (kcal) to the title and an avg "
                            "power/speed/cadence/hr line below it, from wahoo_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
@@ -1311,6 +1451,12 @@ def main() -> None:
                     help="also write a climb ranking (top N by gain x avg grade, default "
                                "10) to stats/trackview-<range>_climbs.txt; grade is "
                                "geometry-derived, so it works even with --no-map")
+    ap.add_argument("--trend", action="store_true",
+                    help="also write a per-ride training-trend chart over ride date -- "
+                                 "distance, gain, duration, and a calories-burned panel when a "
+                                 "power average is available -- to "
+                                 "output/trackview-<range>_trend.<format>; a standalone figure "
+                                 "(no basemap), so it writes even with --no-map")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
@@ -1349,11 +1495,15 @@ def main() -> None:
             return
 
     color_by = "flat" if args.no_elev else args.color_by
-     # --color-by speed/power need per-point telemetry; --heat wants point
-      # timestamps -- both auto-enable the per-point collection (with_ext),
-      # unless --no-map (a stats-only run ignores the map-only flags)
-    want_ext = args.ext or (not args.no_map
-                  and (color_by in ("speed", "power") or args.heat))
+        # Per-point telemetry (power/speed/hr/cadence) is auto-collected for the
+        # features that need it: --color-by speed/power shade by it, --profile's
+        # ride card plots it, --heat's density wants point timestamps, and --trend's
+        # calories panel needs a power average.  The map-only ones (speed/power,
+        # profile, heat) collect only when a map is drawn; --trend is standalone (a
+        # --no-map run still charts it), so it always collects.     --ext additionally
+        # gates the avg-telemetry title line and the ride-log columns.
+    want_ext = args.ext or args.trend or (not args.no_map
+                  and (color_by in ("speed", "power") or args.heat or args.profile))
     tracks = load_tracks(paths, DECIMATE_M, with_ext=want_ext, noise_m=args.gain_noise)
     if not tracks:
         print("No *.gpx files found - nothing to render.")
@@ -1388,6 +1538,13 @@ def main() -> None:
             print("        --profile draws one distance profile, so it needs --split "
                     "(or a single track); skipping the profile panel")
             profile = False
+        elif profile and not any(_has_metric_pts(t, m[0])
+                                         for t in render_tracks for m in PROF_METRICS):
+                  # --profile auto-collects the per-point telemetry the ride card's
+                  # mini-panels plot; with none (e.g. a plain komoot track, no --ext)
+                  # the card falls back to elevation + grade only
+            print("          --profile: no ride carries per-point telemetry "
+                              "(need wahoo_to_gpx --ext); each card shows elevation + grade only")
 
         if not render_tracks:
             print("      no tracks left to render after suppression.")
@@ -1429,6 +1586,15 @@ def main() -> None:
     if args.climbs is not None:
         climbs_path = STATS_DIR / f"trackview-{label}_climbs.txt"
         write_climbs(tracks, climbs_path, top_n=args.climbs)
+
+        # --trend: a per-ride training-trend chart over ride date (distance, gain,
+        # duration, plus a calories-burned panel when any ride carries a power
+        # average); a standalone figure (no basemap), so it writes even under
+        # --no-map, alongside the stats/ ride-log.    --trend auto-collects the
+        # telemetry the calories panel needs (see want_ext above).
+    if args.trend:
+        trend_path = OUTPUT_DIR / f"trackview-{label}_trend.{args.format}"
+        write_trend(tracks, trend_path)
 
 if __name__ == "__main__":
     main()

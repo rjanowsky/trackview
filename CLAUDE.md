@@ -40,7 +40,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --color-by grade --grade-cap 8      # pin the grade colour range to +/-8% (not auto)
 .venv/bin/python trackview.py --color-by power      # shade the route by effort (fast/high = hot; needs --ext, else flat)
 .venv/bin/python trackview.py --color-by speed       # shade the route by pace (fast = hot; needs --ext, else flat)
-.venv/bin/python trackview.py --profile --split     # add an elevation + grade profile panel under each map
+.venv/bin/python trackview.py --profile --split     # an elevation + grade + telemetry "ride card" under each map
 .venv/bin/python trackview.py --ext                 # avg power/speed/cadence/hr/temperature + calories burned (kcal)
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
 .venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
@@ -53,6 +53,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --labels                   # tag each route's start with name + distance (a combined map)
 .venv/bin/python trackview.py --gain-noise 1.5           # ignore GPS vertical jitter when summing ascent
 .venv/bin/python trackview.py --climbs 10                # also write a climb ranking to stats/
+.venv/bin/python trackview.py --trend                    # also write a per-ride training-trend chart over ride date to output/
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -71,8 +72,10 @@ efficiency), `--split`
    grey-centred diverging grade ramp with a robust percentile cap — `--grade-cap N`
    pins it and a few combined rides get their own colourbar — `speed`/`power` on the
    same effort ramp (`inferno`, fast/high = hot, needing the `--ext` telemetry, auto-
-   collected and falling back to a flat colour when absent); or flat distinct colours); `--profile` adds an
-  elevation + grade vs. distance panel under each map (needs `--split`, or a single track).
+   collected and falling back to a flat colour when absent); or flat distinct colours); `--profile`
+   renders a "ride card" — the elevation + grade silhouette (geometry-derived, no telemetry) plus
+   a slim telemetry mini-panel per metric the ride carries (power/speed/HR/cadence, auto-
+   collected) — under each map (needs `--split`, or a single track).
   `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose ride date
   (read from the Wahoo-style filename stem) falls in the range — mirroring
   `wahoo_to_gpx --since/--until`; a filename with no date is skipped when a bound is set.
@@ -108,7 +111,7 @@ Non-obvious Wahoo quirks the converter handles (and why):
 - the two `--ext` flags are **paired**: `wahoo_to_gpx.py --ext` embeds
  `power`/`speed_kmh`/`cadence`/`heartrate`/`temperature` (and a `grade` tag the map does *not* use — see below) as un-namespaced `<trkpt><extensions>`
   children; `trackview.py --ext` reads them back (gpxpy flattens the `<extensions>` children onto `point.extensions`, bare tags) to print an avg power/speed/cadence/hr/temperature subtitle plus the calories-burned total on the main title line (kcal = avg power x ride duration / 4184 / ~25% efficiency); absent telemetry is skipped.
-  Grade, by contrast, is *geometry-derived* (see Colouring modes below), so `--color-by grade` and `--profile` need no telemetry at all.
+  Grade, by contrast, is *geometry-derived* (see Colouring modes below), so `--color-by grade` and a `--profile` elevation + grade silhouette need no telemetry at all (the `--profile` telemetry mini-panels auto-collect it).
 
 ## Notes / testing
 
@@ -129,9 +132,13 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 3. `latlon_to_merc()` — project to Web Mercator (EPSG:3857) for plotting.
 4. `render()` — fetch the raster basemap, overlay each track (white halo underlay
    + colour ramp), add start/stop markers, legend, colourbar, title, attribution,
-   and save the PNG.  With `--profile` a single-track figure instead grows into a
-   2-row `GridSpec` (`height_ratios=[3,1]`): the map on top and a `_draw_profile()`
-   elevation + grade-vs-distance silhouette in a slim panel below.
+   and save the PNG.  With `--profile` a single-track (or `--split`) figure instead grows
+   into a *ride card*: a `GridSpec(2 + n_prof, 1)` (`height_ratios=[3.0, 1.3] + [0.5]*n_prof`)
+   with the map on top, a `_draw_profile()` elevation + grade-vs-distance silhouette, then one
+   slim telemetry mini-panel per metric the ride carries (`_draw_profile_metric`, driven by
+   `PROF_METRICS` — power/speed/HR/cadence in a fixed order + colour, gated by
+   `_has_metric_pts`).   `--profile` auto-collects that telemetry (no `--ext` on the line), and the figure grows only
+   with the metrics present.
 5. `main()` — CLI wiring, per-track summary printout (`--sparse` skips it, leaving just
    the summary lines: where it reads, the track/point totals, files written, and any date-filter skips), and
    `write_stats()` which writes a ride-log table to `stats/` (one row per ride, each
@@ -162,6 +169,14 @@ Key non-obvious details:
      *smoothed* grade (`_moving_avg`, `CLIMB_SMOOTH`) stays ≥ `CLIMB_MIN_GR` (4 %) over ≥
      `CLIMB_MIN_LEN` (250 m), ranked by a "climb score" = gain × average grade.  Pure
      geometry, so it works with `--no-map`; `_ride_climbs`/`_all_climbs`/`write_climbs`.
+    * `--trend` writes a per-ride *training-trend* chart to
+     `output/trackview-<range>_trend.<format>` — one stacked panel per metric *over ride
+     date* (distance, elevation gain, duration, and a calories-burned panel when a ride
+     carries a power average): each ride placed on its Wahoo-filename date (`_ride_date`),
+     sorted so a panel reads left-to-right in time, a filled line on a shared `mdates`
+     date axis (`AutoDateLocator` + a `%b %Y` formatter), colour-cycled from `_TREND_COLORS`.
+     A standalone figure (no basemap, no network), so it writes even under `--no-map`;
+     undated rides are skipped (the title notes how many).    `_trend_panels`/`write_trend`.
    * A scale bar (`_draw_scale_bar`, `_nice_m`, `_fmt_len`) is drawn in every map's
      lower-right corner (`--no-scale` omits it): a "nice" 1/2/5×10ᵏ length of ~15 % of the
      visible width, in Web-Mercator metres (the `equal`-aspect axes makes a data-length line
@@ -175,7 +190,7 @@ Key non-obvious details:
 - **Rendering is headless** — `matplotlib.use("Agg")` is set before importing
   `pyplot`. The figure is square (`FIGURE_IN = (11, 11)`) and `fit_aspect()`
   grows the bounding box to match the figure aspect so the map is never letter-boxed.
-- **Colouring modes** (`--color-by {elev,grade,flat,speed,power}`, default `elev`; `--no-elev` is a visible alias for `flat`): each track is shaded by a metric along its path.  Elevation uses the perceptually-uniform `viridis` ramp (`CMAPEL`, dark low end and bright high end both read on a pale basemap, unlike the old light `terrain`); grade uses a **grey-centred** diverging ramp (`CMAPGRADE`, `GRADE_STOPS`) — steep descents blue, steep climbs red, and the 0 % neutral a visible mid-**grey** rather than white, so a flat route stays visible.  The grade norm is **capped robustly** (the `GRADE_CAP_PCT` percentile of |grade|, clamped to `GRADE_CAP_FLOOR`/`GRADE_CAP_CEIL`) so a lone GPS-noise spike can't squash the ramp to its neutral centre, and `--grade-cap N` pins that range instead of the auto cap.   On a *combined* grade map a few rides (≤ `GRADE_CBAR_MAX`) each get their **own** colourbar at their own cap (via `_stack_grade_colorbars`/`_short_label`) so one steep ride can't desaturate the others; beyond that, or when a cap is pinned, a single shared colourbar is used and a line on stdout says so.   In `--profile`, the per-segment grade line is lightly smoothed (`_moving_avg`, `GRADE_SMOOTH`) to quiet GPS jitter.  Every metric-shaded route is under-laid with a subtle **dark outline** (a touch wider than the line) so it pops on the busy basemap; the flat mode keeps a white halo.  `--color-by flat`/`--no-elev` (or `elev` when the total elevation range is ≤ 1 m) gives one bold distinct colour per track instead.   `speed`/`power` shade the route by **per-segment telemetry** on the same perceptually-uniform effort ramp (`CMAPEED="inferno"`, fast/high = hot): each segment takes the average of its two endpoints and the norm is `_metric_norm` — a robust `[2 %, 98 %]` percentile range so a lone GPS spike can't squash it.  They need the per-point values that `load_tracks` now retains by carrying a per-point record through `decimate(carry=...)` (`d["speed_pts"]`/`d["power_pts"]`/`d["tsec"]`, aligned with `merc`/`ele`/`grade`); that collection is auto-enabled when `--color-by speed/power` or `--heat` is set even without `--ext` (which still gates the avg-telemetry title line and the ride-log columns), and a track without telemetry falls back to its flat colour with a note on stdout.  The active mode sets the colourbar and the title's `shaded by …` suffix.
+- **Colouring modes** (`--color-by {elev,grade,flat,speed,power}`, default `elev`; `--no-elev` is a visible alias for `flat`): each track is shaded by a metric along its path.  Elevation uses the perceptually-uniform `viridis` ramp (`CMAPEL`, dark low end and bright high end both read on a pale basemap, unlike the old light `terrain`); grade uses a **grey-centred** diverging ramp (`CMAPGRADE`, `GRADE_STOPS`) — steep descents blue, steep climbs red, and the 0 % neutral a visible mid-**grey** rather than white, so a flat route stays visible.  The grade norm is **capped robustly** (the `GRADE_CAP_PCT` percentile of |grade|, clamped to `GRADE_CAP_FLOOR`/`GRADE_CAP_CEIL`) so a lone GPS-noise spike can't squash the ramp to its neutral centre, and `--grade-cap N` pins that range instead of the auto cap.   On a *combined* grade map a few rides (≤ `GRADE_CBAR_MAX`) each get their **own** colourbar at their own cap (via `_stack_grade_colorbars`/`_short_label`) so one steep ride can't desaturate the others; beyond that, or when a cap is pinned, a single shared colourbar is used and a line on stdout says so.   In `--profile`, the per-segment grade line is lightly smoothed (`_moving_avg`, `GRADE_SMOOTH`) to quiet GPS jitter.  Every metric-shaded route is under-laid with a subtle **dark outline** (a touch wider than the line) so it pops on the busy basemap; the flat mode keeps a white halo.  `--color-by flat`/`--no-elev` (or `elev` when the total elevation range is ≤ 1 m) gives one bold distinct colour per track instead.   `speed`/`power` shade the route by **per-segment telemetry** on the same perceptually-uniform effort ramp (`CMAPEED="inferno"`, fast/high = hot): each segment takes the average of its two endpoints and the norm is `_metric_norm` — a robust `[2 %, 98 %]` percentile range so a lone GPS spike can't squash it.  They need the per-point values that `load_tracks` now retains by carrying a per-point record through `decimate(carry=...)` (`d["speed_pts"]`/`d["power_pts"]`/`d["tsec"]`, aligned with `merc`/`ele`/`grade`); that collection is auto-enabled when `--color-by speed/power`, `--heat`, `--profile` or `--trend` is set even without `--ext` (`--profile`/`--trend` use it only for the card's mini-panels / the trend's calories panel, not the `--ext` title line or ride-log columns), and a track without telemetry falls back to its flat colour with a note on stdout.  The active mode sets the colourbar and the title's `shaded by …` suffix.
 - **Time-on-route density & ride labels.**  `--heat` (a map-only flag, ignored under `--no-map`) draws a 2-D "time on route" density *under* the route lines: `_draw_heat` builds a `HEAT_GRID`×`HEAT_GRID` (300×300) `np.histogram2d` of the routes' decimated points over the bbox, each cell weighted by the **time on the segments through it** (a slow climb / rest stop / traffic glows more than a fast pass) from `_dwell_times(d["tsec"], n)` — point j carries the time on the segment *leaving* it, the last point its incoming one; a ride with no usable timestamps falls back to a uniform point-count weight, so `--heat` works even without `--ext`.  It is drawn on a `YlOrRd` ramp at `HEAT_ALPHA` (0.55) with empty cells masked (basemap shows through) and the colour capped at `HEAT_CAP_PCT` (98 %), and carries a "Time on route" colourbar whose ticks are formatted as a duration by `_fmt_heat_time` (`N s` / `N m` / `Nh Mm`, a `FuncFormatter`); when a metric colourbar is already on the right edge that one is shown instead, with a note on stdout.  `--labels` (also map-only) tags each route's start marker on a *combined* map (`len(tracks) > 1`) with a halo'd `name      N km` line via `_short_label`, staggered vertically by the ride's index so co-located loop starts stay legible; a single track is left unlabelled (its name is in the title).
 - **Stationary-trainer tracks are suppressed from the map only.** Before
    `render()`, `main()` drops any track whose `Device:` line matches

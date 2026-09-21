@@ -35,7 +35,9 @@ Line references below are to trackview.py as of that commit.
 Open proposals (re-analysed 2026-09-19).   [7] (scale bar), [10] (climb ranking) and
 [15] (gain-noise) are done that day (see each item's "DONE" note).   [6] (speed/power
 shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
-2026-09-20 (see their "DONE" notes below); the rest below are still open.  Line
+2026-09-20 (see their "DONE" notes below); [11] (the profile "ride card") and [12] (the
+training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); the rest
+below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -113,14 +115,41 @@ Analysis
      beats a short steep one.  Writes stats/trackview-<range>_climbs.txt (a self-
      describing header naming the thresholds).  Pure geometry, so it runs under --no-map.
 
-[11] More profile lines.  _draw_profile() today draws only elevation + grade.  Add
+[11] [done] More profile lines.  _draw_profile() today draws only elevation + grade.  Add
      speed / power / HR / cadence as further lines (a 3rd twin axis, or a slim
      stacked mini-panel per metric) from the same telemetry, so one figure is a full
      "ride card".  Needs the per-point arrays from item [6].
+     DONE (2026-09-21): `--profile` (a single track, or --split) now renders a "ride card":
+     the map, the elevation + grade silhouette, then one slim telemetry mini-panel per
+     metric the ride carries, each on its own strip below and sharing the distance x-axis.
+     The panels are data-driven from PROF_METRICS (a fixed order and colour -- power
+     #d73027, speed #1f78b4, HR #2a9d8f, cadence #8c564b -- so a card looks the same every
+     time): _draw_profile_metric() plots a ride's per-point array (item [6]'s d["*_pts"],
+     aligned with cum_km) as a filled line, and _has_metric_pts() gates a panel per metric,
+     so a ride with no HR strap or a plain komoot track simply omits the panel it lacks.
+     The figure is a GridSpec(2 + n_prof, 1, height_ratios=[3.0, 1.3] + [0.5]*n_prof) that
+     grows only with the metrics present, and the map's bbox is refit to the map axes'
+     (narrower) aspect so a tall card doesn't letter-box the near-square basemap.  --profile
+     auto-collects the per-point telemetry (with_ext in want_ext, no --ext on the line), and
+     when no ride carries any a note is printed and each card falls back to elevation + grade
+     only.  Verified by rendering (a 2026-03-02 ride -> map + elev/grade + power/speed/hr/
+     cadence panels; a telemetry-free track -> elev/grade only, with the note).
 
-[12] Time-series / trend chart.  A per-ride line chart of distance, gain, duration
+[12] [done] Time-series / trend chart.  A per-ride line chart of distance, gain, duration
      and calories *over time* (all rides on one axis), written to output/ or
      stats/.  Makes training-volume trends and the 2019->2026 span visible.
+     DONE (2026-09-21): the `--trend` switch (a standalone figure -- no basemap, no network
+     -- so it writes even under --no-map) renders one stacked panel per metric over ride
+     date: Distance (km), Elevation gain (m), Duration (h), and a Calories (kcal) panel
+     appended only when at least one ride carries a power average.  _trend_panels() places
+     each ride on its Wahoo-filename date (_ride_date) and sorts the rides by date, so a
+     panel reads left-to-right in time; each panel is a filled line + markers on a shared
+     date x-axis (mdates AutoDateLocator + a "%b %Y" formatter), colour-cycled from
+     _TREND_COLORS.  A ride with no date in its filename can't be placed, so it is skipped
+     and the title notes "N undated ride(s) skipped" (the title also spans first..last date).
+     It writes output/trackview-<range>_trend.<format>; --trend auto-collects the telemetry
+     (with_ext, always, even under --no-map) that the calories panel needs.  Verified by
+     rendering (--trend --no-map -> a 4-panel chart).
 
 [13] Calendar / activity heatmap.  A GitHub-contribution-style grid of the year,
      each day coloured by that ride's distance (or gain / ride count).  A --calendar
