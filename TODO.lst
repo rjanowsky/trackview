@@ -37,8 +37,9 @@ Open proposals (re-analysed 2026-09-19).   [7] (scale bar), [10] (climb ranking)
 shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 2026-09-20 (see their "DONE" notes below); [11] (the profile "ride card") and [12] (the
 training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
-activity calendar), [14] (the year-in-review summary) and [16] (the on-disk tile cache)
-were done on 2026-09-22 (see their "DONE" notes below); the rest below are still open.  Line
+activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
+[17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); the
+rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -232,10 +233,27 @@ Correctness & data quality
      the image -- i.e. it was served entirely from the on-disk cache.
 
 Selection, filtering & workflow
-[17] Device / sport filters.  The ride-log already groups by Device
+[17] [done] Device / sport filters.  The ride-log already groups by Device
      (_device_groups); add --device NAME / --sport NAME (from the GPX <desc>
      "Device:"/"Sport:" lines) to restrict which rides are drawn and listed,
      complementing the --since/--until date filter for mixed-device/sport folders.
+     DONE (2026-09-22): `--device NAME` / `--sport NAME` keep only the rides whose GPX `<desc>`
+    "Device:"/"Sport:" line equals `NAME`, matched case-insensitively and whitespace-trimmed.
+     `_sport_type`/`_SPORT_RE` mirror the existing `_device_type`/`_DEVICE_RE` (both read the line
+     `wahoo_to_gpx` stamps into `<desc>`), and `load_tracks` now captures `d["sport"]` alongside
+    `d["device"]`.  `_match_meta`/`_filter_by_meta` keep the rides passing *every* active filter
+     (a ride missing the line an active filter names is skipped, never guessed, as an undated ride
+      is under `--since`/`--until`); when nothing matches, the distinct values the log *does* carry
+      are printed per filter (a typo is easy to fix) and the run stops ("nothing to render").  Because
+    the values live in the *parsed* `<desc>` (not the filename), the filter runs *after*
+     `load_tracks`: `main()` reassigns the `tracks` list, so every downstream reader - the map, the
+     ride-log/CSV and the stats/ reports - sees only the kept rides.  They gate the stats too, so they
+    are *not* map-only (not in the `--no-map` ignored-flags list; a `--no-map` run still honours them).
+     `wahoo_to_gpx.py` needs no change (device/sport parsing lives only here).  Verified by rendering on
+    a synthetic mixed folder (2x "Wahoo ELEMNT BOLT"/"Bike" + 1x "Garmin Forerunner 965"/"Run"): the 8
+     scenarios - partial match, case-insensitive match, a `--device`+`--sport` AND-combination, and the
+    zero-match cases (each printing its found-hints and stopping) - plus a direct check that the filter
+     reaches the written ride-log/CSV and the `--split` map render (only the kept rides are written).
 
 [18] --top N.  Render/stat only the N longest, highest-gain, or most-recent rides
      (a "best-of" map, or to keep a huge combined map legible): a --top N --by

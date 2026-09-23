@@ -22,6 +22,8 @@ Usage:
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
     python trackview.py --since 2026-09-08    # only tracks on/after a date (from the .gpx filename)
     python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
+    python trackview.py --device "Wahoo ELEMNT BOLT"    # restrict to one device  (GPX <desc>)
+    python trackview.py --sport Bike                    # restrict to one sport    (GPX <desc>)
     python trackview.py --csv                # also write a CSV ride-log (header + rows, no totals) to stats/
     python trackview.py --csv --csv-delimiter ,    # comma-separated instead of the default ';'
     python trackview.py --sparse               # quiet stdout: skip the per-track stats listing
@@ -323,9 +325,11 @@ def _fmt_num(v, spec: str) -> str:
 
 
 _NAME_DATE_RE = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?=_|$)")
-# `wahoo_to_gpx` stamps a "Device: <name>" line into the GPX <desc> (e.g.
-# "Wahoo ELEMNT BOLT", "Kickr Snap"); a plain komoot track has no such line.
+# `wahoo_to_gpx` stamps a "Device: <name>" and a "Sport: <name>" line into the
+# GPX <desc> (e.g. "Wahoo ELEMNT BOLT", "Bike"); a plain komoot track has
+# neither, and an undated/foreign file may carry one but not the other.
 _DEVICE_RE = re.compile(r"(?im)^\s*Device:\s*(.+)$")
+_SPORT_RE  = re.compile(r"(?im)^\s*Sport:\s*(.+)$")
 
 
 def _title_name(name: str) -> str:
@@ -362,6 +366,14 @@ def _device_type(desc: str | None) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _sport_type(desc: str | None) -> str | None:
+    """Sport embedded by `wahoo_to_gpx` as a 'Sport: <name>' line in the GPX <desc>
+    (e.g. 'Bike'); None when the track carries no such line (e.g. a plain komoot
+    track), so a --sport filter can skip it rather than guess."""
+    m = _SPORT_RE.search(desc) if desc else None
+    return m.group(1).strip() if m else None
+
+
 def _device_label(device: str | None) -> str:
     """Cell text for the ride-log 'Device' column; 'unknown' when the track
     carries no Device line (e.g. a plain komoot track)."""
@@ -381,6 +393,49 @@ def _device_groups(tracks) -> list[tuple[str, list]]:
             order.append(label)
         groups[label].append(t)
     return [(lbl, groups[lbl]) for lbl in order]
+
+
+def _match_meta(t, device=None, sport=None) -> bool:
+    """True when a ride passes the active --device/--sport filter.  Each active filter
+    is an exact, case-insensitive, whitespace-trimmed match on the ride's own 'Device:' /
+    'Sport:' value (the same <desc> line _device_type / _sport_type read), so a ride
+    missing that line fails the filter (never guessed, as an undated ride under
+    --since/--until).  With no active filter every ride passes."""
+    if device and (t.get("device") or "").casefold() != device.casefold():
+        return False
+    if sport and (t.get("sport") or "").casefold() != sport.casefold():
+        return False
+    return True
+
+
+def _filter_by_meta(tracks, device=None, sport=None) -> list:
+    """Keep only the rides passing the active --device/--sport filter, so a mixed-
+    device/sport folder can be narrowed; the filter runs after load_tracks (the values
+    live in the parsed <desc>, not the filename).  A ride missing the line an active
+    filter names is skipped (never guessed); when nothing matches, the distinct values
+    the log *does* carry are printed so a typo is easy to fix.  Returns the kept rides
+    (unchanged when no filter is active)."""
+    if not (device or sport):
+        return tracks
+    kept = [t for t in tracks if _match_meta(t, device, sport)]
+    skipped = len(tracks) - len(kept)
+    if not skipped:
+        return kept
+    why = []
+    if device:
+        why.append(f"device '{device}'")
+    if sport:
+        why.append(f"sport '{sport}'")
+    print(f"      --device/--sport: {len(kept)}/{len(tracks)} track(s) match "
+          f"{' and '.join(why)}")
+    if not kept:
+        for key, val in (("device", device), ("sport", sport)):
+            if not val:
+                continue
+            present = sorted({(t.get(key) or "unknown") for t in tracks})
+            print(f"      --{key}: no ride matches '{val}'; "
+                  f"the log has: {', '.join(present)}")
+    return kept
 
 
 # A "Kickr Snap" is a stationary smart trainer: its session has no route of its
@@ -444,8 +499,10 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
                               and gpx.tracks[0].name else None)
                  or Path(path).stem)
         device = _device_type(gpx.description)           # "Device: <name>" line, if any
-        d = {"path": path, "name": name, "device": device, "merc": merc, "ele": ele,
+        sport  = _sport_type(gpx.description)            # "Sport: <name>" line, if any
+        d = {"path": path, "name": name, "device": device, "sport": sport,
               "n": len(raw), "ndec": len(dec),
+              "merc": merc, "ele": ele,
               "dist_km": dist_km, "gain_m": gain_m,
               "grade": grade, "cum_km": cum_km,
               "duration_s": (t_last - t_first).total_seconds() if t_first else 0.0}
@@ -1616,6 +1673,16 @@ def main() -> None:
     ap.add_argument("--until", metavar="YYYY-MM-DD", default=None,
                     help="only render tracks on/before this date (local, read from the "
                              ".gpx filename); default: no upper bound")
+    ap.add_argument("--device", metavar="NAME", default=None,
+                    help="only render/list rides whose GPX <desc> 'Device:' line is NAME "
+                              "(case-insensitive; a ride with no such line is skipped, as an "
+                              "undated ride under --since/--until); complements the date "
+                              "filter for a mixed-device folder")
+    ap.add_argument("--sport", metavar="NAME", default=None,
+                    help="only render/list rides whose GPX <desc> 'Sport:' line is NAME "
+                              "(case-insensitive; a ride with no such line is skipped); "
+                              "complements the date filter for a mixed-sport folder")
+
     ap.add_argument("--out", default=None,
                     help="output file for the combined map "
                          "(default: output/tracks_overview.<format>)")
@@ -1769,6 +1836,18 @@ def main() -> None:
     if not tracks:
         print("No *.gpx files found - nothing to render.")
         return
+
+      # --device/--sport narrow the rides to one device and/or sport (each matched on
+      # its own parsed <desc> 'Device:'/'Sport:' line, case-insensitively), complementing
+      # the --since/--until date filter for a mixed-device/sport folder.  Filtering the
+      # `tracks` list here means every downstream reader - the map, the ride-log/CSV and
+      # the stats/ reports - sees only the kept rides; a ride missing the line an active
+      # filter names is skipped, and when nothing matches we stop (nothing to render).
+    if args.device or args.sport:
+        tracks = _filter_by_meta(tracks, args.device, args.sport)
+        if not tracks:
+            print("      no track matches the --device/--sport filter - nothing to render.")
+            return
 
     print(f"   {len(tracks)} track(s), "
           f"{sum(t['n'] for t in tracks):,} pts -> "

@@ -45,6 +45,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
 .venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
+.venv/bin/python trackview.py --device "Wahoo ELEMNT BOLT"  # restrict to one device    (GPX <desc> "Device:")
+.venv/bin/python trackview.py --sport Bike                  # restrict to one sport     (GPX <desc> "Sport:")
 .venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
@@ -83,6 +85,12 @@ efficiency), `--split`
   `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose ride date
   (read from the Wahoo-style filename stem) falls in the range — mirroring
   `wahoo_to_gpx --since/--until`; a filename with no date is skipped when a bound is set.
+   `--device NAME`/`--sport NAME` narrow the rides to one device and/or sport — matched
+   case-insensitively on the GPX `<desc>` "Device:"/"Sport:" line that `wahoo_to_gpx` stamps
+    (e.g. `Wahoo ELEMNT BOLT`, `Bike`) — complementing the date filter for a mixed-device/sport
+   folder.  Unlike the filename-based date filter these are read from the *parsed* `<desc>`, so
+    the filter runs *after* `load_tracks` (see Key non-obvious details); a ride with no such
+    line is skipped (never guessed), and when nothing matches the run stops.
 
 ## Wahoo -> GPX (`wahoo_to_gpx.py`)
 
@@ -131,6 +139,8 @@ Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
    (by filename stem, via `_ride_date`/`_parse_argdate`); `load_tracks(paths)`
    then parses each remaining file with `gpxpy`, flattening all
    track→segment→point into one `(lat, lon, ele)` list per file.
+    A `--device`/`--sport` filter then runs *after* `load_tracks` (its values live in the
+   parsed `<desc>`, not the filename), narrowing the `tracks` list every downstream reader sees.
 2. `decimate()` — drop points closer than `DECIMATE_M` (5 m) apart to cut
    ~68k points/file down to a few thousand. First and last points are always kept.
 3. `latlon_to_merc()` — project to Web Mercator (EPSG:3857) for plotting.
@@ -234,6 +244,17 @@ Key non-obvious details:
    tracks, while `write_stats()`/`write_csv()` still use the full set, so a trainer
    ride is always listed in the ride-log/CSV. A `suppressing N 'Kickr Snap'` line is
    printed when any are dropped.
+- **Device / sport filter** (`--device NAME`/`--sport NAME`, TODO [17]) narrow the rides to
+   one device and/or sport — an exact, case-insensitive, whitespace-trimmed match on each ride's
+  own GPX `<desc>` "Device:"/"Sport:" value (the lines `_device_type`/`_sport_type` parse, e.g.
+    `Wahoo ELEMNT BOLT`/`Bike`, stamped by `wahoo_to_gpx`).  Because those values live in the
+   *parsed* `<desc>` (not the filename, as the date filter's do), `main()` applies
+    `_filter_by_meta(tracks, ...)` *after* `load_tracks`, and the narrowed list flows to every
+   downstream reader — the map, the ride-log/CSV and the stats reports.  A ride carrying no such
+     line is skipped (never guessed, as an undated ride under `--since`/`--until`); when nothing
+    matches the distinct values the log *does* carry are printed (a typo is easy to fix) and the
+    run stops.  They gate the stats too, so they are *not* in the map-only flag list (a `--no-map`
+   run still honours them).
 - The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
 - **Ride-log stats table** (`write_stats`): every run writes

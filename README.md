@@ -40,6 +40,8 @@ python trackview.py --ext                  # avg power/speed/cadence/hr/temperat
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
 python trackview.py --since 2026-09-08     # only tracks on/after a date (from the .gpx filename)
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
+python trackview.py --device "Wahoo ELEMNT BOLT"       # restrict to one device   (GPX <desc> "Device:")
+python trackview.py --sport Bike                       # restrict to one sport    (GPX <desc> "Sport:")
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 python trackview.py --no-scale                # omit the map's lower-right scale bar (on by default)
@@ -109,6 +111,14 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`
   filters.  A track whose filename carries no date is skipped (never guessed) whenever a
   bound is active.
+- **Device / sport filter** `--device NAME` and `--sport NAME` keep only the rides whose
+  GPX `<desc>` "Device:" / "Sport:" line (stamped by `wahoo_to_gpx`, e.g. `Wahoo ELEMNT BOLT`,
+   `Bike`) equals `NAME` (case-insensitive), narrowing a mixed-device or mixed-sport folder and
+  complementing the `--since`/`--until` date filter.  A ride carrying no such line is skipped
+   (never guessed), as an undated ride is under a date bound, and when nothing matches the distinct
+  values the log *does* carry are printed so a typo is easy to fix.  They gate the ride-log/CSV and
+   the stats reports as well as the map, so they are *not* map-only (a `--no-map` run still honours
+  them).
 - **Climb ranking** `--climbs [N]` (default `10`) also writes
   `stats/trackview-<first>_<last>_climbs.txt`: the N most-significant *sustained* climbs
    across all the rides, a maximal run of segments whose smoothed grade stays ≥ 4 % over at
