@@ -33,6 +33,7 @@ Usage:
     python trackview.py --calendar --year 2026  # restrict the grid to one calendar year
     python trackview.py --summary               # a year-in-review report (per year/month) -> stats/
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
+    python trackview.py --no-cache             # fetch tiles fresh each run (default: cache them under tiles/)
 """
 from __future__ import annotations
 
@@ -62,6 +63,10 @@ import matplotlib.dates as mdates
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
 OUTPUT_DIR  = Path(__file__).resolve().parent / "output"
 STATS_DIR   = Path(__file__).resolve().parent / "stats"
+# Basemap tiles are cached to disk under here (contextily's on-disk tile cache,
+# keyed by z/x/y per provider), so re-renders and offline runs reuse the downloaded
+# tiles instead of refetching them; --no-cache disables it, tiles/ is git-ignored.
+TILE_CACHE_DIR = Path(__file__).resolve().parent / "tiles"
 
 DECIMATE_M  = 5.0       # drop track points closer than this (m): keeps the shape,
                         # cuts ~68k points to a few thousand for crisp, fast drawing
@@ -1650,7 +1655,7 @@ def main() -> None:
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--detail/"
                             "--split/--no-elev/--color-by/--grade-cap/--profile/--heat/"
-                             "--labels/--no-scale are then ignored)")
+                             "--labels/--no-scale/--no-cache are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
                               "per ride, the same columns as the ride-log but no totals "
@@ -1666,6 +1671,10 @@ def main() -> None:
     ap.add_argument("--no-scale", action="store_true",
                     help="omit the map's scale bar (a 'N km' bar in the lower-right, "
                                "on by default); a map-only flag, ignored with --no-map")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="fetch basemap tiles fresh each run (default: cache them on disk "
+                                 "under tiles/, keyed by z/x/y, so re-renders and offline runs reuse "
+                                 "them; a map-only flag, ignored with --no-map")
     ap.add_argument("--heat", action="store_true",
                     help="overlay a 2-D 'time on route' density under the routes (a "
                                 "YlOrRd heatmap, brighter where you spend the most time or "
@@ -1775,6 +1784,17 @@ def main() -> None:
         out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
         split_prefix = (f"{_safe_filename(Path(args.out).stem)}_" if args.out else "")
+
+         # Basemap tiles are cached to disk under tiles/ (contextily's on-disk tile
+         # cache, keyed by z/x/y per provider), so re-renders and offline runs reuse
+         # them instead of refetching every tile; --no-cache fetches fresh instead
+         # (contextily's ephemeral per-session cache, the old behaviour).
+        if not args.no_cache:
+            TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cx.set_cache_dir(str(TILE_CACHE_DIR))
+            if not args.sparse:
+                print(f"       tile cache: {TILE_CACHE_DIR} "
+                          "(re-renders reuse downloaded tiles; --no-cache fetches fresh)")
 
         # a stationary-trainer 'Kickr Snap' session has no route of its own, so
         # it would just clutter the basemap; keep such tracks off the image while

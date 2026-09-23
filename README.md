@@ -43,6 +43,7 @@ python trackview.py --until 2026-09-05     # only tracks on/before a date (from 
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 python trackview.py --no-scale                # omit the map's lower-right scale bar (on by default)
+python trackview.py --no-cache                # fetch basemap tiles fresh each run (default: cache them on disk under tiles/)
 python trackview.py --heat                   # overlay a 2-D "time on route" density under the routes (where you ride)
 python trackview.py --labels                 # tag each route's start with name + distance (a combined map)
 python trackview.py --gain-noise 1.5          # ignore GPS vertical jitter when summing ascent
@@ -79,6 +80,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   so it stays legible over a busy basemap.
 - **Time-on-route density** `--heat` overlays a 2-D density of *where you ride* under the route lines: a 300×300 histogram of the routes' decimated points over the map's bounding box, each cell weighted by the **time spent** on the segments through it (so a slow climb, a rest stop or a traffic queue glows more than a fast pass; a ride with no timestamps is weighted by point count instead), on a `YlOrRd` ramp at ~0.55 opacity with empty cells masked so the basemap shows through and the colour capped at a high percentile so one hot cell can't wash out the rest.  It carries a "Time on route" colourbar (ticks formatted as a duration, `N s` / `N m` / `Nh Mm`); when a metric colourbar is already on the right edge that one is shown instead, with a note on stdout.  A map-only flag, ignored with `--no-map`.
 - **Ride labels** `--labels` tags each route's **start marker** on a *combined* map with a halo'd `name      N km` line (via `_short_label`), so a many-ride overview is identifiable without a legend key.  Loop rides often share one start, so the tags are staggered vertically by the ride's order to keep a handful of co-located starts legible; a single track is left unlabelled (its name is already in the title).  A map-only flag, ignored with `--no-map`.
+- **Tile cache** basemap tiles are cached to disk under `tiles/` (git-ignored), keyed by z/x/y per provider, so a re-render — or an offline run — reuses the tiles already downloaded instead of refetching every one, which also eases the rate-limit pressure the `_load_basemap` fallback was there to absorb.  `--no-cache` fetches fresh each run instead (contextily's ephemeral per-session cache, the old behaviour); a map-only flag, ignored with `--no-map`.
 - **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `wahoo_to_gpx --ext` embeds.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
@@ -97,7 +99,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   descents are untouched.  It changes only the gain total (distance and duration are
   unaffected); `0` reproduces the old "sum of every rising segment" exactly.
 
-- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`) are ignored when it is set.
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache`) are ignored when it is set.
 - **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The

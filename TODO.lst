@@ -37,8 +37,8 @@ Open proposals (re-analysed 2026-09-19).   [7] (scale bar), [10] (climb ranking)
 shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 2026-09-20 (see their "DONE" notes below); [11] (the profile "ride card") and [12] (the
 training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
-activity calendar) and [14] (the year-in-review summary) were done on 2026-09-22 (see their
-"DONE" notes below); the rest below are still open.  Line
+activity calendar), [14] (the year-in-review summary) and [16] (the on-disk tile cache)
+were done on 2026-09-22 (see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -209,10 +209,27 @@ Correctness & data quality
      counting ascent by ~800x (a 22,007,339 m total) - and was corrected the same day.
      The wahoo_to_gpx.py copy is left unchanged (its default 0 keeps the two identical).
 
-[16] On-disk tile cache.  contextily refetches tiles on every run; cache the
+[16] [done] On-disk tile cache.
      per-detail tiles to disk (keyed by z/x/y) so re-renders and offline runs work,
      and the rate-limit pressure the fallback/backoff in _load_basemap() is already
      trying to absorb disappears.  Pairs naturally with [7]/[8].
+     DONE (2026-09-22): contextily already caches the tiles it downloads -- a joblib
+     `Memory` keyed by z/x/y per provider -- but it wipes that cache dir at process
+     exit (a per-session `tempfile`), so nothing survived a run.  The fix re-points that
+     cache at a persistent, git-ignored `tiles/` dir (`TILE_CACHE_DIR`): `main()` calls
+     `cx.set_cache_dir(str(TILE_CACHE_DIR))` once, before the render loop (gated on
+     `not args.no_cache`; a `--no-map` run skips it, as it draws no tiles), so re-renders
+     and offline runs reuse the tiles already on disk instead of refetching every one, and
+     the rate-limit pressure the _load_basemap() fallback exists to absorb largely
+     disappears.  `--no-cache` (a new map-only flag, ignored under `--no-map`) skips the
+     `set_cache_dir` call and leaves contextily's ephemeral per-session cache -- exactly
+     the old behaviour.  `add_basemap()` doesn't forward a `use_cache` kwarg, so the only
+     lever is the cache *location*; a one-line "tile cache: tiles/ ..." note (suppressed
+     by --sparse) confirms it is on.  `tiles/` joined `output/`/`stats/` in .gitignore and
+     the flag + cache were documented in the module Usage, README and CLAUDE.md.  Verified
+     by rendering: a render populates `tiles/`, and a second identical run with
+     `contextily.tile.requests.get` patched to raise (network "disabled") still produced
+     the image -- i.e. it was served entirely from the on-disk cache.
 
 Selection, filtering & workflow
 [17] Device / sport filters.  The ride-log already groups by Device

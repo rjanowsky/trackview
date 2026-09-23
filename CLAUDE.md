@@ -49,6 +49,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
 .venv/bin/python trackview.py --no-scale                 # omit the map's lower-right scale bar (on by default)
+.venv/bin/python trackview.py --no-cache                 # fetch tiles fresh each run (default: cache them under tiles/)
 .venv/bin/python trackview.py --heat                     # overlay a 2-D "time on route" density under the routes
 .venv/bin/python trackview.py --labels                   # tag each route's start with name + distance (a combined map)
 .venv/bin/python trackview.py --gain-noise 1.5           # ignore GPS vertical jitter when summing ascent
@@ -212,6 +213,14 @@ Key non-obvious details:
   pixel variance exceeds `min_var`; on failure it sleeps 2 s and tries the next
   provider. A failed or blank tile is expected to trigger fallback, so this is
   intentionally not covered by tests.
+- **On-disk tile cache** (`--no-cache` disables it): contextily already caches the
+  tiles it downloads (a joblib `Memory` keyed by z/x/y per provider) but wipes its
+  cache dir at process exit; `main()` points that cache at the git-ignored `tiles/`
+  dir (`cx.set_cache_dir`, gated on `not args.no_cache`) before the render loop, so a
+  re-render -- or a run with no network -- reuses the tiles already on disk instead of
+  refetching every one, easing the rate-limit pressure the fallback above exists to
+  absorb.  `--no-cache` leaves contextily's ephemeral per-session cache (the old
+  behaviour); a map-only flag, ignored under `--no-map`.
 - **Rendering is headless** — `matplotlib.use("Agg")` is set before importing
   `pyplot`. The figure is square (`FIGURE_IN = (11, 11)`) and `fit_aspect()`
   grows the bounding box to match the figure aspect so the map is never letter-boxed.
@@ -225,7 +234,7 @@ Key non-obvious details:
    tracks, while `write_stats()`/`write_csv()` still use the full set, so a trainer
    ride is always listed in the ride-log/CSV. A `suppressing N 'Kickr Snap'` line is
    printed when any are dropped.
-- The `gpx/` input, `output/` and `stats/` are git-ignored; GPX files here are
+- The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
 - **Ride-log stats table** (`write_stats`): every run writes
     `stats/trackview-<first>_<last>.txt`, where `<first>`/`<last>` are the earliest
@@ -236,7 +245,7 @@ Key non-obvious details:
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
   device type** (`_device_groups` groups the rides; that device's name, shown last, in the
   Device column).  Columns mirror the two title lines; under `--ext` two more appear — a **Max grade (%)** (the ride's steepest segment, geometry-derived rather than read from the `grade` extension) and an **Avg temperature (°C)** (from the `temperature` extension) — alongside the calories-burned total and avg power/speed/cadence/hr.  A `-` marks a metric a ride does not carry.  `--no-map`
-  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale` are then no-ops) but still runs this stats write, so a stats-only run is possible.
+  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache` are then no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
    (incl. the Device column, shared via `_stats_columns`), but just a header row + one
