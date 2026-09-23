@@ -54,6 +54,9 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --gain-noise 1.5           # ignore GPS vertical jitter when summing ascent
 .venv/bin/python trackview.py --climbs 10                # also write a climb ranking to stats/
 .venv/bin/python trackview.py --trend                    # also write a per-ride training-trend chart over ride date to output/
+.venv/bin/python trackview.py --calendar                 # a GitHub-style activity grid (km/day) over the year -> output/
+.venv/bin/python trackview.py --calendar --calendar-by gain # colour each day by m gain (or 'rides') instead
+.venv/bin/python trackview.py --summary                  # also write a year-in-review report (per year/month) -> stats/
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -181,6 +184,28 @@ Key non-obvious details:
      lower-right corner (`--no-scale` omits it): a "nice" 1/2/5×10ᵏ length of ~15 % of the
      visible width, in Web-Mercator metres (the `equal`-aspect axes makes a data-length line
      a true on-screen distance), with a white casing so it reads over a busy basemap.
+- **Activity calendar & year-in-review** (TODO [13]/[14]) — both *standalone* outputs (no
+   basemap, no network, so they write even under `--no-map`):
+    * `--calendar` writes a GitHub-style *activity grid* to
+     `output/trackview-<range>_calendar.<format>`: one 7 (weekday, Mon–Sun) × ISO-week block
+     per calendar year that has rides, stacked top-to-bottom and each labelled with its year,
+     every day a square coloured by that day's total on a sequential ramp with a pale "no-ride"
+     end, so a busy stretch glows and a rest gap goes blank.  The metric is
+     `--calendar-by {distance,gain,rides}` (default `distance`, km/day on `Greens`; `gain` m/day
+     on `OrRd`, `rides` a count on `Blues`); `--year YYYY` restricts to one calendar year.  All
+     days share one colour scale (0 .. the busiest day) so the stacked years compare, with a
+     single colourbar in the right margin; the x-axis is labelled by *month* (a tick at the first
+     week of each month, not by week number, so a partial year shows only the months it spans).
+     Each ride is placed on its `_ride_date` (an undated ride is skipped, the title notes how
+     many).   `_calendar_days`/`write_calendar` (with `_month_ticks` for the month x-axis).
+    * `--summary` writes a per-year, per-month *year-in-review* aggregate of the ride-log to
+     `stats/trackview-<range>_summary.txt`: the dated rides grouped by calendar year, and within
+     each year by month, each with its ride count, total distance, gain and hours — plus, under
+     `--ext` as the ride-log does, the group's point-weighted average power (`_metric_avg`, a `-`
+     marks a group with none).  Each year is a block of monthly rows closed by a `TOTAL` row; a
+     multi-year log closes with an `ALL years` grand total, and undated rides get a note.  Pure
+     geometry, so it writes under `--no-map`; the avg-power column needs `--ext`.
+     `_summary_groups`/`write_summary`.
 - **Basemap fallback** (`_load_basemap`): providers are tried in order
   (`--style` first, then the rest of `SOURCES`). It catches fetch exceptions
   *and* detects blank/rate-limited tiles by checking that the returned image's

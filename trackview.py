@@ -28,6 +28,10 @@ Usage:
     python trackview.py --gain-noise 1.5       # ignore GPS vertical jitter (a dip must exceed 1.5 m) when summing ascent
     python trackview.py --climbs 10            # also write a climb ranking (top N by gain x avg grade) to stats/
     python trackview.py --trend                  # a per-ride training-trend chart over ride date -> output/
+    python trackview.py --calendar              # a GitHub-style activity grid (km/day) over the year -> output/
+    python trackview.py --calendar --calendar-by gain # colour each day by m gain (or 'rides') instead of km
+    python trackview.py --calendar --year 2026  # restrict the grid to one calendar year
+    python trackview.py --summary               # a year-in-review report (per year/month) -> stats/
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
 """
 from __future__ import annotations
@@ -1318,6 +1322,236 @@ def write_trend(tracks, out_path: Path) -> None:
     print(f"  wrote {out_path}       ({out_path.stat().st_size // 1024} KB)")
 
 
+# The --calendar "activity grid" (a GitHub-style contribution calendar): one 7 (weekday) x
+# weeks block per calendar year, each day a square coloured by that day's total of the chosen
+# metric.  A metric is (a human label, a sequential colourmap whose *light* end is the "no
+# ride" colour), so a busy stretch glows and a rest gap stays pale -- a year (or the whole
+# log) at a glance.  The dict order fixes the --calendar-by choices.  The x-axis is labelled
+# by month (_month_ticks: a tick at the first week of each month, not by week number), so a
+# partial year shows only the months it spans.
+_CALENDAR_METRICS = {
+    "distance": ("km / day",      "Greens"),
+    "gain":     ("m gain / day",  "OrRd"),
+    "rides":    ("rides / day",   "Blues"),
+}
+_MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _calendar_days(tracks, metric="distance", year=None):
+    """Per-year day-totals for the --calendar grid: {year: {(iso_week, iso_weekday): value}}.
+    Each dated ride adds its `metric` value to the day it was ridden -- distance (km) or gain
+    (m), or 1.0 for a ride count -- so a day that saw two rides sums them; the (week, weekday)
+    is the ride's ISO week/weekday (week 1..53, Monday=1).  `year`, when given, keeps only that
+    one calendar year; else every year that has a dated ride is returned.  A ride with no date
+    in its filename can't be placed on the grid, so it is skipped (and counted)."""
+    by_year = {}
+    skipped = 0
+    for t in tracks:
+        rd = _ride_date(t["path"])
+        if rd is None:
+            skipped += 1
+            continue
+        if year is not None and rd.year != year:
+            continue
+        if metric == "gain":
+            val = t["gain_m"]
+        elif metric == "rides":
+            val = 1.0
+        else:
+            val = t["dist_km"]
+        iso = rd.isocalendar()
+        key = (iso[1], iso[2])
+        cell = by_year.setdefault(rd.year, {})
+        cell[key] = cell.get(key, 0.0) + val
+    return by_year, skipped
+
+
+def _month_ticks(year, weeks):
+    """X-axis ticks for the --calendar grid, one per calendar month: a tick at the week
+    that holds the 1st of the month, a GitHub-style month label in place of a week number.
+    A month whose 1st falls outside this year's ISO weeks is left off -- a year that begins
+    mid-ISO-year skips the January that sits in the previous ISO week, and a month past the
+    log's last ride (past `weeks`) never starts -- so a partial year shows only the months
+    it actually spans."""
+    ticks, labels, seen = [], [], set()
+    for m in range(1, 13):
+        iso = date(year, m, 1).isocalendar()
+        if iso[0] != year:                 # 1st landed in the adjacent ISO year's week
+            continue
+        w = iso[1]
+        if not 1 <= w <= weeks or w in seen:
+            continue
+        seen.add(w)
+        ticks.append(w - 1)
+        labels.append(_MONTH_ABBR[m])
+    return ticks, labels
+
+
+def write_calendar(tracks, out_path, metric="distance", year=None):
+    """Write a GitHub-style activity grid to out_path: one 7 (weekday) x weeks block per
+    calendar year that has rides (stacked top-to-bottom, each labelled with its year), each day
+    a square coloured by its total of `metric` (--calendar-by) on a sequential ramp with a pale
+    "no ride" end, so busy stretches glow and rest gaps go blank.  The days share one colour
+    scale (0 .. the busiest day) so the years compare at a glance.  A standalone figure (no
+    basemap, no network), so it writes even under --no-map; undated rides can't be placed and
+    are skipped (the title notes how many)."""
+    by_year, skipped = _calendar_days(tracks, metric, year)
+    if not by_year:
+        what = f" in {year}" if year is not None else ""
+        print(f"      --calendar: no dated ride to plot{what}.")
+        return
+    label, cmap = _CALENDAR_METRICS[metric]
+    years = sorted(by_year)
+    # a common week-width, so a partial year's empty leading/trailing weeks stay pale and
+    # the stacked year-blocks line up column-for-column
+    weeks = 1
+    for cells in by_year.values():
+        weeks = max(weeks, max((w for (w, _wd) in cells), default=1))
+    vmax = max((v for cells in by_year.values() for v in cells.values()), default=0.0)
+    norm = Normalize(vmin=0.0, vmax=max(vmax, 1e-9), clip=True)
+    fig, axes = plt.subplots(len(years), 1,
+                             figsize=(12.0, 1.7 + 1.5 * len(years)), dpi=DPI,
+                             squeeze=False)
+    weekday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    for k, y in enumerate(years):
+        ax = axes[k][0]
+        arr = np.zeros((7, weeks))
+        for (w, wd), val in by_year[y].items():
+            if 1 <= w <= weeks and 1 <= wd <= 7:
+                arr[wd - 1, w - 1] = val
+        im = ax.imshow(arr, cmap=cmap, norm=norm, aspect="auto",
+                       origin="upper", interpolation="nearest")
+        ax.set_yticks(range(7))
+        ax.set_yticklabels(weekday, fontsize=7)
+        mticks, mlabels = _month_ticks(y, weeks)
+        ax.set_xticks(mticks)
+        ax.set_xticklabels(mlabels, fontsize=7)
+        # thin white gaps between the squares (the contribution-grid look)
+        ax.set_xticks(np.arange(-0.5, weeks, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, 7, 1), minor=True)
+        ax.grid(which="minor", color="white", linewidth=0.6, zorder=0)
+        ax.tick_params(which="both", length=0)
+        # label each year only when stacking more than one (a single block's year is in
+        # the suptitle, so we don't print it twice)
+        if len(years) > 1:
+            ax.set_title(f"{y}", fontsize=11, fontweight="bold",
+                         loc="left", x=0.0, pad=5)
+    span = years[0] if len(years) == 1 else f"{years[0]}..{years[-1]}"
+    title = f"trackview - activity {span}   ({label})"
+    if skipped:
+        title += f"   ({skipped} undated ride{'s' if skipped != 1 else ''} skipped)"
+    fig.suptitle(title, fontsize=12, fontweight="bold", y=0.97)
+    fig.subplots_adjust(hspace=0.6, left=0.06, right=0.89, top=0.88, bottom=0.09)
+     # one colourbar in the reserved right margin (a single shared 0..busiest-day
+     # scale, so the stacked years compare at a glance); its vertical extent is read
+     # off the grid itself so the bar lines up with the squares, not the figure edges
+    top_ax = axes[0][0].get_position()
+    bot_ax = axes[-1][0].get_position()
+    cax = fig.add_axes([0.925, bot_ax.y0, 0.013, top_ax.y1 - bot_ax.y0])
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(label, fontsize=9)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
+    plt.close(fig)
+    print(f"  wrote {out_path}")
+
+
+def _summary_groups(tracks):
+    """Split the rides for the --summary year-in-review report: dated rides grouped by
+    calendar year then month ({year: {month: [rides]}}), plus an 'undated' list of rides
+    whose filename carries no date and so can't be placed by year/month."""
+    by_year = {}
+    undated = []
+    for t in tracks:
+        rd = _ride_date(t["path"])
+        if rd is None:
+            undated.append(t)
+        else:
+            by_year.setdefault(rd.year, {}).setdefault(rd.month, []).append(t)
+    return by_year, undated
+
+
+def write_summary(tracks, out_path, show_ext: bool = False) -> None:
+    """Write a year-in-review report to out_path: the rides grouped by calendar year, and
+    within each year by month, each shown with its ride count, total distance, total gain and
+    total hours -- and, under --ext as the ride-log does, the group's point-weighted average
+    power (a '-' marks a group that carries none).  Each year is its own block of monthly rows
+    closed by a TOTAL row; when the log spans several years an 'ALL years' grand total closes
+    the report, and any undated rides (no date in the filename, so unplaceable) get a note.
+    Pure geometry, so it writes even under --no-map; the avg-power column needs --ext."""
+    by_year, undated = _summary_groups(tracks)
+    n = len(tracks)
+    header = ["Month", "Rides", "Dist (km)", "Gain (m)", "Hours"]
+    numeric = [False, True, True, True, True]
+    if show_ext:
+        header.append("Avg power (W)")
+        numeric.append(True)
+
+    def cells(group, label):
+        dist = sum(t["dist_km"] for t in group)
+        gain = sum(t["gain_m"] for t in group)
+        hours = sum(t.get("duration_s", 0.0) for t in group) / 3600.0
+        row = [label, f"{len(group):,}", f"{dist:,.0f}", f"{gain:,.0f}",
+               f"{hours:,.1f}"]
+        if show_ext:
+            row.append(_fmt_num(_metric_avg(group, "power"), ",.0f"))
+        return row
+
+    def flat(by_year_):
+        return [t for y in by_year_.values() for ms in y.values() for t in ms]
+
+    year_rows = {}
+    for y in sorted(by_year):
+        months = by_year[y]
+        rows = [cells(months[m], _MONTH_ABBR[m]) for m in sorted(months)]
+        rows.append(cells(flat({y: months}), "TOTAL"))
+        year_rows[y] = rows
+    grand = None
+    if len(by_year) > 1:
+        grand = cells(flat(by_year), "ALL years")
+
+    # every row that will print sizes the columns, so the year blocks align
+    all_rows = [r for y in sorted(year_rows) for r in year_rows[y]]
+    if grand is not None:
+        all_rows.append(grand)
+    widths = [max(len(header[i]), *[len(r[i]) for r in all_rows])
+              for i in range(len(header))]
+
+    def fmt(row):
+        return "          ".join(
+              (c.rjust(widths[i]) if numeric[i] else c.ljust(widths[i]))
+              for i, c in enumerate(row))
+
+    head = "          ".join(
+          (h.rjust(widths[i]) if numeric[i] else h.ljust(widths[i]))
+          for i, h in enumerate(header))
+    rule = "          ".join("-" * w for w in widths)
+    lines = [f"trackview - year-in-review   {n} ride{'s' if n != 1 else ''}",
+             ""]
+    for y in sorted(year_rows):
+        lines.append("")
+        lines.append(f"{y}")
+        lines.append(head)
+        lines.append(rule)
+        lines += [fmt(r) for r in year_rows[y]]
+    if undated:
+        ud = sum(t["dist_km"] for t in undated)
+        ug = sum(t["gain_m"] for t in undated)
+        lines.append("")
+        lines.append(f"   {len(undated)} undated ride"
+                     f"{'s' if len(undated) != 1 else ''} "
+                     f"(no date in the filename, unplaced by year/month): "
+                     f"{ud:,.1f} km, {ug:,.0f} m")
+    if grand is not None:
+        lines.append("")
+        lines.append(rule)
+        lines.append(fmt(grand))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  wrote {out_path}")
+
+
 def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
                   retries: int = 3, backoff_s: float = 2.0) -> str:
     """Fall back through tile providers until one shows real tiles.
@@ -1457,6 +1691,24 @@ def main() -> None:
                                  "power average is available -- to "
                                  "output/trackview-<range>_trend.<format>; a standalone figure "
                                  "(no basemap), so it writes even with --no-map")
+    ap.add_argument("--calendar", action="store_true",
+                    help="also write a GitHub-style activity grid -- one square per calendar "
+                          "day, coloured by that day's total of --calendar-by, one 7xweeks block "
+                          "per year that has rides -- to "
+                          "output/trackview-<range>_calendar.<format>; a standalone figure "
+                          "(no basemap), so it writes even with --no-map")
+    ap.add_argument("--calendar-by", choices=list(_CALENDAR_METRICS), default="distance",
+                    help="what colours each day of the --calendar grid: 'distance' (default, km "
+                          "ridden that day), 'gain' (metres of ascent) or 'rides' (how many "
+                          "rides that day)")
+    ap.add_argument("--year", type=int, default=None, metavar="YYYY",
+                    help="restrict --calendar to a single calendar year (default: every year "
+                          "that has rides, stacked one block each)")
+    ap.add_argument("--summary", action="store_true",
+                    help="also write a year-in-review report to "
+                          "stats/trackview-<range>_summary.txt: the rides grouped by year (and "
+                          "month) with their ride count, total distance, gain and hours, plus "
+                          "avg power under --ext; pure geometry, so it works even with --no-map")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
@@ -1587,6 +1839,14 @@ def main() -> None:
         climbs_path = STATS_DIR / f"trackview-{label}_climbs.txt"
         write_climbs(tracks, climbs_path, top_n=args.climbs)
 
+      # --summary: a year-in-review report -> ./stats/trackview-<first>_<last ride
+      # date>_summary.txt, the rides grouped by year (and month) with their ride
+      # count, total distance, gain and hours (plus avg power under --ext, as the
+      # ride-log does); pure geometry, so it works even with --no-map.
+    if args.summary:
+        summary_path = STATS_DIR / f"trackview-{label}_summary.txt"
+        write_summary(tracks, summary_path, show_ext=args.ext)
+
         # --trend: a per-ride training-trend chart over ride date (distance, gain,
         # duration, plus a calories-burned panel when any ride carries a power
         # average); a standalone figure (no basemap), so it writes even under
@@ -1595,6 +1855,14 @@ def main() -> None:
     if args.trend:
         trend_path = OUTPUT_DIR / f"trackview-{label}_trend.{args.format}"
         write_trend(tracks, trend_path)
+
+       # --calendar: a GitHub-style activity grid -> ./output/trackview-<first>_<last
+       # ride date>_calendar.<format>, one square per calendar day coloured by
+       # --calendar-by, one 7xweeks block per year that has rides; a standalone figure
+       # (no basemap), so it writes even under --no-map, alongside the --trend chart.
+    if args.calendar:
+        cal_path = OUTPUT_DIR / f"trackview-{label}_calendar.{args.format}"
+        write_calendar(tracks, cal_path, metric=args.calendar_by, year=args.year)
 
 if __name__ == "__main__":
     main()

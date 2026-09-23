@@ -48,6 +48,10 @@ python trackview.py --labels                 # tag each route's start with name 
 python trackview.py --gain-noise 1.5          # ignore GPS vertical jitter when summing ascent
 python trackview.py --climbs 10               # also write a climb ranking to stats/
 python trackview.py --trend                   # also write a per-ride training-trend chart (distance/gain/duration/calories) over ride date to output/
+python trackview.py --calendar                 # a GitHub-style activity grid (km/day) over the year to output/
+python trackview.py --calendar --calendar-by gain     # colour each day by m gain (or 'rides') instead of km
+python trackview.py --calendar --year 2026   # restrict the grid to one calendar year
+python trackview.py --summary                  # also write a year-in-review report (per year/month) to stats/
 python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
@@ -118,6 +122,29 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
    left-to-right in time; a ride with no date in its filename can't be placed and is skipped (the
    title notes how many).  It is a standalone figure (no basemap, no network), so it writes even with
    `--no-map`, and it auto-collects the telemetry the calories panel needs.
+- **Activity calendar** `--calendar` writes a GitHub-contribution-style *activity grid* to
+   `output/trackview-<first>_<last>_calendar.<format>`: one 7 (weekday, Mon–Sun) × ISO-week block
+   per calendar year that has rides, stacked top-to-bottom and each labelled with its year, every
+   day a square coloured by that day's total on a sequential ramp with a pale "no ride" end, so a
+   busy stretch glows and a rest gap goes blank.  A day that saw two rides sums them.  The metric
+   is `--calendar-by {distance,gain,rides}` (default `distance`, km/day on a `Greens` ramp; `gain`
+   is m/day on `OrRd`, `rides` is a ride count on `Blues`); `--year YYYY` restricts the grid to one
+   calendar year.  Every day shares one colour scale (0 .. the busiest day) so the stacked years
+   compare at a glance, with a single "metric/day" colourbar in the right margin.  The x-axis is
+   labelled by *month* (a tick at the first week of each month, the GitHub way, not by week
+   number), so a stretch of riding reads at a glance and a partial year shows only the months it
+   spans.  Each ride is
+   placed on its Wahoo-filename date (`YYYY-MM-DD`, the same `_ride_date()` the trend chart uses);
+   a ride with no date can't be placed and is skipped (the title notes how many).  It is a
+   standalone figure (no basemap, no network), so it writes even under `--no-map`.
+- **Year-in-review summary** `--summary` writes a per-year, per-month aggregate of the ride-log to
+   `stats/trackview-<first>_<last>_summary.txt`: the dated rides grouped by calendar year, and
+   within each year by month, each shown with its ride count, total distance, total gain and total
+   hours — and, under `--ext` as the ride-log does, the group's point-weighted average power (a `-`
+   marks a group that carries none).  Each year is its own block of monthly rows closed by a `TOTAL`
+   row; when the log spans several years an `ALL years` grand total closes the report, and any
+   undated rides (no date in the filename, so unplaceable) get a note.  Pure geometry, so it writes
+   even under `--no-map`; the avg-power column needs `--ext`.
 
 ## Base-map providers (`--style`)
 

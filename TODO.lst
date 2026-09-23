@@ -36,8 +36,9 @@ Open proposals (re-analysed 2026-09-19).   [7] (scale bar), [10] (climb ranking)
 [15] (gain-noise) are done that day (see each item's "DONE" note).   [6] (speed/power
 shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 2026-09-20 (see their "DONE" notes below); [11] (the profile "ride card") and [12] (the
-training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); the rest
-below are still open.  Line
+training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
+activity calendar) and [14] (the year-in-review summary) were done on 2026-09-22 (see their
+"DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -151,14 +152,46 @@ Analysis
      (with_ext, always, even under --no-map) that the calories panel needs.  Verified by
      rendering (--trend --no-map -> a 4-panel chart).
 
-[13] Calendar / activity heatmap.  A GitHub-contribution-style grid of the year,
+[13] [done] Calendar / activity heatmap.  A GitHub-contribution-style grid of the year,
      each day coloured by that ride's distance (or gain / ride count).  A --calendar
      PNG is the best "year at a glance"; reuses _ride_date() per ride.
+     DONE (2026-09-22): `--calendar` writes a GitHub-style *activity grid* to
+     output/trackview-<range>_calendar.<format> -- one 7 (weekday, Mon-Sun) x ISO-week
+     block per calendar year that has rides, stacked top-to-bottom and each labelled with
+     its year, every day a square coloured by that day's total on a sequential ramp with a
+     pale "no-ride" end, so a busy stretch glows and a rest gap goes blank (a day that saw
+     two rides sums them).  The metric is `--calendar-by {distance,gain,rides}` (default
+     distance, km/day on a `Greens` ramp; gain = m/day on `OrRd`, rides = a count on
+     `Blues`); `--year YYYY` restricts to one calendar year.  All days share one colour
+     scale (0 .. the busiest day) so the stacked years compare, with a single colourbar in
+     the reserved right margin -- its extent is read off the grid, so it lines up with the
+     squares rather than the figure edges.  The x-axis is labelled by month (a tick at the
+     first week of each month, not by week number) so a partial year shows only the months it
+     spans.  Each ride is placed on its Wahoo-filename date
+     (`_ride_date`, the same helper the trend chart uses); an undated ride can't be placed
+     and is skipped, the title noting how many.  A standalone figure (no basemap, no
+     network), so it writes even under --no-map.  `_calendar_days`/`write_calendar` (with
+     `_month_ticks` for the month-labelled x-axis), driven by `_CALENDAR_METRICS` (metric ->
+      (label, cmap)) and `_MONTH_ABBR`.  Verified by rendering
+     (a single 2026-year grid; a synthetic 2024..2026 stack with per-block year titles and
+     the shared colourbar; a no-match --year prints its note and writes nothing).
 
-[14] Annual / monthly summary report.  Aggregate the ride-log per year (and per
+[14] [done] Annual / monthly summary report.  Aggregate the ride-log per year (and per
      month): total distance, gain, rides, hours, avg power - appended to the stats/
      table or a new per-year report file.  The history spans many years, so a
      year-in-review is currently only possible by hand.
+     DONE (2026-09-22): `--summary` writes a per-year, per-month *year-in-review* aggregate
+     of the ride-log to stats/trackview-<range>_summary.txt.  `_summary_groups` splits the
+     rides by calendar year then month ({year: {month: [rides]}}) plus an 'undated' list
+     (no date in the filename, so unplaceable); `write_summary` renders each year as its own
+     block of monthly rows (ride count, total distance, gain and hours -- plus, under --ext as
+     the ride-log does, the group's point-weighted average power via _metric_avg, a '-' marks
+     a group with none) closed by a TOTAL row, and when the log spans several years an
+     'ALL years' grand total closes the report, with a note for any undated rides.  The
+     columns are sized from every row that prints (so the year blocks align) with the same
+     11-space separators as the ride-log.  Pure geometry, so it writes even under --no-map;
+     the avg-power column needs --ext.  Verified by rendering (the 2026 log -> a 117-ride
+     monthly report with a TOTAL row).
 
 Correctness & data quality
 [15] [done] Elevation-gain noise handling.  _distance_and_gain() sums *every* positive
