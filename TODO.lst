@@ -38,7 +38,8 @@ shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 2026-09-20 (see their "DONE" notes below); [11] (the profile "ride card") and [12] (the
 training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
-[17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); the
+[17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
+(the --top N best-of filter) was done on 2026-09-24 (see its "DONE" note below); the
 rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
@@ -255,9 +256,29 @@ Selection, filtering & workflow
     zero-match cases (each printing its found-hints and stopping) - plus a direct check that the filter
      reaches the written ride-log/CSV and the `--split` map render (only the kept rides are written).
 
-[18] --top N.  Render/stat only the N longest, highest-gain, or most-recent rides
+[18] [done] --top N.  Render/stat only the N longest, highest-gain, or most-recent rides
      (a "best-of" map, or to keep a huge combined map legible): a --top N --by
      {km,gain,recent} switch, applied after the date filter.
+     DONE (2026-09-24): `--top N --by {km,gain,recent}` (default `recent`) keeps only the `N`
+      most-significant rides, ranked by `_top_key` -- distance (`km` -> `dist_km`), elevation gain
+        (`gain` -> `gain_m`) or the Wahoo-filename ride date (`recent` -> `_ride_date` as a day ordinal,
+      a ride with no filename date ranking last).  As with --device/--sport it runs *after* every
+      other filter: `main()` reassigns `tracks` once more, right after the --device/--sport block, so
+      it selects the top `N` of whatever rides remain and the narrowed list flows to every downstream
+      reader (the map, the ride-log/CSV and the stats/ reports).    `_select_top` re-sorts the survivors
+      back into the original date-ascending order (the glob is date-sorted) via a stable rank, so the
+      ride-log and the `trackview-<first>_<last>` filename read as usual and ties keep that order; `N`
+        >= the ride count (or `N` <= 0) is a no-op (the list is returned unchanged, no note).  A one-line
+        `--top N --by <by>: K/N ride(s) kept (the N longest/highest-gain/most recent)` confirms a
+      narrowing selection -- printed even under --sparse, like the --device/--sport note, whenever the
+      set is actually reduced; a no-op selection prints nothing.  Not map-only, so a --no-map run honours
+      it; `--by` is an argparse `choices=[km,gain,recent]`, so a bad value is rejected.    `wahoo_to_gpx.py`
+      needs no change.  Verified headlessly (--no-map): a unit test of `_select_top`/`_top_key` (each of
+      km/gain/recent re-sorted to date order, ties kept, `N`>=count / `N`<=0 a no-op, an undated ride
+      last under `recent` yet winning on a pure value under `km`), plus end-to-end runs on the 119-ride
+      log -- `--top 5 --by gain` writes the 5 highest-gain rides (confirmed against an independent
+      ranking), `--since 2026-08-01 --top 3 --by km` narrows to 34 then the 3 longest of those (the note
+      reads 3/34), and `--top 3 --by km --csv` writes a matching 3-row CSV.
 
 [19] Recurse / multiple input dirs.  main() does gpx_dir.glob("*.gpx") (flat, line
      956); allow nested folders (rglob) or a repeatable --gpx-dir so rides can be

@@ -47,6 +47,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
 .venv/bin/python trackview.py --device "Wahoo ELEMNT BOLT"  # restrict to one device    (GPX <desc> "Device:")
 .venv/bin/python trackview.py --sport Bike                  # restrict to one sport     (GPX <desc> "Sport:")
+.venv/bin/python trackview.py --top 10 --by gain            # render/stat only the N highest-gain rides (or --by km/recent)
+.venv/bin/python trackview.py --top 5                       # ... or the N most recent (--by default)
 .venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
@@ -255,6 +257,17 @@ Key non-obvious details:
     matches the distinct values the log *does* carry are printed (a typo is easy to fix) and the
     run stops.  They gate the stats too, so they are *not* in the map-only flag list (a `--no-map`
    run still honours them).
+- **Top-N filter** (`--top N --by {km,gain,recent}`, default `recent`, TODO [18]) keeps only the
+   `N` most-significant rides — a "best-of" map, or a way to keep a huge combined map legible —
+   ranked by `dist_km` (`km`), `gain_m` (`gain`) or the Wahoo-filename ride date (`recent`).  As with
+   `--device`/`--sport` (it runs *after* those too, so it selects the top `N` of whatever rides
+   remain), `main()` applies `_select_top(tracks, N, by)` *after* `load_tracks` and the narrowed list
+   flows to every downstream reader — the map, the ride-log/CSV and the stats reports.  `_select_top`
+   re-sorts the survivors back into the original date-ascending order (the glob is date-sorted, so the
+   ride-log and the `trackview-<first>_<last>` filename still read as usual); a stable rank keeps ties
+   in that order, a ride with no filename date ranks last under `recent` (but still wins on a pure value
+   under `km`/`gain`), and `N` ≥ the ride count (or `N` ≤ 0) is a no-op.  It is *not* a map-only flag
+   (a `--no-map` run still honours it).
 - The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
 - **Ride-log stats table** (`write_stats`): every run writes

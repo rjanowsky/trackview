@@ -42,6 +42,8 @@ python trackview.py --since 2026-09-08     # only tracks on/after a date (from t
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
 python trackview.py --device "Wahoo ELEMNT BOLT"       # restrict to one device   (GPX <desc> "Device:")
 python trackview.py --sport Bike                       # restrict to one sport    (GPX <desc> "Sport:")
+python trackview.py --top 10 --by gain                 # render/stat only the N highest-gain rides (or --by km/recent)
+python trackview.py --top 5                            # ... or the N most recent (--by default)
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 python trackview.py --no-scale                # omit the map's lower-right scale bar (on by default)
@@ -119,6 +121,15 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   values the log *does* carry are printed so a typo is easy to fix.  They gate the ride-log/CSV and
    the stats reports as well as the map, so they are *not* map-only (a `--no-map` run still honours
   them).
+- **Top-N filter** `--top N --by {km,gain,recent}` (default `recent`) keeps only the `N`
+  most-significant rides — a "best-of" map, or a way to keep a huge combined map legible — ranked
+  by distance (`km`), elevation gain (`gain`) or recency (`recent`, the default).  It runs *after*
+  the `--since`/`--until`/`--device`/`--sport` filters (so it selects the top `N` of whatever rides
+  remain), and narrows the `tracks` list the same way, so the map, the ride-log/CSV and the stats
+  reports all see only the selected rides; the survivors are re-sorted back into date order (so the
+  ride-log and the `trackview-<first>_<last>` filename read as usual), ties keep that order, and
+  `N` ≥ the ride count (or `N` ≤ 0) is a no-op.  It is *not* a map-only flag (a `--no-map` run still
+  honours it).
 - **Climb ranking** `--climbs [N]` (default `10`) also writes
   `stats/trackview-<first>_<last>_climbs.txt`: the N most-significant *sustained* climbs
    across all the rides, a maximal run of segments whose smoothed grade stays ≥ 4 % over at

@@ -24,6 +24,8 @@ Usage:
     python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
     python trackview.py --device "Wahoo ELEMNT BOLT"    # restrict to one device  (GPX <desc>)
     python trackview.py --sport Bike                    # restrict to one sport    (GPX <desc>)
+    python trackview.py --top 10 --by gain              # render/stat only the N highest-gain rides (or --by km/recent)
+    python trackview.py --top 5                         # ... or the N most recent (--by default)
     python trackview.py --csv                # also write a CSV ride-log (header + rows, no totals) to stats/
     python trackview.py --csv --csv-delimiter ,    # comma-separated instead of the default ';'
     python trackview.py --sparse               # quiet stdout: skip the per-track stats listing
@@ -436,6 +438,45 @@ def _filter_by_meta(tracks, device=None, sport=None) -> list:
             print(f"      --{key}: no ride matches '{val}'; "
                   f"the log has: {', '.join(present)}")
     return kept
+
+
+# The human phrasing for each --top ranking (--by value -> the adjective a "top N"
+# note reads as, e.g. "the 10 longest").  The dict order doubles as the --by choices.
+_TOP_BY = {
+     "km":      "longest",
+     "gain":    "highest-gain",
+     "recent": "most recent",
+}
+
+
+def _top_key(t, by: str) -> float:
+    """A ride's --top ranking value on `by` (a larger value ranks higher): 'km' is its
+    distance, 'gain' its elevation gain, and 'recent' its Wahoo-filename ride date as a day
+    ordinal (a ride with no date in the filename ranks as the oldest, so it drops out of a
+    most-recent selection first).  Pure geometry -- the values are already on the ride dict --
+    so it works with or without telemetry."""
+    if by == "km":
+        return t["dist_km"]
+    if by == "gain":
+        return t["gain_m"]
+    rd = _ride_date(t["path"])
+    return float(rd.toordinal()) if rd is not None else 0.0
+
+
+def _select_top(tracks, n: int, by: str) -> list:
+    """Keep only the top `n` rides ranked by `by` ('km'/'gain'/'recent', see _top_key),
+    then restore the kept rides to their original (date-ascending) order, so the map, the
+    ride-log/CSV and the stats/ reports read as usual -- e.g. the stats filename's
+    earliest->latest span (tracks[0]/tracks[-1]) and the ride-log's top-down listing.
+    Ties fall back to that original order (a stable rank on the already date-sorted list),
+    and `n` >= the ride count (or a non-positive `n`) is a no-op, so an unbounded run is
+    returned unchanged."""
+    if not n or n >= len(tracks):
+        return tracks
+    order = sorted(range(len(tracks)), key=lambda i: _top_key(tracks[i], by),
+                   reverse=True)
+    picked = set(order[:n])
+    return [tracks[i] for i in range(len(tracks)) if i in picked]
 
 
 # A "Kickr Snap" is a stationary smart trainer: its session has no route of its
@@ -1687,6 +1728,14 @@ def main() -> None:
                     help="only render/list rides whose GPX <desc> 'Sport:' line is NAME "
                               "(case-insensitive; a ride with no such line is skipped); "
                               "complements the date filter for a mixed-sport folder")
+    ap.add_argument("--top", type=int, metavar="N", default=None,
+                    help="render/stat only the N rides ranked by --by -- a 'best-of' map, "
+                              "or a way to keep a huge combined map legible; applied after "
+                              "the --since/--until and --device/--sport filters; default: no limit")
+    ap.add_argument("--by", choices=list(_TOP_BY), default="recent",
+                    help="what --top ranks the rides by: 'km' (the longest), 'gain' (the "
+                              "highest elevation gain) or 'recent' (the most recent, the "
+                              "default); ties keep date order")
 
     ap.add_argument("--out", default=None,
                     help="output file for the combined map "
@@ -1853,6 +1902,21 @@ def main() -> None:
         if not tracks:
             print("      no track matches the --device/--sport filter - nothing to render.")
             return
+
+      # --top N --by {km,gain,recent} keep only the N most-significant rides -- a
+      # 'best-of' map, or a way to keep a huge combined map legible -- ranked by distance
+      # ('km'), elevation gain ('gain') or recency ('recent', the default).  It runs
+      # *after* every other filter (the --since/--until range and the --device/--sport
+      # filter above), so it selects the top N of whatever rides remain; filtering the
+      # `tracks` list here means the map, the ride-log/CSV and the stats/ reports all see
+      # only the selected rides, which _select_top re-sorts back into date order so the
+      # ride-log and the stats filename read as usual.
+    if args.top is not None:
+        kept = _select_top(tracks, args.top, args.by)
+        if len(kept) < len(tracks):
+            print(f"         --top {args.top} --by {args.by}: {len(kept)}/{len(tracks)} "
+                  f"ride(s) kept (the {args.top} {_TOP_BY[args.by]})")
+        tracks = kept
 
     print(f"   {len(tracks)} track(s), "
           f"{sum(t['n'] for t in tracks):,} pts -> "
