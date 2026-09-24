@@ -137,7 +137,7 @@ syntax-check with `.venv/bin/python -c "import ast; ast.parse(open('trackview.py
 
 Everything lives in `trackview.py`. The pipeline runs top-to-bottom:
 
-1. `main()` discovers `*.gpx` and applies the `--since`/`--until` date filter
+1. `main()` discovers `*.gpx` (recursively into subfolders by default; `--flat` for one level) and applies the `--since`/`--until` date filter
    (by filename stem, via `_ride_date`/`_parse_argdate`); `load_tracks(paths)`
    then parses each remaining file with `gpxpy`, flattening all
    track→segment→point into one `(lat, lon, ele)` list per file.
@@ -263,17 +263,19 @@ Key non-obvious details:
    `--device`/`--sport` (it runs *after* those too, so it selects the top `N` of whatever rides
    remain), `main()` applies `_select_top(tracks, N, by)` *after* `load_tracks` and the narrowed list
    flows to every downstream reader — the map, the ride-log/CSV and the stats reports.  `_select_top`
-   re-sorts the survivors back into the original date-ascending order (the glob is date-sorted, so the
+   re-sorts the survivors back into the original date-ascending order (the (recursive) glob is date-ascending, so the
    ride-log and the `trackview-<first>_<last>` filename still read as usual); a stable rank keeps ties
    in that order, a ride with no filename date ranks last under `recent` (but still wins on a pure value
    under `km`/`gain`), and `N` ≥ the ride count (or `N` ≤ 0) is a no-op.  It is *not* a map-only flag
    (a `--no-map` run still honours it).
 - The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
-  Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.
+  Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.  Discovery recurses into subfolders by
+  default (a `year/` layout — the real `gpx/` holds one folder per year); `--flat` restricts it
+  to the input dir itself (the old single-level glob).
 - **Ride-log stats table** (`write_stats`): every run writes
     `stats/trackview-<first>_<last>.txt`, where `<first>`/`<last>` are the earliest
-  and latest ride dates — `tracks[0]`/`tracks[-1]` via `_title_name` (the glob is
-  date-sorted, so these are the first/last rides); one ride's date repeats for a
+  and latest ride dates — `tracks[0]`/`tracks[-1]` via `_title_name` (the (recursive)
+  glob is date-ascending, so these are the first/last rides); one ride's date repeats for a
   single-track run.  Each ride row carries the ride stats plus its **device type**, the
   last column (from the GPX `Device:` line, parsed by `_device_type`; a track with none
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per

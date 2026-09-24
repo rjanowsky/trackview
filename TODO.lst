@@ -39,8 +39,8 @@ shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
 [17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
-(the --top N best-of filter) was done on 2026-09-24 (see its "DONE" note below); the
-rest below are still open.  Line
+(the --top N best-of filter) and [19] (recursive input discovery) were done on 2026-09-24
+(see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -280,9 +280,25 @@ Selection, filtering & workflow
       ranking), `--since 2026-08-01 --top 3 --by km` narrows to 34 then the 3 longest of those (the note
       reads 3/34), and `--top 3 --by km --csv` writes a matching 3-row CSV.
 
-[19] Recurse / multiple input dirs.  main() does gpx_dir.glob("*.gpx") (flat, line
-     956); allow nested folders (rglob) or a repeatable --gpx-dir so rides can be
-     organised by year/device under subfolders.
+[19] [done] Recurse / multiple input dirs.  main() did gpx_dir.glob("*.gpx") (flat, line
+     956); nested folders (rglob) are now supported so rides organised under a year/ or
+     device/ layout are found.  The repeatable --gpx-dir half is deferred: one recursively-
+     searched input dir already covers the real layout (one subfolder per year), and a single
+     ride log has no need to pull from several dirs.
+     DONE (2026-09-24): discovery now recurses by default -- main() uses gpx_dir.rglob("*.gpx")
+     (was glob), so the 787 rides that live one-per-year under gpx/2019..gpx/2026 are all found
+     (a flat glob found 0 of them).   `--flat` (a new, *non*-map-only flag, like --since/
+     --device/--sport/--top) restores the old single-level glob.  Discovery stays date-ascending
+     because the Wahoo filename embeds the ride date (a nested path sorts as gpx/<YYYY>/<date>.gpx),
+     so the ride-log order and the trackview-<first>_<last> stats filename read as usual; every
+     downstream reader (map, ride-log/CSV, the stats/ reports) sees the nested rides, and
+     --since/--until/--device/--sport/--top all compose with it (verified: --since 2026-09-01
+     narrows 787 -> 18, --top 3 --by km -> 3).   `_ride_date` reads the date off `path.stem`, so
+     a nested path needs no special-casing, and the "no files" message notes "(or its subfolders)"
+     when recursing.  The repeatable `--gpx-dir` half of the proposal is intentionally *not*
+     implemented.  Verified on the real nested gpx/ (default recurses to 787 rides -> a
+     trackview-2019-07-21_2026-09-24 ride-log; --flat finds 0 top-level and stops "nothing to
+     render").
 
 [20] --list dry-run.  Print the rides that *would* be processed after all filters
      (names, dates, dist/gain) and stop - no basemap fetch, no image.  A cheap way

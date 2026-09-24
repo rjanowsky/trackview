@@ -4,7 +4,8 @@ Plot every GPX track in `./gpx` onto a static map image (PNG or PDF).
 
 ## What it does
 
-1. Reads all `*.gpx` from the `gpx/` folder (`gpxpy`).
+1. Reads all `*.gpx` from the `gpx/` folder **and its subfolders** (`gpxpy`), so rides
+   organised under a `year/` or `device/` layout are found too (`--flat` for a single level).
 2. Decimates the points (default 5 m spacing) — keeps the route shape, cuts the
    point count for crisp, fast drawing.
 3. Fetches a raster base map for the tracks' bounding box (`contextily`,
@@ -44,6 +45,7 @@ python trackview.py --device "Wahoo ELEMNT BOLT"       # restrict to one device 
 python trackview.py --sport Bike                       # restrict to one sport    (GPX <desc> "Sport:")
 python trackview.py --top 10 --by gain                 # render/stat only the N highest-gain rides (or --by km/recent)
 python trackview.py --top 5                            # ... or the N most recent (--by default)
+python trackview.py --flat                             # look for *.gpx only in the input dir (default: recurse into subfolders, e.g. a year/ layout)
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 python trackview.py --no-scale                # omit the map's lower-right scale bar (on by default)
@@ -108,6 +110,13 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The
   ride-log and CSV files are unaffected.
+- **Input dir / recursion** the `--gpx-dir` input is searched **recursively by default**
+  (subfolders are descended, so rides organised under a `year/` or `device/` layout are
+  found too — the real `gpx/` holds one subfolder per year, `2019`…`2026`).  `--flat`
+  restricts the search to the input dir itself (the old single-level glob).  Discovery stays
+  date-ascending because the Wahoo filename embeds the ride date, so the ride-log and the
+   `trackview-<first>_<last>` filename read as usual; it is *not* a map-only flag, so a
+   `--no-map` run still recurses.
 - **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose
   ride date falls in the range — read from the Wahoo-style filename stem (e.g.
   `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`

@@ -38,6 +38,7 @@ Usage:
     python trackview.py --summary               # a year-in-review report (per year/month) -> stats/
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
     python trackview.py --no-cache             # fetch tiles fresh each run (default: cache them under tiles/)
+    python trackview.py --flat                 # look for *.gpx only in the input dir (default: recurse into subfolders, e.g. a year/ layout)
 """
 from __future__ import annotations
 
@@ -384,7 +385,7 @@ def _device_label(device: str | None) -> str:
 
 def _device_groups(tracks) -> list[tuple[str, list]]:
     """Split the rides into (device label, [rides]) groups in first-seen order
-    (the glob is date-sorted), so the ride-log can print one totals row per
+    (the (recursive) glob is date-ascending), so the ride-log can print one totals row per
     device type.  A ride with no device line falls in its own 'unknown' group."""
     order: list[str] = []
     groups: dict[str, list] = {}
@@ -468,7 +469,7 @@ def _select_top(tracks, n: int, by: str) -> list:
     then restore the kept rides to their original (date-ascending) order, so the map, the
     ride-log/CSV and the stats/ reports read as usual -- e.g. the stats filename's
     earliest->latest span (tracks[0]/tracks[-1]) and the ride-log's top-down listing.
-    Ties fall back to that original order (a stable rank on the already date-sorted list),
+    Ties fall back to that original order (a stable rank on the already date-ascending list),
     and `n` >= the ride count (or a non-positive `n`) is a no-op, so an unbounded run is
     returned unchanged."""
     if not n or n >= len(tracks):
@@ -1713,6 +1714,10 @@ def main() -> None:
         description="Render GPX tracks from a folder onto a static map image "
                      "(PNG or PDF).")
     ap.add_argument("--gpx-dir", default=str(GPX_DIR))
+    ap.add_argument("--flat", action="store_true",
+                    help="look for *.gpx only in --gpx-dir itself, not its subfolders "
+                         "(default: recurse into subfolders, so rides organised under a "
+                         "year/ or device/ layout are found too)")
     ap.add_argument("--since", metavar="YYYY-MM-DD", default=None,
                     help="only render tracks on/after this date (local, read from the "
                              ".gpx filename); default: no lower bound")
@@ -1845,8 +1850,14 @@ def main() -> None:
         raise SystemExit("error: --csv-delimiter must be a non-empty character")
 
     gpx_dir = Path(args.gpx_dir)
-    print(f"trackview - reading *.gpx from {gpx_dir}")
-    paths = sorted(gpx_dir.glob("*.gpx"))
+       # By default the search recurses into subfolders (rglob), so rides organised
+       # under a year/ or device/ layout are found too; --flat restricts it to
+       # --gpx-dir itself (the old single-level glob).  Either way the (recursive)
+       # glob stays date-ascending, because the Wahoo filename embeds the ride date,
+       # so the ride-log and the trackview-<first>_<last> filename read as usual.
+    recurse = not args.flat
+    print(f"trackview - reading *.gpx{' recursively' if recurse else ''} from {gpx_dir}")
+    paths = sorted(gpx_dir.rglob("*.gpx") if recurse else gpx_dir.glob("*.gpx"))
 
      # date filter: Wahoo-style .gpx names carry the ride start date (local) in the
      # stem, so --since/--until select by that (mirrors wahoo_to_gpx.py).  A name with
@@ -1888,7 +1899,8 @@ def main() -> None:
                   and (color_by in ("speed", "power") or args.heat or args.profile))
     tracks = load_tracks(paths, DECIMATE_M, with_ext=want_ext, noise_m=args.gain_noise)
     if not tracks:
-        print("No *.gpx files found - nothing to render.")
+        print(f"No *.gpx found in {gpx_dir}"
+              f"{' (or its subfolders)' if recurse else ''} - nothing to render.")
         return
 
       # --device/--sport narrow the rides to one device and/or sport (each matched on
@@ -1988,7 +2000,7 @@ def main() -> None:
 
      # a per-run ride-log -> ./stats/trackview-<first>_<last ride date>.txt, holding
      # the two title headers' stats as a table, one row per ride, plus a totals row
-    first = _title_name(tracks[0]["name"])        # earliest ride (glob is date-sorted)
+    first = _title_name(tracks[0]["name"])        # earliest ride (the glob is date-ascending)
     last   = _title_name(tracks[-1]["name"])       # latest ride
     label  = _safe_filename(f"{first}_{last}")
     stats_path = STATS_DIR / f"trackview-{label}.txt"
