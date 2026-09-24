@@ -812,13 +812,18 @@ def _draw_heat(ax, tracks, bbox, grid: int = HEAT_GRID, cap_pct: float = HEAT_CA
     vals = H.compressed()
     cap = float(np.percentile(vals, cap_pct)) if vals.size else 0.0
     norm = mcolors.Normalize(vmin=0.0, vmax=max(cap, 1e-9), clip=True)
-    # imshow(aspect="auto") flips the *axes* to auto; restore the map's equal aspect
-    # so the routes and the scale bar (a true on-screen distance) stay undistorted.
-    prev_aspect = ax.get_aspect()
+    # imshow(aspect="auto") makes the (square) grid fill the view *and* flips the
+    # axes aspect to "auto" as a side effect.  Do NOT "restore" the map's equal aspect
+    # afterwards: switching the axes back to "equal" after the image was laid out at
+    # "auto" invalidates the image's transform, so the overlay was never drawn (the
+    # --heat output was byte-identical to no --heat).  The restore is also pointless
+    # here: the bbox is already aspect-fit to the figure, so the view limits are
+    # unchanged by the flip (equal and auto agree), and the route lines + scale bar
+    # (data-coordinate artists, placed by those view limits, not the aspect string)
+    # stay undistorted.
     im = ax.imshow(H, extent=[w, s, e, n], origin="lower", aspect="auto",
                    cmap="YlOrRd", norm=norm, alpha=alpha, zorder=3,
                    interpolation="bilinear")
-    ax.set_aspect(prev_aspect)
     return im
 
 
