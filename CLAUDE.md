@@ -65,6 +65,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --calendar                 # a GitHub-style activity grid (km/day) over the year -> output/
 .venv/bin/python trackview.py --calendar --calendar-by gain # colour each day by m gain (or 'rides') instead
 .venv/bin/python trackview.py --summary                  # also write a year-in-review report (per year/month) -> stats/
+.venv/bin/python trackview.py --html                     # a self-contained interactive Leaflet map (inline GeoJSON + a tile layer) -> output/
+.venv/bin/python trackview.py --html --html-cdn          # reference Leaflet from a CDN instead of inlining it
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -222,6 +224,20 @@ Key non-obvious details:
      multi-year log closes with an `ALL years` grand total, and undated rides get a note.  Pure
      geometry, so it writes under `--no-map`; the avg-power column needs `--ext`.
      `_summary_groups`/`write_summary`.
+- **Interactive HTML / Leaflet export** (`--html`, TODO [22]) writes a *self-contained, single-file*
+   interactive map to `output/trackview-<range>_map.html` -- a *different* deliverable from the
+   parent repo's `gpx_viewer.py` (a Streamlit + Folium upload app; no code shared).  Each ride is an
+   *inline GeoJSON* LineString (`_tracks_geojson`/`_ride_feature`, from the decimated `d["ll"]`
+   lat/lon `load_tracks` now keeps), coloured by its place in `STRONG_COLORS`, with a white-cased
+   route, green/red start/stop markers, a click-for-stats popup and a clickable ride list, on a tile
+   layer at the URL matching `--style`, fit to the data on load.  The Leaflet CSS + JS are *inlined*
+   by default (`_load_leaflet`), so the one file opens from disk offline; the ~150 KB library is
+   cached on disk under the git-ignored `lib/` (like the tile cache, via `_fetch_text`) so re-renders
+   don't refetch, and `--html-cdn` references the library from a CDN instead (a smaller file that
+   needs internet to *view*).  `--html` is *not* a map-only flag (a `--no-map` run still writes it):
+   it fetches no basemap and needs no telemetry.  The embedded GeoJSON is JSON with `<` escaped (so a
+   ride name can't close the `<script>`); ride names shown in the DOM are HTML-escaped client-side.
+    `_leaflet_document`/`write_html`.
 - **Basemap fallback** (`_load_basemap`): providers are tried in order
   (`--style` first, then the rest of `SOURCES`). It catches fetch exceptions
   *and* detects blank/rate-limited tiles by checking that the returned image's
@@ -286,7 +302,7 @@ Key non-obvious details:
   and it composes with `--list` (a `--list --today` is a no-fetch dry-run of today's rides) and the stats
   path.  It is *not* a map-only flag (a `--no-map` run still honours it); it forces flat discovery, so
   today's ride must sit at the top level of the input dir (not a `year/` subfolder).
-- The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
+- The `gpx/` input, `output/`, `stats/`, `tiles/` (the on-disk basemap cache) and `lib/` (the cached Leaflet library, for `--html`) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.  Discovery recurses into subfolders by
   default (a `year/` layout — the real `gpx/` holds one folder per year); `--flat` restricts it
   to the input dir itself (the old single-level glob).

@@ -40,7 +40,7 @@ training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [1
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
 [17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
 (the --top N best-of filter), [19] (recursive input discovery) and [20] (the --list dry-run)
-were done on 2026-09-24 and [21] (the --today glance) on 2026-09-25 (see their "DONE" notes below); the rest below are still open.  Line
+were done on 2026-09-24 and [21] (the --today glance), [22] (the self-contained HTML/Leaflet export) on 2026-09-25 (see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -341,11 +341,34 @@ Selection, filtering & workflow
      basemap and writes stats/trackview-2026-09-25_2026-09-25.txt.
 
 Output & sharing
-[22] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks
+[22] [done] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks
      as inline GeoJSON/SVG) that is zoomable and shareable, complementing the static
      PNG/PDF.  Note the parent repo has a separate interactive gpx_viewer.py
      (Streamlit+Folium); this would be a *static, dependency-light, single-file*
      variant (no server) - a different deliverable.
+      DONE (2026-09-25): `--html` writes a *self-contained, single-file* interactive Leaflet map
+      to `output/trackview-<range>_map.html`, alongside the stats/CSV/climbs/summary/trend/
+      calendar writes (a standalone output, so it writes even under --no-map).  Each ride is an
+      *inline GeoJSON* LineString (`_tracks_geojson`/`_ride_feature`, from the decimated `d["ll"]`
+      lat/lon `load_tracks` now keeps) coloured by its place in `STRONG_COLORS`, with a white-cased
+      route, green/red start/stop markers, a click-for-stats popup and a clickable ride list, on a
+      tile layer at the URL matching `--style` (reusing `SOURCES`/`ATTRIBUTION`), fit to the data
+      on load -- zoomable and shareable with no server, complementing the static PNG/PDF and a
+      *different* deliverable from the parent `gpx_viewer.py` (no code shared).  The Leaflet CSS +
+      JS are *inlined* by default (`_load_leaflet`/`_fetch_text`), so the one file opens from disk
+      offline; the ~150 KB library is cached on disk under the git-ignored `lib/` (like the tile
+      cache) so re-renders don't refetch, and `--html-cdn` references the library from a CDN
+      instead (a smaller file that needs internet to *view*); with no cache and no network it falls
+      back to that CDN reference and says so.  The embedded GeoJSON is JSON with "<" escaped (so a
+      ride name can't close the <script>) and the DOM names are HTML-escaped client-side.  `--html`
+      is *not* a map-only flag (a --no-map run writes it): it fetches no basemap and needs no
+      telemetry.  Because it embeds every decimated point, pair it with --top/--since to keep a
+      busy log small.  Verified: a single-ride and a 5-ride file (5 features, 5 distinct colours,
+      date-ordered; the embedded RIDE_DATA parses as JSON with [lon,lat] coords matching the
+      source GPX), the --html-cdn mode (a small <link>/<script src> file, no inlined library),
+      the true offline+no-cache fallback (CDN reference + a note, no crash), the empty-route guard
+      (no file written), and the full pipeline (PNG + stats + HTML together).
+
 
 [23] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
      image (e.g. a 3x3 of the most recent rides) - a "recent rides" overview without

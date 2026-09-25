@@ -62,6 +62,8 @@ python trackview.py --calendar                 # a GitHub-style activity grid (k
 python trackview.py --calendar --calendar-by gain     # colour each day by m gain (or 'rides') instead of km
 python trackview.py --calendar --year 2026   # restrict the grid to one calendar year
 python trackview.py --summary                  # also write a year-in-review report (per year/month) to stats/
+python trackview.py --html                     # a self-contained interactive Leaflet map (inline GeoJSON + a tile layer) to output/
+python trackview.py --html --html-cdn          # reference Leaflet from a CDN instead of inlining it (a smaller file, needs internet to view)
 python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
@@ -194,6 +196,18 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
    row; when the log spans several years an `ALL years` grand total closes the report, and any
    undated rides (no date in the filename, so unplaceable) get a note.  Pure geometry, so it writes
    even under `--no-map`; the avg-power column needs `--ext`.
+- **Interactive HTML map** `--html` writes a self-contained, single-file interactive Leaflet map to
+   `output/trackview-<first>_<last>_map.html`: the rides as *inline GeoJSON* LineStrings (each a
+   white-cased coloured route with green/red start/stop markers and a click-for-stats popup) on a
+   tile layer at the URL matching `--style`, plus a clickable ride list, fit to the data on load —
+   so it zooms/pans and is shareable with no server.  It complements the static PNG/PDF, and is a
+   *different* deliverable from the parent repo's `gpx_viewer.py` (an interactive Streamlit + Folium
+   app).  The Leaflet CSS + JS are *inlined* by default (a genuinely offline single file; the ~150 KB
+   download is cached under `lib/`, git-ignored, like the tile cache), so the file opens straight
+   from disk; `--html-cdn` references the library from a CDN instead (a smaller file that needs
+   internet to *view*).  A standalone output (no basemap fetch, no telemetry), so it writes even
+   under `--no-map`; because it embeds every decimated point, pair it with `--top`/`--since` to keep
+   a busy log to a handful of rides.
 
 ## Base-map providers (`--style`)
 
