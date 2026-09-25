@@ -39,8 +39,8 @@ shading), [8] (heat overlay) and [9] (ride labels) were done the next day,
 training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [13] (the
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
 [17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
-(the --top N best-of filter) and [19] (recursive input discovery) were done on 2026-09-24
-(see their "DONE" notes below); the rest below are still open.  Line
+(the --top N best-of filter), [19] (recursive input discovery) and [20] (the --list dry-run)
+were done on 2026-09-24 (see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -300,9 +300,25 @@ Selection, filtering & workflow
      trackview-2019-07-21_2026-09-24 ride-log; --flat finds 0 top-level and stops "nothing to
      render").
 
-[20] --list dry-run.  Print the rides that *would* be processed after all filters
+[20] [done] --list dry-run.  Print the rides that *would* be processed after all filters
      (names, dates, dist/gain) and stop - no basemap fetch, no image.  A cheap way
      to preview a --since/--until or --top selection.
+     DONE (2026-09-24): `--list` is a dry-run preview -- main() calls a new
+     `_list_rides(tracks)` and `return`s *before* the basemap fetch, the image and
+     every stats/CSV/climbs/summary/trend/calendar write, so a filter selection can
+     be previewed cheaply.  It runs *after* all the filters (--since/--until,
+     --device/--sport, --top N --by) on the fully-filtered `tracks`, so it lists
+     exactly the rides a run would process -- one `Date   Ride   Dist (km)   Gain
+     (m)` line each (the ride-log core), closed by a TOTAL row -- and an empty match
+     prints "--list: no ride matches the filters".  A ride with no date in its
+     filename shows 'undated' (the date filter would already have skipped it, so that
+     only arises under --flat or for a foreign name).  It prints its own listing, so
+     it overrides --sparse, and it is *not* a map-only flag (a --no-map run stops at
+     --list too).  Verified on the real nested gpx/: --list lists all 788 rides,
+     --since 2026-09-01 narrows to 19, and --top 10 --by gain shows the 10
+     highest-gain rides (re-sorted into date order for display); in every case no
+     image or stats/CSV file is written (a `find` of output/ and stats/ turned up
+     nothing new).
 
 Output & sharing
 [21] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks

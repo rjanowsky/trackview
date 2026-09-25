@@ -46,6 +46,8 @@ python trackview.py --sport Bike                       # restrict to one sport  
 python trackview.py --top 10 --by gain                 # render/stat only the N highest-gain rides (or --by km/recent)
 python trackview.py --top 5                            # ... or the N most recent (--by default)
 python trackview.py --flat                             # look for *.gpx only in the input dir (default: recurse into subfolders, e.g. a year/ layout)
+python trackview.py --list                                   # list the rides that survive every filter, then stop (no basemap, no image)
+python trackview.py --list --since 2026-09-01 --top 10 --by gain # preview a filter selection without fetching a basemap
 python trackview.py --csv                 # also write a CSV ride-log (header + rows, no totals) to stats/
 python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 python trackview.py --no-scale                # omit the map's lower-right scale bar (on by default)
@@ -139,6 +141,14 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   ride-log and the `trackview-<first>_<last>` filename read as usual), ties keep that order, and
   `N` ≥ the ride count (or `N` ≤ 0) is a no-op.  It is *not* a map-only flag (a `--no-map` run still
   honours it).
+- **Dry-run listing** `--list` prints the rides that *would* be processed -- one
+  `Date  Ride  Dist (km)  Gain (m)` line per ride that survives *every* filter
+  (`--since`/`--until`, `--device`/`--sport`, `--top N --by`), closed by a `TOTAL`
+  row -- then stops: it fetches no basemap and writes no image or stats/CSV/report,
+  so a filter selection can be previewed cheaply.  It runs *after* the filters on the
+  fully-filtered rides (so it shows exactly what a run would process), prints its own
+  listing (so it overrides `--sparse`), and is *not* a map-only flag (a `--no-map` run
+  stops at `--list` too); a ride with no date in its filename shows `undated`.
 - **Climb ranking** `--climbs [N]` (default `10`) also writes
   `stats/trackview-<first>_<last>_climbs.txt`: the N most-significant *sustained* climbs
    across all the rides, a maximal run of segments whose smoothed grade stays ≥ 4 % over at

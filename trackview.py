@@ -39,6 +39,8 @@ Usage:
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
     python trackview.py --no-cache             # fetch tiles fresh each run (default: cache them under tiles/)
     python trackview.py --flat                 # look for *.gpx only in the input dir (default: recurse into subfolders, e.g. a year/ layout)
+    python trackview.py --list                  # list the rides that survive every filter, then stop (no basemap, no image)
+    python trackview.py --list --since 2026-09-01 --top 10 --by gain      # preview a filter selection without fetching a basemap
 """
 from __future__ import annotations
 
@@ -478,6 +480,46 @@ def _select_top(tracks, n: int, by: str) -> list:
                    reverse=True)
     picked = set(order[:n])
     return [tracks[i] for i in range(len(tracks)) if i in picked]
+
+
+def _list_rides(tracks) -> None:
+    """The --list dry-run preview: one line per ride that survives *every* filter
+    (the --since/--until range, the --device/--sport filter and the --top N
+    selection, all applied upstream in main), giving its filename date, its name,
+    its distance and its gain, closed by a totals row -- the core of the ride-log
+    printed to stdout so a filter selection can be previewed cheaply.  It stops
+    before any basemap fetch, image or stats/CSV/report write, so it has no
+    output side effects.  A ride with no date in its filename shows 'undated'
+    (the date filter would already have skipped it, so this only arises under
+    --flat or for a foreign name)."""
+    if not tracks:
+        print("      --list: no ride matches the filters")
+        return
+    def date_cell(t):
+        rd = _ride_date(t["path"])
+        return rd.isoformat() if rd else "undated"
+    rows = [[date_cell(t), t["name"],
+             f"{t['dist_km']:,.1f}", f"{t['gain_m']:,.0f}"] for t in tracks]
+    head = ["Date", "Ride", "Dist (km)", "Gain (m)"]
+    right = [False, False, True, True]
+    total = ["TOTAL", "",
+             f"{sum(t['dist_km'] for t in tracks):,.1f}",
+             f"{sum(t['gain_m'] for t in tracks):,.0f}"]
+    widths = [max(len(head[i]), len(total[i]),
+                 max((len(r[i]) for r in rows), default=0))
+              for i in range(len(head))]
+    def fmt(cells):
+        return "      ".join((c.rjust(widths[i]) if right[i] else c.ljust(widths[i]))
+                             for i, c in enumerate(cells))
+    n = len(tracks)
+    print(f"      --list: {n} ride{'s' if n != 1 else ''} match the filters "
+          f"(no basemap fetched, no image written)")
+    print("     " + fmt(head))
+    print("     " + "      ".join("-" * w for w in widths))
+    for r in rows:
+        print("     " + fmt(r))
+    print("     " + "      ".join("-" * w for w in widths))
+    print("     " + fmt(total))
 
 
 # A "Kickr Snap" is a stationary smart trainer: its session has no route of its
@@ -1742,6 +1784,13 @@ def main() -> None:
                               "highest elevation gain) or 'recent' (the most recent, the "
                               "default); ties keep date order")
 
+    ap.add_argument("--list", action="store_true",
+                    help="print the rides that survive every filter (--since/--until/"
+                                 "--device/--sport/--top) -- their name, date, distance "
+                                 "and gain -- then stop: a dry-run that fetches no "
+                                 "basemap and writes no image or stats, so a filter "
+                                 "selection can be previewed cheaply (overrides --sparse)")
+
     ap.add_argument("--out", default=None,
                     help="output file for the combined map "
                          "(default: output/tracks_overview.<format>)")
@@ -1929,6 +1978,14 @@ def main() -> None:
             print(f"         --top {args.top} --by {args.by}: {len(kept)}/{len(tracks)} "
                   f"ride(s) kept (the {args.top} {_TOP_BY[args.by]})")
         tracks = kept
+
+    if args.list:
+        # --list is a dry-run preview: list the rides that survive every filter
+        # and stop -- no basemap fetch, no image and no stats/CSV/report write, so
+        # a --since/--until/--device/--sport/--top selection can be previewed
+        # cheaply; it prints its own listing, so it is not gated on --sparse.
+        _list_rides(tracks)
+        return
 
     print(f"   {len(tracks)} track(s), "
           f"{sum(t['n'] for t in tracks):,} pts -> "

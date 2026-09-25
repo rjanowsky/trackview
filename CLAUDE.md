@@ -49,6 +49,8 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --sport Bike                  # restrict to one sport     (GPX <desc> "Sport:")
 .venv/bin/python trackview.py --top 10 --by gain            # render/stat only the N highest-gain rides (or --by km/recent)
 .venv/bin/python trackview.py --top 5                       # ... or the N most recent (--by default)
+.venv/bin/python trackview.py --list                        # list the rides that survive every filter, then stop (no basemap, no image)
+.venv/bin/python trackview.py --list --since 2026-09-01 --top 10 --by gain # preview a filter selection without fetching a basemap
 .venv/bin/python trackview.py --csv                    # also write a CSV ride-log (header + rows, no totals) to stats/
 .venv/bin/python trackview.py --csv --csv-delimiter ,   # comma-separated instead of the default ';'
 .venv/bin/python trackview.py --sparse                   # quiet stdout: skip the per-track stats listing
@@ -268,6 +270,14 @@ Key non-obvious details:
    in that order, a ride with no filename date ranks last under `recent` (but still wins on a pure value
    under `km`/`gain`), and `N` ≥ the ride count (or `N` ≤ 0) is a no-op.  It is *not* a map-only flag
    (a `--no-map` run still honours it).
+- **Dry-run listing** (`--list`, TODO [20]) prints the rides that *would* be processed -- one
+   `Date  Ride  Dist (km)  Gain (m)` line per ride that survives *every* filter (`--since`/`--until`,
+   `--device`/`--sport`, `--top N --by`), closed by a `TOTAL` row -- then stops: it fetches no
+  basemap and writes no image or stats/CSV/report, so a filter selection can be previewed cheaply.
+  `main()` calls a new `_list_rides(tracks)` and `return`s *after* the `--top` filter (on the
+  fully-filtered `tracks`) but *before* the basemap fetch, image and the stats/CSV/climbs/summary/
+  trend/calendar writes; a ride with no filename date shows `undated`.  It prints its own listing
+  (so it overrides `--sparse`) and is *not* a map-only flag (a `--no-map` run stops at `--list` too).
 - The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.  Discovery recurses into subfolders by
   default (a `year/` layout — the real `gpx/` holds one folder per year); `--flat` restricts it
