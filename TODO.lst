@@ -320,18 +320,36 @@ Selection, filtering & workflow
      image or stats/CSV file is written (a `find` of output/ and stats/ turned up
      nothing new).
 
+[21] `--today` -- a shorthand for `--flat --since <today>`.  A one-flag "what did I
+     ride today?" preview: it sets the --flat discovery and the --since date bound to
+     the calendar date of the run (date.today(), formatted YYYY-MM-DD), so a daily
+      "today so far" glance needs no typed date.  Cheap: reuse the existing --flat and
+      --since/--until filter (main() would just fold --today into those two args, or
+      _parse_argdate it as today), so it composes with --list (a `--list --today` is a
+     no-fetch dry-run of today's rides) and the stats path, and is not a map-only flag.
+     It is intentionally a *runtime* date (today when you run it), never a baked-in
+     constant.
+
 Output & sharing
-[21] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks
+[22] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks
      as inline GeoJSON/SVG) that is zoomable and shareable, complementing the static
      PNG/PDF.  Note the parent repo has a separate interactive gpx_viewer.py
      (Streamlit+Folium); this would be a *static, dependency-light, single-file*
      variant (no server) - a different deliverable.
 
-[22] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
+[23] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
      image (e.g. a 3x3 of the most recent rides) - a "recent rides" overview without
      opening N files; a --gallery N switch.
 
+Test & testing
+The repo has no automated tests; `pytest` 9.1.1 is installed in `.venv` (`.venv/bin/pytest`), so the suite should live in a `tests/` dir run with `.venv/bin/pytest`.  Most of trackview.py is pure geometry / string logic that is cheap to unit-test *without* network or a rendered figure -- only the basemap fetch, the matplotlib image and the stats/report writers are the heavy, I/O-bound paths, so keep those behind fixtures/mocks (or a `slow`/`network` skip marker), not the fast suite.  Numbered after [23].
 
+[24] Scaffold a `tests/` dir + a `conftest.py` with a tiny synthetic GPX fixture (a handful of points -- a climb, a descent, flat -- with and without <extensions> telemetry) built in-memory via gpxpy (no file on disk), plus a fixture that points `--gpx-dir` at a `tmp_path` of two Wahoo-named rides in a subfolder (one carrying a Device:/Sport: desc, one a plain komoot track) so the filter tests compose.  Add a `pytest` line to the README Setup and a `pyproject.toml` `[tool.pytest]` block with a `network`/`slow` marker so CI can run the pure tests fast.
 
+[25] Unit-test the date/parse helpers on their own: `_ride_date` (a Wahoo stem `2026_09_07_08_12_47` -> 2026-09-07; a nested `gpx/2026/...` path; a foreign name like a komoot title -> None) and `_parse_argdate` (a good `YYYY-MM-DD` -> a date; a bad string -> a clear error, no crash).  Pure, no fixtures.
 
+[26] Unit-test the pure geometry: `_grade_cap` (a high-percentile auto cap, a pinned `--grade-cap N`, and the floor/ceil clamp) and `_moving_avg` (a windowed, NaN-skipping average over a known series), and `_select_top` (by `km`/`gain`/`recent`; ties keep date order; `N` >= the ride count or `N` <= 0 is a no-op; an undated ride ranks last under `recent` but can still win on a pure `km`/`gain` value).
 
+[27] Test the filter *composition* against the fixture folder, mirroring the real runs documented above: --since/--until narrows by filename date, --device/--sport by the <desc> line (a non-match prints the distinct values and skips a ride with no line), --top runs *after* them and re-sorts the survivors back into date order, and --today (once [21] lands) folds to `--flat --since date.today()`.  Assert on the surviving `tracks` list, not the printed text.
+
+[28] Lock in the dry-run contract: `_list_rides` prints a header + one row per ride + a TOTAL row, and an empty-set message, and --list writes *nothing* -- so assert via `capsys` that the table appears while a `tmp_path`-based check shows no new file in the stats/ or output/ dirs.  Cover a `--no-map`+`--list` combo and an impossible `--until` (empty match), asserting the pre-existing 'no tracks' guard fires first.
