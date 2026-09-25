@@ -45,6 +45,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --no-map                # skip the map/image; just compute the stats + write stats/
 .venv/bin/python trackview.py --since 2026-09-05       # only tracks on/after a date (from the .gpx filename)
 .venv/bin/python trackview.py --until 2026-09-08       # only tracks on/before a date (from the .gpx filename)
+.venv/bin/python trackview.py --today                  # a "what did I ride today?" glance: --flat --since <today> (no-fetch with --list)
 .venv/bin/python trackview.py --device "Wahoo ELEMNT BOLT"  # restrict to one device    (GPX <desc> "Device:")
 .venv/bin/python trackview.py --sport Bike                  # restrict to one sport     (GPX <desc> "Sport:")
 .venv/bin/python trackview.py --top 10 --by gain            # render/stat only the N highest-gain rides (or --by km/recent)
@@ -278,6 +279,13 @@ Key non-obvious details:
   fully-filtered `tracks`) but *before* the basemap fetch, image and the stats/CSV/climbs/summary/
   trend/calendar writes; a ride with no filename date shows `undated`.  It prints its own listing
   (so it overrides `--sparse`) and is *not* a map-only flag (a `--no-map` run stops at `--list` too).
+- **Today glance** (`--today`, TODO [21]) is the shorthand for `--flat --since <today>` — a one-flag
+  "what did I ride today?" look.  `main()` folds it into the two existing knobs: it sets `args.flat = True`
+  and `args.since = date.today().isoformat()` (a *runtime* date, never a baked-in constant), so every
+  downstream reader — the date filter, `--list` and the stats path — sees the narrow selection transparently,
+  and it composes with `--list` (a `--list --today` is a no-fetch dry-run of today's rides) and the stats
+  path.  It is *not* a map-only flag (a `--no-map` run still honours it); it forces flat discovery, so
+  today's ride must sit at the top level of the input dir (not a `year/` subfolder).
 - The `gpx/` input, `output/`, `stats/` and `tiles/` (the on-disk basemap cache) are git-ignored; GPX files here are
   Strava exports named `YYYY-MM-DD_<id>_<date>.gpx`.  Discovery recurses into subfolders by
   default (a `year/` layout — the real `gpx/` holds one folder per year); `--flat` restricts it

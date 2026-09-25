@@ -41,6 +41,7 @@ python trackview.py --ext                  # avg power/speed/cadence/hr/temperat
 python trackview.py --no-map             # skip the map image; just compute the stats + write the stats/ ride-log
 python trackview.py --since 2026-09-08     # only tracks on/after a date (from the .gpx filename)
 python trackview.py --until 2026-09-05     # only tracks on/before a date (from the .gpx filename)
+python trackview.py --today                 # a "what did I ride today?" glance: --flat --since <today> (a no-fetch glance with --list)
 python trackview.py --device "Wahoo ELEMNT BOLT"       # restrict to one device   (GPX <desc> "Device:")
 python trackview.py --sport Bike                       # restrict to one sport    (GPX <desc> "Sport:")
 python trackview.py --top 10 --by gain                 # render/stat only the N highest-gain rides (or --by km/recent)
@@ -124,6 +125,12 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`
   filters.  A track whose filename carries no date is skipped (never guessed) whenever a
   bound is active.
+- **Today glance** `--today` is the shorthand for `--flat --since <today>`: a one-flag
+  "what did I ride today?" look that switches to flat discovery (today's rides sit at the top
+  level of the folder) and bounds `--since` to the current calendar day, so a daily glance needs
+  no typed date.  It folds into those two flags, so it composes with `--list` (a `--list --today`
+  is a no-fetch dry-run of today's rides) and the stats path, and is *not* a map-only flag (a
+  `--no-map` run still honours it).  The date is `date.today()` at run time, never a baked-in constant.
 - **Device / sport filter** `--device NAME` and `--sport NAME` keep only the rides whose
   GPX `<desc>` "Device:" / "Sport:" line (stamped by `wahoo_to_gpx`, e.g. `Wahoo ELEMNT BOLT`,
    `Bike`) equals `NAME` (case-insensitive), narrowing a mixed-device or mixed-sport folder and

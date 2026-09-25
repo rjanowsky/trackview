@@ -40,7 +40,7 @@ training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [1
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
 [17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
 (the --top N best-of filter), [19] (recursive input discovery) and [20] (the --list dry-run)
-were done on 2026-09-24 (see their "DONE" notes below); the rest below are still open.  Line
+were done on 2026-09-24 and [21] (the --today glance) on 2026-09-25 (see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -320,7 +320,7 @@ Selection, filtering & workflow
      image or stats/CSV file is written (a `find` of output/ and stats/ turned up
      nothing new).
 
-[21] `--today` -- a shorthand for `--flat --since <today>`.  A one-flag "what did I
+[21] [done] `--today` -- a shorthand for `--flat --since <today>`.  A one-flag "what did I
      ride today?" preview: it sets the --flat discovery and the --since date bound to
      the calendar date of the run (date.today(), formatted YYYY-MM-DD), so a daily
       "today so far" glance needs no typed date.  Cheap: reuse the existing --flat and
@@ -329,6 +329,16 @@ Selection, filtering & workflow
      no-fetch dry-run of today's rides) and the stats path, and is not a map-only flag.
      It is intentionally a *runtime* date (today when you run it), never a baked-in
      constant.
+     DONE (2026-09-25): `--today` is the one-flag `--flat --since <today>` shortcut.  main()
+     folds it into the two existing knobs *before* discovery: `args.flat = True` (today's ride
+     sits at the top level of the folder, not a year/ subfolder) and `args.since =
+     date.today().isoformat()` (a *runtime* date, never a baked-in constant), so every
+     downstream reader -- the --since/--until date filter, --list and the stats path -- sees the
+     narrow selection transparently; a one-line "         --today: flat discovery + since <date>"
+     note confirms it.  It is *not* a map-only flag, so `--today --no-map` still writes today's
+     ride-log.  Verified on the real gpx/: `--list --today` (flat, not recursive) lists just the
+     2026-09-25 ride (1 vs 789 recursive) and writes nothing, and `--today --no-map` skips the
+     basemap and writes stats/trackview-2026-09-25_2026-09-25.txt.
 
 Output & sharing
 [22] Self-contained HTML / Leaflet export.  A single .html (a tile URL + the tracks

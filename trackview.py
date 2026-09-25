@@ -22,6 +22,7 @@ Usage:
     python trackview.py --no-map            # skip the map; just compute the stats + write the stats/ file
     python trackview.py --since 2026-09-08    # only tracks on/after a date (from the .gpx filename)
     python trackview.py --until 2026-09-05    # only tracks on/before a date (from the .gpx filename)
+    python trackview.py --today                # a "what did I ride today?" glance: --flat --since <today> (with --list it is a no-fetch glance)
     python trackview.py --device "Wahoo ELEMNT BOLT"    # restrict to one device  (GPX <desc>)
     python trackview.py --sport Bike                    # restrict to one sport    (GPX <desc>)
     python trackview.py --top 10 --by gain              # render/stat only the N highest-gain rides (or --by km/recent)
@@ -1766,6 +1767,13 @@ def main() -> None:
     ap.add_argument("--until", metavar="YYYY-MM-DD", default=None,
                     help="only render tracks on/before this date (local, read from the "
                              ".gpx filename); default: no upper bound")
+    ap.add_argument("--today", action="store_true",
+                    help="shorthand for '--flat --since <today>': a 'what did I ride "
+                             "today?' glance that switches to flat discovery and bounds "
+                             "--since to the current calendar day (date.today() at run "
+                             "time, never a baked-in constant); it folds into those two "
+                             "flags, so it composes with --list, --until and the stats "
+                             "path, and is not a map-only flag (a --no-map run honours it)")
     ap.add_argument("--device", metavar="NAME", default=None,
                     help="only render/list rides whose GPX <desc> 'Device:' line is NAME "
                               "(case-insensitive; a ride with no such line is skipped, as an "
@@ -1897,6 +1905,18 @@ def main() -> None:
 
     if args.csv and not args.csv_delimiter:
         raise SystemExit("error: --csv-delimiter must be a non-empty character")
+
+      # --today is the shorthand for '--flat --since <today>' -- a one-flag "what did I
+      # ride today?" glance.  It folds into the two existing knobs -- flat discovery
+      # (today's rides sit at the top level of the folder) and a --since bound at the
+      # current calendar day -- so every downstream reader (the date filter, --list, the
+      # stats path) sees the narrow selection transparently, and it composes with --list
+      # (a no-fetch dry-run of today's rides) and --no-map.  The date is date.today() at
+      # run time, never a baked-in constant.
+    if args.today:
+        args.flat = True
+        args.since = date.today().isoformat()
+        print(f"        --today: flat discovery + since {args.since} (today's rides)")
 
     gpx_dir = Path(args.gpx_dir)
        # By default the search recurses into subfolders (rglob), so rides organised
