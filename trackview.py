@@ -11,6 +11,7 @@ Usage:
     python trackview.py --format pdf      # write a vector PDF instead of PNG
     python trackview.py --split           # one map file per track (default: all in one)
     python trackview.py --profile --split    # an elevation + grade + telemetry ride card under each map
+    python trackview.py --gallery 6                 # tile the N most recent rides into one mosaic contact sheet -> output/ (bare --gallery = 9, a 3x3)
     python trackview.py --style sat    # Esri satellite base map
     python trackview.py --detail 15      # override the auto-chosen detail
     python trackview.py --no-elev      # flat colour instead of elevation shading
@@ -2020,6 +2021,111 @@ def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
     raise RuntimeError("all base-map sources failed")
 
 
+def _gallery_grid(n: int) -> tuple:
+    """Rows x cols that fit `n` cells with as few empty slots as possible -- a near-
+    square mosaic (a 3x3 for the 9 rides the bare --gallery draws, a 2x3 for 5, a
+     3x4 for 12, etc.).  The empty trailing slots of a ragged last row are just left
+     blank on the sheet."""
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    return rows, cols
+
+
+def _gallery_cell(ax, t, idx, style, detail):
+    """Draw one mosaic cell: a single-ride basemap + its white-haloed, flat-coloured
+    route with green/red start/stop markers and a name/distance/gain caption above it
+     -- the flat per-track look of a --split map, shrunk to a thumbnail.  The tile
+    detail (zoom) is auto per cell from the ride's own extent unless `detail` pins it,
+    so each ride zooms to itself rather than the whole set.  Returns the basemap
+    provider actually loaded, so the figure can attribute every source it used."""
+    merc = np.asarray(t["merc"], dtype=float)
+    w, s, e, n = (merc[:, 0].min(), merc[:, 1].min(),
+                  merc[:, 0].max(), merc[:, 1].max())
+    dx, dy = (e - w) * PAD_FRAC, (n - s) * PAD_FRAC
+    bbox = (w - dx, s - dy, e + dx, n + dy)
+    if detail is None:
+        detail = choose_detail(bbox)
+    ordered = [style] + [k for k in SOURCES if k != style]
+    loaded = _load_basemap(ax, bbox, ordered, detail)
+
+    seg = np.array([[merc[j], merc[j + 1]] for j in range(len(merc) - 1)])
+    halo = LineCollection(seg, colors="white", linewidths=3.0, alpha=0.9)
+    halo.set_zorder(4)
+    ax.add_collection(halo)
+    lc = LineCollection(seg, colors=[STRONG_COLORS[idx % len(STRONG_COLORS)]],
+                        linewidths=2.2, alpha=0.95)
+    lc.set_zorder(5)
+    ax.add_collection(lc)
+    x0, y0 = merc[0]
+    x1, y1 = merc[-1]
+    ax.scatter([x0], [y0], s=40, color="lime", edgecolors="k",
+               linewidths=0.5, zorder=7)
+    ax.scatter([x1], [y1], s=40, color="red", edgecolors="k",
+               linewidths=0.5, zorder=7)
+    ax.axis("off")
+    cap = (f"{_title_name(t['name'])}      "
+           f"{t['dist_km']:,.0f} km      ▲ {t['gain_m']:,.0f} m")
+    ax.set_title(cap, fontsize=9, pad=3)
+    return loaded
+
+
+def write_gallery(tracks, out_path, style="osm", n=9, detail=None):
+    """Tile the `n` most recent rides into one mosaic contact sheet -- a 'recent
+    rides' overview without opening N files, the mosaic alternative to --split (one
+    image instead of N).  Each cell is a single-ride basemap + route with a caption
+    (see _gallery_cell); the rides are the most recent (by filename date) of the
+    already --since/--until/--device/--sport/--top-filtered tracks, shown newest-first
+    so the top-left cell is the latest ride, and a ride with no date in its name ranks
+    last so it drops out of a 'most recent' view first.  A ride with no route (< 2
+    points, e.g. a suppressed trainer ride that slipped through) is skipped like the
+    map, and an empty set is a no-op -- a line on stdout, nothing written.  A map
+    output (a basemap per cell), so it fetches tiles and is skipped under --no-map."""
+    def _recency(t):
+        rd = _ride_date(t["path"])
+        return rd.toordinal() if rd is not None else -1
+    routed = [t for t in sorted(tracks, key=_recency, reverse=True)
+              if len(t.get("merc") or []) >= 2]
+    cells = routed if not n or n >= len(routed) else routed[:n]
+    if not cells:
+        print("      --gallery: no ride has a route to tile.")
+        return
+    rows, cols = _gallery_grid(len(cells))
+    cell = 3.3                       # inches per cell; a 3x3 -> ~10x11 in, the base size
+    fig = plt.figure(figsize=(cols * cell, rows * cell + 0.9), dpi=DPI)
+    gs = fig.add_gridspec(rows, cols, hspace=0.24, wspace=0.20,
+                          left=0.01, right=0.99, top=0.90, bottom=0.04)
+    loaded_keys = []
+    for k, t in enumerate(cells):
+        r, c = divmod(k, cols)
+        ax = fig.add_subplot(gs[r, c])
+        loaded_keys.append(_gallery_cell(ax, t, k, style, detail))
+
+    total_km = sum(t["dist_km"] for t in cells)
+    total_gain = sum(t["gain_m"] for t in cells)
+    if len(cells) > 1:
+        span = (f"{_title_name(cells[-1]['name'])} .. "
+                f"{_title_name(cells[0]['name'])}")
+        title = f"trackview - {len(cells)} most recent rides   ({span})"
+    else:
+        name = _title_name(cells[0]["name"]) or cells[0]["name"]
+        title = f"trackview - {name}   ({total_km:,.0f} km)"
+    fig.suptitle(title, fontsize=13, fontweight="bold", y=0.985)
+
+    # one attribution line, a distinct entry per basemap provider actually loaded
+    used = "    ·    ".join(
+        ATTRIBUTION.get(k, "© OpenStreetMap contributors")
+        for k in dict.fromkeys(loaded_keys))
+    fig.text(0.006, 0.005, used, fontsize=7, color="#555")
+    if detail is not None:
+        fig.text(0.994, 0.005, f"detail {detail}", fontsize=7,
+                 color="#555", ha="right")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
+    plt.close(fig)
+    print(f"  wrote {out_path}    ({out_path.stat().st_size // 1024} KB)")
+
+
 # --------------------------------- entry point --------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(
@@ -2099,6 +2205,16 @@ def main() -> None:
                             "speed, HR and cadence when the ride carries telemetry "
                             "(auto-collected -- no --ext on the line needed); needs "
                             "--split, or a single track -- one card per ride)")
+    ap.add_argument("--gallery", type=int, nargs="?", const=9, metavar="N",
+                    default=None,
+                    help="instead of one combined (or --split) map, tile the N most "
+                               "recent rides into a single mosaic contact sheet -- a "
+                               "'recent rides' overview without opening N files; N "
+                               "defaults to 9 (a 3x3).  Each cell is that ride's own "
+                               "basemap + route (the flat per-track look of a --split "
+                               "cell) with a name/distance/gain caption.  A map output, "
+                               "so it fetches tiles and is skipped under --no-map; --split "
+                               "is ignored when --gallery is set (it is the mosaic instead)")
     ap.add_argument("--ext", action="store_true",
                     help="add the calories-burned total (kcal) to the title and an avg "
                            "power/speed/cadence/hr line below it, from wahoo_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
@@ -2106,7 +2222,7 @@ def main() -> None:
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
                             "stats/.   The map-only flags --out/--format/--style/--detail/"
-                            "--split/--no-elev/--color-by/--grade-cap/--profile/--heat/"
+                            "--split/--gallery/--no-elev/--color-by/--grade-cap/--profile/--heat/"
                              "--labels/--no-scale/--no-cache are then ignored)")
     ap.add_argument("--csv", action="store_true",
                     help="also write a CSV ride-log to stats/ (a header row + one row "
@@ -2340,6 +2456,17 @@ def main() -> None:
 
         if not render_tracks:
             print("      no tracks left to render after suppression.")
+        elif args.gallery is not None:
+             # a mosaic of the N most recent rides -- the --split alternative (one
+             # image instead of N files); --out names the single file, else the
+             # dated auto name in output/
+            glabel = _safe_filename(f"{_title_name(render_tracks[0]['name'])}_"
+                                   f"{_title_name(render_tracks[-1]['name'])}")
+            out_path = (Path(args.out) if args.out is not None
+                        else out_dir / f"trackview-{glabel}_gallery.{args.format}")
+            print(f"       --gallery: {args.gallery} most recent ride(s) -> '{out_path.name}'")
+            write_gallery(render_tracks, out_path, style=args.style,
+                          n=args.gallery, detail=args.detail)
         elif args.split:
             if args.out:
                 print(f"        --split + --out: each file -> '{split_prefix}<ride>.{args.format}' in {out_dir}")

@@ -67,6 +67,7 @@ Run the tool with the venv interpreter to avoid system-Python import errors:
 .venv/bin/python trackview.py --summary                  # also write a year-in-review report (per year/month) -> stats/
 .venv/bin/python trackview.py --html                     # a self-contained interactive Leaflet map (inline GeoJSON + a tile layer) -> output/
 .venv/bin/python trackview.py --html --html-cdn          # reference Leaflet from a CDN instead of inlining it
+.venv/bin/python trackview.py --gallery 6                   # tile the N most recent rides into one mosaic contact sheet -> output/ (bare --gallery = 9, a 3x3)
 .venv/bin/python trackview.py --gpx-dir DIR --out OUT
 .venv/bin/python trackview.py --help                # full CLI
 ```
@@ -238,6 +239,7 @@ Key non-obvious details:
    it fetches no basemap and needs no telemetry.  The embedded GeoJSON is JSON with `<` escaped (so a
    ride name can't close the `<script>`); ride names shown in the DOM are HTML-escaped client-side.
     `_leaflet_document`/`write_html`.
+- **Gallery / contact sheet** (`--gallery [N]`, bare = 9; TODO [23]) tiles the N *most recent* rides of the already-filtered `tracks` into one mosaic at `output/trackview-<range>_gallery.<format>` (`write_gallery` -> `_gallery_grid` lays a near-square rows x cols grid, 3x3 for 9, 2x3 for 5; `_gallery_cell` draws each cell = that ride's own basemap + route via the shared `_load_basemap`, flat `STRONG_COLORS` per cell, white-cased, green/red start/stop, a name/distance/gain caption).  The rides are sorted newest-first (`_ride_date` ordinal) so the top-left cell is the latest; a route-less ride (< 2 points, e.g. a suppressed trainer ride) is dropped and an empty set writes nothing (a line on stdout).  It is a *map* output (a basemap per cell, so it honours `--style`/`--detail`/the tile cache and is skipped under `--no-map`, alongside the ride-log/CSV), the mosaic alternative to `--split` (which the `main()` render branch treats as mutually exclusive: `--gallery` takes precedence).
 - **Basemap fallback** (`_load_basemap`): providers are tried in order
   (`--style` first, then the rest of `SOURCES`). It catches fetch exceptions
   *and* detects blank/rate-limited tiles by checking that the returned image's
@@ -315,7 +317,7 @@ Key non-obvious details:
   reads as `unknown`).  The table closes with one **`Summary`** totals/averages row **per
   device type** (`_device_groups` groups the rides; that device's name, shown last, in the
   Device column).  Columns mirror the two title lines; under `--ext` two more appear — a **Max grade (%)** (the ride's steepest segment, geometry-derived rather than read from the `grade` extension) and an **Avg temperature (°C)** (from the `temperature` extension) — alongside the calories-burned total and avg power/speed/cadence/hr.  A `-` marks a metric a ride does not carry.  `--no-map`
-  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache` are then no-ops) but still runs this stats write, so a stats-only run is possible.
+  skips the `render()`/basemap step (no image, no network fetch — the map-only flags `--out`/`--format`/`--style`/`--detail`/`--split`/`--gallery`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache` are then no-ops) but still runs this stats write, so a stats-only run is possible.
 - **CSV ride-log** (`--csv`, `write_csv`): also writes
    `stats/trackview-<first>_<last>.csv` — the same columns as the `.txt` ride-log
    (incl. the Device column, shared via `_stats_columns`), but just a header row + one

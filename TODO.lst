@@ -40,7 +40,8 @@ training-trend chart) were done on 2026-09-21 (see their "DONE" notes below); [1
 activity calendar), [14] (the year-in-review summary), [16] (the on-disk tile cache) and
 [17] (the device/sport filters) were done on 2026-09-22 (see their "DONE" notes below); [18]
 (the --top N best-of filter), [19] (recursive input discovery) and [20] (the --list dry-run)
-were done on 2026-09-24 and [21] (the --today glance), [22] (the self-contained HTML/Leaflet export) on 2026-09-25 (see their "DONE" notes below); the rest below are still open.  Line
+were done on 2026-09-24 and [21] (the --today glance), [22] (the self-contained HTML/Leaflet export) and [23] (the
+--gallery contact sheet) on 2026-09-25 (see their "DONE" notes below); the rest below are still open.  Line
 references below are to trackview.py as of each item's date; flag names are
 suggestions.  Ordered roughly by value; each notes the cheapest implementation hook.
 
@@ -370,9 +371,28 @@ Output & sharing
       (no file written), and the full pipeline (PNG + stats + HTML together).
 
 
-[23] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
+[23] [done] Contact sheet / gallery.  Tile the --split per-track maps into one mosaic
      image (e.g. a 3x3 of the most recent rides) - a "recent rides" overview without
      opening N files; a --gallery N switch.
+      DONE (2026-09-25): `--gallery [N]` (bare = 9, a 3x3) tiles the N *most recent* rides of the
+      already-filtered `tracks` into one mosaic at `output/trackview-<range>_gallery.<format>`
+      (`write_gallery` -> `_gallery_grid` lays a near-square rows x cols grid -- 3x3 for 9, 2x3 for
+      5, a 1xN row for a small N; a ragged last row's unused slots stay blank), the mosaic
+      alternative to --split (in main()'s render branch they are mutually exclusive -- --gallery
+      takes precedence -- and --gallery is listed among --no-map's ignored flags).  Each cell
+      (`_gallery_cell`) is that ride's OWN basemap + route: a fresh `_load_basemap` at the ride's
+      own auto-chosen detail (so a cell zooms to itself, not the whole set) in the flat per-track
+      look -- a white-cased `STRONG_COLORS` route, green/red start/stop markers and a
+      name/distance/gain caption -- reusing the map's own basemap/tile-cache/attribution paths.
+      The rides are the most recent by `_ride_date` ordinal, shown newest-first so the top-left cell
+      is the latest; a route-less ride (< 2 points, e.g. a suppressed 'Kickr Snap' trainer ride that
+      slips through) is dropped and an empty set is a no-op (a line on stdout, nothing written).  It
+      is a *map* output -- a basemap per cell -- so it honours --style/--detail/the tile cache and
+      is skipped under --no-map (a line on stdout; the ride-log/CSV are still written), while --out
+      names the single file and otherwise the dated auto name is used.  Verified: 1/2/3/4/9-cell
+      sheets render (3x3 for 9, every cell with basemap content), --no-map skips it (no gallery file,
+      stats still written), --out writes to the named path, the empty-set and route-less guards
+      write nothing, and the full pipeline (gallery + the stats/ ride-log together).
 
 Test & testing
 The repo has no automated tests; `pytest` 9.1.1 is installed in `.venv` (`.venv/bin/pytest`), so the suite should live in a `tests/` dir run with `.venv/bin/pytest`.  Most of trackview.py is pure geometry / string logic that is cheap to unit-test *without* network or a rendered figure -- only the basemap fetch, the matplotlib image and the stats/report writers are the heavy, I/O-bound paths, so keep those behind fixtures/mocks (or a `slow`/`network` skip marker), not the fast suite.  Numbered after [23].

@@ -64,6 +64,7 @@ python trackview.py --calendar --year 2026   # restrict the grid to one calendar
 python trackview.py --summary                  # also write a year-in-review report (per year/month) to stats/
 python trackview.py --html                     # a self-contained interactive Leaflet map (inline GeoJSON + a tile layer) to output/
 python trackview.py --html --html-cdn          # reference Leaflet from a CDN instead of inlining it (a smaller file, needs internet to view)
+python trackview.py --gallery 6                  # tile the N most recent rides into one mosaic contact sheet to output/ (bare --gallery = 9, a 3x3)
 python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
@@ -110,7 +111,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   descents are untouched.  It changes only the gain total (distance and duration are
   unaffected); `0` reproduces the old "sum of every rising segment" exactly.
 
-- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache`) are ignored when it is set.
+- `--no-map` skips the basemap fetch and image entirely (no output image, no network) and just writes the ride-log table above — a stats-only run.  The map-only flags (`--out`/`--format`/`--style`/`--detail`/`--split`/`--gallery`/`--no-elev`/`--color-by`/`--grade-cap`/`--profile`/`--heat`/`--labels`/`--no-scale`/`--no-cache`) are ignored when it is set.
 - **Sparse output** `--sparse` quiets stdout: it skips the per-track stats listing (the
   one line per read ride) and prints only the summary lines — where it reads, the track
   count / point totals, the files written, and any `--since`/`--until` skips.  The
@@ -208,6 +209,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
    internet to *view*).  A standalone output (no basemap fetch, no telemetry), so it writes even
    under `--no-map`; because it embeds every decimated point, pair it with `--top`/`--since` to keep
    a busy log to a handful of rides.
+- **Gallery / contact sheet** `--gallery [N]` (bare `--gallery` = 9) tiles the N *most recent* rides of the already-filtered set into a single mosaic to `output/trackview-<first>_<last>_gallery.<format>` — a "recent rides" overview without opening N files, the *mosaic* alternative to `--split` (one image instead of N).  Each cell is that ride's own basemap + route (the flat per-track look of a `--split` cell) with a green start / red stop and a name / distance / gain caption, laid out in a near-square grid (3x3 for 9, 2x3 for 5, a 1xN row for a small N); the top-left cell is the latest ride.  It fetches a basemap per cell, so it honours `--style` / `--detail` / the tile cache and is skipped under `--no-map` (a line on stdout says so, and the ride-log/CSV are still written); a ride with no route (e.g. a suppressed trainer ride) is dropped from the sheet, and an empty set writes nothing.  `--out` names the single file; otherwise the dated auto name is used.
 
 ## Base-map providers (`--style`)
 
