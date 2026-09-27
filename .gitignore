@@ -5,6 +5,7 @@ tiles/
 lib/
 __pycache__/
 *.pyc
+.pytest_cache/
 .DS_Store
 
 # personal ride data & regenerable outputs (not part of the tool)

@@ -1,0 +1,14 @@
+# trackview has no packaging of its own; this file only configures the test
+# runner (pytest is already installed in .venv).  See the "Testing" section of
+# README.md and TODO.lst items [24]-[28].
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Two markers let CI run just the pure suite fast and offline:
+#     .venv/bin/pytest -m "not network and not slow"
+#   network  - a path that fetches basemap tiles or the Leaflet CDN
+#   slow     - a path that renders a matplotlib figure
+markers = [
+     "network: fetches basemap tiles or the Leaflet CDN (skipped in the fast suite)",
+     "slow: renders a matplotlib figure (skipped in the fast pure suite)",
+]

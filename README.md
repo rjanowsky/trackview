@@ -22,6 +22,21 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
+## Testing
+
+`pytest` (already in `.venv`) runs the pure suite -- no network, no figures, so it
+is fast and offline:
+
+```bash
+.venv/bin/pytest                                  # the full suite
+.venv/bin/pytest -m "not network and not slow"     # the pure subset (CI)
+```
+
+The two markers live in `pyproject.toml`: `network` (a basemap-tile / Leaflet-CDN
+fetch) and `slow` (a matplotlib render).  The heavy path is behind both, so the
+default run stays quick; run it with
+`TRACKVIEW_TEST_NETWORK=1 .venv/bin/pytest -m "network and slow"`.
+
 ## Usage
 
 ```bash

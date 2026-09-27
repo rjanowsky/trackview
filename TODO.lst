@@ -395,14 +395,56 @@ Output & sharing
       write nothing, and the full pipeline (gallery + the stats/ ride-log together).
 
 Test & testing
-The repo has no automated tests; `pytest` 9.1.1 is installed in `.venv` (`.venv/bin/pytest`), so the suite should live in a `tests/` dir run with `.venv/bin/pytest`.  Most of trackview.py is pure geometry / string logic that is cheap to unit-test *without* network or a rendered figure -- only the basemap fetch, the matplotlib image and the stats/report writers are the heavy, I/O-bound paths, so keep those behind fixtures/mocks (or a `slow`/`network` skip marker), not the fast suite.  Numbered after [23].
+The suite lives in `tests/`, run with `.venv/bin/pytest` (pytest 9.1.1 is in the venv).  Most of trackview.py is pure geometry / string logic that is cheap to unit-test *without* network or a rendered figure -- only the basemap fetch and the matplotlib image are the heavy, I/O-bound paths, so they sit behind a `network`/`slow` marker (registered in pyproject.toml), not the fast suite.  Numbered after [23]; all five are done (2026-09-26).
 
-[24] Scaffold a `tests/` dir + a `conftest.py` with a tiny synthetic GPX fixture (a handful of points -- a climb, a descent, flat -- with and without <extensions> telemetry) built in-memory via gpxpy (no file on disk), plus a fixture that points `--gpx-dir` at a `tmp_path` of two Wahoo-named rides in a subfolder (one carrying a Device:/Sport: desc, one a plain komoot track) so the filter tests compose.  Add a `pytest` line to the README Setup and a `pyproject.toml` `[tool.pytest]` block with a `network`/`slow` marker so CI can run the pure tests fast.
+[24] [done] Scaffold a `tests/` dir + a `conftest.py` with a tiny synthetic GPX fixture (a handful of points -- a climb, a descent, flat -- with and without <extensions> telemetry) built in-memory via gpxpy (no file on disk), plus a fixture that points `--gpx-dir` at a `tmp_path` of two Wahoo-named rides in a subfolder (one carrying a Device:/Sport: desc, one a plain komoot track) so the filter tests compose.  Add a `pytest` line to the README Setup and a `pyproject.toml` `[tool.pytest]` block with a `network`/`slow` marker so CI can run the pure tests fast.
+     DONE (2026-09-26): `tests/` holds a `conftest.py` (a sys.path shim so `import
+     trackview` works, the `build_ride`/`write_ride`/`gpx_points` helpers, and three
+     fixtures -- `synthetic_gpx` (a climb/descent/flat ride *with* <extensions>
+     telemetry), `synthetic_gpx_plain` (the same, telemetry-free komoot-style), and
+     `gpx_folder` (a tmp_path `2026/` subfolder of one Wahoo ELEMNT BOLT/Bike ride +
+     one plain komoot ride, for the filter composition)) and the five test modules
+     below.  `pyproject.toml` registers the `network`/`slow` markers (and `testpaths =
+     ["tests"]`); a README "Testing" section documents `.venv/bin/pytest` and the fast
+     `-m "not network and not slow"` subset.  A `network`+`slow`-marked render smoke test
+     is skipped by default (set `TRACKVIEW_TEST_NETWORK=1` to run it).  `tests/__pycache__`
+     and `.pytest_cache/` joined .gitignore.
 
-[25] Unit-test the date/parse helpers on their own: `_ride_date` (a Wahoo stem `2026_09_07_08_12_47` -> 2026-09-07; a nested `gpx/2026/...` path; a foreign name like a komoot title -> None) and `_parse_argdate` (a good `YYYY-MM-DD` -> a date; a bad string -> a clear error, no crash).  Pure, no fixtures.
+[25] [done] Unit-test the date/parse helpers on their own: `_ride_date` (a Wahoo stem `2026_09_07_08_12_47` -> 2026-09-07; a nested `gpx/2026/...` path; a foreign name like a komoot title -> None) and `_parse_argdate` (a good `YYYY-MM-DD` -> a date; a bad string -> a clear error, no crash).  Pure, no fixtures.
+     DONE (2026-09-26): `tests/test_parse_helpers.py` -- `_ride_date` on a Wahoo stem,
+     a nested `gpx/2026/...` path, a foreign komoot name and an invalid-calendar stem
+     (all -> the right date / None), and `_parse_argdate` (a good date -> a `date`; a
+     bad string / an impossible date -> a `SystemExit` naming the bad flag).  Pure.
 
-[26] Unit-test the pure geometry: `_grade_cap` (a high-percentile auto cap, a pinned `--grade-cap N`, and the floor/ceil clamp) and `_moving_avg` (a windowed, NaN-skipping average over a known series), and `_select_top` (by `km`/`gain`/`recent`; ties keep date order; `N` >= the ride count or `N` <= 0 is a no-op; an undated ride ranks last under `recent` but can still win on a pure `km`/`gain` value).
+[26] [done] Unit-test the pure geometry: `_grade_cap` (a high-percentile auto cap, a pinned `--grade-cap N`, and the floor/ceil clamp) and `_moving_avg` (a windowed, NaN-skipping average over a known series), and `_select_top` (by `km`/`gain`/`recent`; ties keep date order; `N` >= the ride count or `N` <= 0 is a no-op; an undated ride ranks last under `recent` but can still win on a pure `km`/`gain` value).
+     DONE (2026-09-26): `tests/test_geometry.py` -- `_grade_cap` (the auto p98 cap
+     returned as-is when in-range, a pinned cap winning over the auto *and* over a noise
+     spike, a non-positive pin falling back to auto, the floor on an all-flat ride, the
+     ceiling on a steep one, and the floor on empty grades); `_moving_avg` (a window-3 /
+     window-5 linear series, NaN-skipping, all-NaN stays NaN, a sub-1 window is a no-op,
+     and output length == input); and `_select_top` (top-N by km/gain/recent, the
+     re-sort back to date order, the N>=count and N<=0 no-ops, an undated ride last
+     under `recent` yet winning a pure `km`/`gain`).  One-line fix to `_select_top`: it
+     now treats a *negative* N as a no-op too (`if not n or n <= 0 or n >= len`),
+     honouring the docstring/this item's "N <= 0 is a no-op" (only N=0 was guarded).
 
-[27] Test the filter *composition* against the fixture folder, mirroring the real runs documented above: --since/--until narrows by filename date, --device/--sport by the <desc> line (a non-match prints the distinct values and skips a ride with no line), --top runs *after* them and re-sorts the survivors back into date order, and --today (once [21] lands) folds to `--flat --since date.today()`.  Assert on the surviving `tracks` list, not the printed text.
+[27] [done] Test the filter *composition* against the fixture folder, mirroring the real runs documented above: --since/--until narrows by filename date, --device/--sport by the <desc> line (a non-match prints the distinct values and skips a ride with no line), --top runs *after* them and re-sorts the survivors back into date order, and --today (once [21] lands) folds to `--flat --since date.today()`.  Assert on the surviving `tracks` list, not the printed text.
+     DONE (2026-09-26): `tests/test_filters.py` -- a `run_filters()` helper mirrors
+     main()'s sequence (date filter -> --device/--sport -> --top --by) and the tests
+     assert on the surviving tracks list: --since/--until narrow by filename date (a gap
+     keeps nothing), --device/--sport match the parsed <desc> (case-insensitively; a
+     line-less ride is skipped; a non-match prints the distinct values incl. 'unknown'),
+     and --top runs *after* them and re-sorts the survivors to date order (a 3-ride
+     folder where the top-2 by gain rank out of order).  `--today` is driven through the
+     real main() with a top-level + a same-date subfolder ride: the fold to flat discovery
+     keeps the top-level one and skips the subfolder twin (verified by capsys).
 
-[28] Lock in the dry-run contract: `_list_rides` prints a header + one row per ride + a TOTAL row, and an empty-set message, and --list writes *nothing* -- so assert via `capsys` that the table appears while a `tmp_path`-based check shows no new file in the stats/ or output/ dirs.  Cover a `--no-map`+`--list` combo and an impossible `--until` (empty match), asserting the pre-existing 'no tracks' guard fires first.
+[28] [done] Lock in the dry-run contract: `_list_rides` prints a header + one row per ride + a TOTAL row, and an empty-set message, and --list writes *nothing* -- so assert via `capsys` that the table appears while a `tmp_path`-based check shows no new file in the stats/ or output/ dirs.  Cover a `--no-map`+`--list` combo and an impossible `--until` (empty match), asserting the pre-existing 'no tracks' guard fires first.
+     DONE (2026-09-26): `tests/test_dry_run.py` -- `_list_rides` prints the Date/Ride/
+     Dist/Gain header, one row per ride, a TOTAL row, and 'no ride matches the filters' on
+     an empty set (an undated ride shows 'undated'); a `run_main()` helper points
+     OUTPUT_DIR/STATS_DIR at empty tmp_path subdirs and asserts a `--list` run writes
+     *nothing* (neither dir is even created).  Covers `--no-map --list` (the --list table
+     prints, 'skipping map generation' does not, nothing is written) and an impossible
+     `--until 2000-01-01` (the pre-existing 'no tracks' guard fires first: 'nothing to
+     render' prints, the --list table does not, nothing is written).

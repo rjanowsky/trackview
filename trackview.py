@@ -480,7 +480,7 @@ def _select_top(tracks, n: int, by: str) -> list:
     Ties fall back to that original order (a stable rank on the already date-ascending list),
     and `n` >= the ride count (or a non-positive `n`) is a no-op, so an unbounded run is
     returned unchanged."""
-    if not n or n >= len(tracks):
+    if not n or n <= 0 or n >= len(tracks):
         return tracks
     order = sorted(range(len(tracks)), key=lambda i: _top_key(tracks[i], by),
                    reverse=True)
