@@ -135,9 +135,31 @@ Non-obvious Wahoo quirks the converter handles (and why):
 
 ## Notes / testing
 
-There is **no test suite, linter, formatter, or CI** in this project. To
-validate a change, run the script (it needs network for the basemap) or at least
-syntax-check with `.venv/bin/python -c "import ast; ast.parse(open('trackview.py').read())"`.
+There is **no linter, formatter, or CI**, but there *is* an automated `pytest`
+suite in `tests/` (configured by `pyproject.toml`: `testpaths = ["tests"]`, plus the
+`network`/`slow` markers).  It is **pure by default** — no network, no figures — so
+the whole thing runs offline in a fraction of a second:
+
+```bash
+.venv/bin/pytest                                 # the full suite (56 pass, 1 skip)
+.venv/bin/pytest -m "not network and not slow"    # the pure subset — what CI should run
+```
+
+The modules map onto the TODO range — `test_parse_helpers.py` [25] (`_ride_date`/
+`_parse_argdate`), `test_geometry.py` [26] (`_grade_cap`/`_moving_avg`/`_select_top`),
+`test_filters.py` [27] (the `--since`/`--until` → `--device`/`--sport` → `--top --by`
+composition, plus the `--today` fold), `test_load_tracks.py` [24] (in-memory `gpxpy`
+rides, with and without `<extensions>` telemetry) and `test_dry_run.py` [28] (the
+`--list` "writes nothing" contract).  `tests/conftest.py` supplies the shared
+fixtures/helpers — `build_ride`, `write_ride`, `gpx_points`, `gpx_folder`,
+`ride_paths`, `run_filters`, `run_main` (the last points `output/`/`stats/` at a
+`tmp_path` so a `main()` run never writes into the repo).  The one heavy path,
+`test_render_smoke.py` (a real basemap fetch + matplotlib figure render), sits behind
+*both* markers and is **skipped** in the default run; opt in with
+`TRACKVIEW_TEST_NETWORK=1 .venv/bin/pytest -m "network and slow"`.
+
+When you can't run the suite, a quick fallback is to syntax-check:
+`.venv/bin/python -c "import ast; ast.parse(open('trackview.py').read())"`.
 
 ## Architecture
 
