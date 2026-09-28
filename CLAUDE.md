@@ -193,7 +193,7 @@ suite in `tests/` (configured by `pyproject.toml`: `testpaths = ["tests"]`, plus
 the whole thing runs offline in a fraction of a second:
 
 ```bash
-.venv/bin/pytest                                 # the full suite (75 pass, 1 skip)
+.venv/bin/pytest                                 # the full suite (101 pass, 1 skip)
 .venv/bin/pytest -m "not network and not slow"    # the pure subset — what CI should run
 ```
 
@@ -202,7 +202,7 @@ The modules map onto the TODO range — `test_parse_helpers.py` [25] (`_ride_dat
 `test_filters.py` [27] (the `--since`/`--until` → `--device`/`--sport` → `--top --by`
 composition, plus the `--today` fold), `test_load_tracks.py` [24] (in-memory `gpxpy`
 rides, with and without `<extensions>` telemetry) and `test_dry_run.py` [28] (the
-`--list` "writes nothing" contract), and `test_fit_to_gpx.py` [29] (a hand-built `.fit` parsed to a track: no-fix dropped, the `-500 m` altitude sentinel filled, semicircles -> degrees, the start-time output stem, the device/sport reword, and `--since`/`--until`).  `tests/conftest.py` supplies the shared
+`--list` "writes nothing" contract), `test_fit_to_gpx.py` [29] (a hand-built `.fit` parsed to a track: no-fix dropped, the `-500 m` altitude sentinel filled, semicircles -> degrees, the start-time output stem, the device/sport reword, and `--since`/`--until`); and `test_wahoo_to_gpx.py` [30] (the JSON twin: a hand-built ride JSON, BOM-tolerated, no-fix rows dropped, the `0 m` altitude sentinel filled, STARTTIME+SECS -> UTC "Z", the `--ext` telemetry tags, the device/sport desc, and the `--since`/`--until` filter).   `tests/conftest.py` supplies the shared
 fixtures/helpers — `build_ride`, `write_ride`, `gpx_points`, `gpx_folder`,
 `ride_paths`, `run_filters`, `run_main` (the last points `output/`/`stats/` at a
 `tmp_path` so a `main()` run never writes into the repo).  The one heavy path,
