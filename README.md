@@ -108,7 +108,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
 - **Time-on-route density** `--heat` overlays a 2-D density of *where you ride* under the route lines: a 300×300 histogram of the routes' decimated points over the map's bounding box, each cell weighted by the **time spent** on the segments through it (so a slow climb, a rest stop or a traffic queue glows more than a fast pass; a ride with no timestamps is weighted by point count instead), on a `YlOrRd` ramp at ~0.55 opacity with empty cells masked so the basemap shows through and the colour capped at a high percentile so one hot cell can't wash out the rest.  It carries a "Time on route" colourbar (ticks formatted as a duration, `N s` / `N m` / `Nh Mm`); when a metric colourbar is already on the right edge that one is shown instead, with a note on stdout.  A map-only flag, ignored with `--no-map`.
 - **Ride labels** `--labels` tags each route's **start marker** on a *combined* map with a halo'd `name      N km` line (via `_short_label`), so a many-ride overview is identifiable without a legend key.  Loop rides often share one start, so the tags are staggered vertically by the ride's order to keep a handful of co-located starts legible; a single track is left unlabelled (its name is already in the title).  A map-only flag, ignored with `--no-map`.
 - **Tile cache** basemap tiles are cached to disk under `tiles/` (git-ignored), keyed by z/x/y per provider, so a re-render — or an offline run — reuses the tiles already downloaded instead of refetching every one, which also eases the rate-limit pressure the `_load_basemap` fallback was there to absorb.  `--no-cache` fetches fresh each run instead (contextily's ephemeral per-session cache, the old behaviour); a map-only flag, ignored with `--no-map`.
-- **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `wahoo_to_gpx --ext` embeds.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
+- **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `wahoo_to_gpx --ext` / `fit_to_gpx --ext` embed.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
 - Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt` (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row per ride with the same stats as the two title lines (distance, duration, gain — plus the calories-burned total and avg power / speed / cadence / hr / temperature when `--ext`, and a **max grade** column), plus its **device type** (from the GPX `Device:` line) as the last column, closing with a totals/averages **per device type** (device name in the Device column).  A `-` marks a metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot track) reads as `unknown`.
@@ -140,8 +140,9 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
    `--no-map` run still recurses.
 - **Date filter** `--since`/`--until` (each a `YYYY-MM-DD`) keep only the tracks whose
   ride date falls in the range — read from the Wahoo-style filename stem (e.g.
-  `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx --since`/`--until`
-  filters.  A track whose filename carries no date is skipped (never guessed) whenever a
+  `2026_09_07_08_12_47` → `2026-09-07`), the same way `wahoo_to_gpx` / `fit_to_gpx`
+  name their output after the ride start (so a Garmin `.fit` ride sorts / filters
+  just like a Wahoo one).  A track whose filename carries no date is skipped (never guessed) whenever a
   bound is active.
 - **Today glance** `--today` is the shorthand for `--flat --since <today>`: a one-flag
   "what did I ride today?" look that switches to flat discovery (today's rides sit at the top
@@ -150,7 +151,7 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
   is a no-fetch dry-run of today's rides) and the stats path, and is *not* a map-only flag (a
   `--no-map` run still honours it).  The date is `date.today()` at run time, never a baked-in constant.
 - **Device / sport filter** `--device NAME` and `--sport NAME` keep only the rides whose
-  GPX `<desc>` "Device:" / "Sport:" line (stamped by `wahoo_to_gpx`, e.g. `Wahoo ELEMNT BOLT`,
+  GPX `<desc>` "Device:" / "Sport:" line (stamped by `wahoo_to_gpx` / `fit_to_gpx`, e.g. `Wahoo ELEMNT BOLT`,
    `Bike`) equals `NAME` (case-insensitive), narrowing a mixed-device or mixed-sport folder and
   complementing the `--since`/`--until` date filter.  A ride carrying no such line is skipped
    (never guessed), as an undated ride is under a date bound, and when nothing matches the distinct

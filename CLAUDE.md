@@ -133,6 +133,58 @@ Non-obvious Wahoo quirks the converter handles (and why):
   children; `trackview.py --ext` reads them back (gpxpy flattens the `<extensions>` children onto `point.extensions`, bare tags) to print an avg power/speed/cadence/hr/temperature subtitle plus the calories-burned total on the main title line (kcal = avg power x ride duration / 4184 / ~25% efficiency); absent telemetry is skipped.
   Grade, by contrast, is *geometry-derived* (see Colouring modes below), so `--color-by grade` and a `--profile` elevation + grade silhouette need no telemetry at all (the `--profile` telemetry mini-panels auto-collect it).
 
+## Garmin -> GPX (`fit_to_gpx.py`)
+
+`fit/` holds Garmin `.fit` ride exports (one binary file per ride; Connect names
+them after the ride *and* a device serial, e.g.
+`2026-09-21-061925-ELEMNT BOLT A8C5-660-0_2026_09_21_08_19_24.fit`).  A `.fit` is
+a stream of typed
+messages parsed by `fitparse` — a `file_id`, optional `device_info`, a `session`
+(totals/sport) and one `record` per second carrying the point + telemetry.
+`fit_to_gpx.py` gathers the `record` stream into the *same* GPX 1.1 track in
+`gpx/` as `wahoo_to_gpx.py`, so `trackview.py` renders the Garmin rides
+alongside the Wahoo and komoot ones:
+
+```bash
+.venv/bin/python fit_to_gpx.py                      # ./fit -> ./gpx
+.venv/bin/python fit_to_gpx.py --ext                 # also embed power/cad/hr/speed(km/h)/grade/temp
+.venv/bin/python fit_to_gpx.py --since 2026-09-05             # only rides on/after a date
+.venv/bin/python fit_to_gpx.py --until 2026-09-08             # only rides on/before a date
+.venv/bin/python fit_to_gpx.py <file.fit> --out-dir DIR
+```
+
+Non-obvious FIT/fitparse quirks the converter handles (and why):
+- the **output is named after the ride start time**, the Wahoo-style
+  `YYYY_MM_DD_HH_MM_SS.gpx` (from the `session`/`file_id`/first-record start time,
+  *not* the long Garmin filename), so `trackview._ride_date` reads the date off
+  the stem and the Garmin rides sort / filter / sheet exactly like the Wahoo ones
+  (the original `.fit` name is kept in the GPX `<desc>` "Converted from …");
+- the **device / sport are reworded to the Wahoo voice**: fitparse renders the
+   FIT enum to machine words (`wahoo_fitness`, `cycling`), which the converter
+   maps to the human words `wahoo_to_gpx` stamps (`Wahoo ELEMNT BOLT`, `Bike`), so a
+   Garmin ride reads the same as a Wahoo one and `trackview --device` / `--sport`
+   match across both (an unknown word passes through untouched);
+- **position is stored in "semicircles"** (a Garmin unit, full circle = 2³¹),
+  speed in m/s and distance in metres — all normalised by
+  `StandardUnitsDataProcessor` (semicircles -> degrees, m/s -> km/h, m -> km), so
+  no manual scale factors, matching the Wahoo export;
+- **`ALT == -500 m` is the "no altitude" sentinel** (a raw `0` against the FIT
+  altitude offset of 500; also an absent field) -> filled from the neighbouring
+  valid altitude, the FIT analogue of Wahoo's `0 m` sentinel; `enhanced_altitude`
+  (barometric) is preferred over the GPS `altitude` when present;
+- records with `position_lat/long == 0/None` are "no fix" (ride start/stop) -> dropped;
+- each record carries its own UTC `timestamp`, written with a `Z` suffix (a
+  tz-aware UTC `datetime`) to match the existing tracks;
+- a filename may be a **bare device serial with no date**, so the `--since`/
+  `--until` ride date falls back to the file's `session`/`file_id` start time when
+  the name is undated (a Wahoo/`komoot` stem is always dated, so it never does);
+- distance/gain use the **same equirectangular approximation as `trackview.py`**
+  (`_distance_and_gain`), copied verbatim so the two stay consistent;
+- the `--ext` tags are **identical to `wahoo_to_gpx.py --ext`** (`power`/
+  `speed_kmh`/`cadence`/`heartrate`/`grade`/`temperature` as un-namespaced
+  `<trkpt><extensions>` children), so `trackview.py --ext` reads them back the
+  same way (and the grade caveat above applies unchanged).
+
 ## Notes / testing
 
 There is **no linter, formatter, or CI**, but there *is* an automated `pytest`
@@ -141,7 +193,7 @@ suite in `tests/` (configured by `pyproject.toml`: `testpaths = ["tests"]`, plus
 the whole thing runs offline in a fraction of a second:
 
 ```bash
-.venv/bin/pytest                                 # the full suite (56 pass, 1 skip)
+.venv/bin/pytest                                 # the full suite (75 pass, 1 skip)
 .venv/bin/pytest -m "not network and not slow"    # the pure subset — what CI should run
 ```
 
@@ -150,7 +202,7 @@ The modules map onto the TODO range — `test_parse_helpers.py` [25] (`_ride_dat
 `test_filters.py` [27] (the `--since`/`--until` → `--device`/`--sport` → `--top --by`
 composition, plus the `--today` fold), `test_load_tracks.py` [24] (in-memory `gpxpy`
 rides, with and without `<extensions>` telemetry) and `test_dry_run.py` [28] (the
-`--list` "writes nothing" contract).  `tests/conftest.py` supplies the shared
+`--list` "writes nothing" contract), and `test_fit_to_gpx.py` [29] (a hand-built `.fit` parsed to a track: no-fix dropped, the `-500 m` altitude sentinel filled, semicircles -> degrees, the start-time output stem, the device/sport reword, and `--since`/`--until`).  `tests/conftest.py` supplies the shared
 fixtures/helpers — `build_ride`, `write_ride`, `gpx_points`, `gpx_folder`,
 `ride_paths`, `run_filters`, `run_main` (the last points `output/`/`stats/` at a
 `tmp_path` so a `main()` run never writes into the repo).  The one heavy path,

@@ -448,3 +448,18 @@ The suite lives in `tests/`, run with `.venv/bin/pytest` (pytest 9.1.1 is in the
      prints, 'skipping map generation' does not, nothing is written) and an impossible
      `--until 2000-01-01` (the pre-existing 'no tracks' guard fires first: 'nothing to
      render' prints, the --list table does not, nothing is written).
+
+[29] [done] A Garmin `.fit` -> GPX converter, `fit_to_gpx.py`, mirroring `wahoo_to_gpx.py`: read each `.fit` in `fit/` (gitignored, like `gc/`/`gpx/`) with `fitparse`, gather the `record` stream into one GPX 1.1 track in `gpx/` so `trackview.py` renders the Garmin rides alongside the Wahoo/komoot ones.  Same flags (`--ext`, `--since`/`--until`, a positional file, `--out-dir`), the same `--ext` `<trkpt><extensions>` tags, and the same equirectangular `_distance_and_gain`.  The output is named after the ride *start time* the Wahoo way (`YYYY_MM_DD_HH_MM_SS.gpx`, from the `session`/`file_id`/first-record start, never the long Connect device+serial name), so `trackview._ride_date` reads the date off the stem and the Garmin rides sort / filter / sheet like the Wahoo ones; the original `.fit` name stays in the GPX `<desc>`.  The device / sport are reworded to the Wahoo voice (`wahoo_fitness` -> `Wahoo ELEMNT BOLT`, `cycling` -> `Bike`) so a Garmin ride reads the same as a Wahoo one and `trackview --device`/`--sport` match across both; an unknown word passes through.  Fitparse quirks: position is in "semicircles" (and speed m/s, distance m) -> normalised by `StandardUnitsDataProcessor`; the "no altitude" sentinel is `-500 m` (raw 0 against the +500 offset, or an absent field) -> filled like Wahoo's `0 m`; no-fix records dropped; the `--since`/`--until` ride date falls back to the file's `session`/`file_id` start time when the name is a bare serial; `fitparse` added to `requirements.txt`.
+     DONE (2026-09-27): `fit_to_gpx.py` + `tests/test_fit_to_gpx.py` (19 tests, a
+     hand-built minimal `.fit` since fitparse is a reader).  Verified: a no-fix lead-in
+     record is dropped (`src` 4 -> `n` 3), the `-500 m` sentinel is forward/back-filled
+     (302 -> 304 -> filled 304), semicircles decode to degrees and 40 m/s -> 144 km/h in
+     the `speed_kmh` extension, times carry a UTC "Z", `--ext` embeds all six telemetry
+     tags (and a plain ride embeds none), `_ride_date` prefers the filename then falls
+     back to the file's start time for a bare-serial name, and `main` converts a folder
+     and composes `--since`/`--until`.  Verified also that the output stem is the
+     ride start time (Wahoo-style `YYYY_MM_DD_HH_MM_SS`, never the long Garmin
+     device+serial name) so a real Connect export still lands on the same stem, and
+     that the device / sport reword to the Wahoo voice (`wahoo_fitness` ->
+     `Wahoo ELEMNT BOLT`, `cycling` -> `Bike`, unknown words pass through).
+     Full suite now 75 pass, 1 skip.

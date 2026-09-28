@@ -11,3 +11,4 @@ __pycache__/
 # personal ride data & regenerable outputs (not part of the tool)
 gpx/
 gc/
+fit/
