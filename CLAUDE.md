@@ -5,11 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 `trackview` is a standalone single-file tool that renders every `*.gpx` in `gpx/`
-onto one static map image (`output/tracks_overview.png`). It is a sub-folder inside
-the larger `workarea` git repo, which is a loose collection of unrelated hobby
-scripts (bicycle gear calculator, weather/heating data, other GPX viewers, etc.).
-`trackview` is **self-contained**: it has its own `README.md`, `requirements.txt`,
-and `.venv`, and does not depend on anything in the parent repo.
+onto one static map image (`output/tracks_overview.png`). `trackview` is **self-contained**: it has its own `README.md`, `requirements.txt`,
+and `.venv`, and does not depend on anything outside this repo.
 
 ## Setup
 
@@ -407,10 +404,3 @@ Key non-obvious details:
 `topo` (OpenTopoMap, default), `sat` (Esri World Imagery), `terrain`
 (Esri World Terrain Base), `osm` (German OSM tile server). A proper `User-Agent`
 is sent and attribution is printed on the image and console.
-
-## Related work
-
-The parent `workarea` has a separate GPX viewer, `gpx_viewer.py`
-(Streamlit + Folium, interactive upload-based map) — a different approach from
-this static-PNG renderer. They do not share code.
-
