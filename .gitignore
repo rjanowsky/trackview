@@ -12,3 +12,9 @@ __pycache__/
 gpx/
 gc/
 fit/
+
+# the tools/ helpers' personal inputs + their regenerable dumps:
+#   *.fit            -> the ride exports being inspected (like fit/)
+#   *_records.json   -> dumped by tools/garmin_fit_reader.py (like output/)
+tools/*.fit
+tools/*_records.json

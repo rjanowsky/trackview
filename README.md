@@ -239,6 +239,25 @@ python trackview.py --sparse                 # quiet stdout: skip the per-track 
 Providers are tried in order; a failed or *blank* tile fetch (near-zero image
 variance, e.g. rate-limiting) automatically falls back to the next one.
 
+## Helper tools (`tools/`)
+
+Two ad-hoc diagnostics for *inspecting* a Garmin `.fit` ride (not the converter
+that feeds the tool — that is `fit_to_gpx.py`, which turns `fit/` into `gpx/`):
+
+```bash
+.venv/bin/python tools/garmin_fit_reader.py              # most recent fit/*.fit
+.venv/bin/python tools/garmin_fit_reader.py <a.fit> ..   # explicit ride(s)
+.venv/bin/python tools/garmin_fit_reader_standalone.py   # no fitparse needed
+```
+
+`garmin_fit_reader.py` (needs `fitparse`, already in `requirements.txt`) prints
+the file/session/lap/record layout and a short stats summary and dumps the *full*
+record stream to a sibling `<name>_records.json`.  `garmin_fit_reader_standalone.py`
+is the dependency-free fallback: with no `fitparse` it reads only the FIT header,
+a hex dump and the embedded strings, then points at the tools that can decode the
+rest.  The `.fit` inputs and the dumped `_records.json` are git-ignored (personal
+data and regenerable output).
+
 ## Notes
 
 - Base maps are fetched over the network at render time (a proper `User-Agent`

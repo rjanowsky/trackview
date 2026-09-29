@@ -466,3 +466,24 @@ The suite lives in `tests/`, run with `.venv/bin/pytest` (pytest 9.1.1 is in the
 
 [30] [done] Test the Wahoo ELEMNT JSON -> GPX converter `wahoo_to_gpx.py` the same way `fit_to_gpx.py` is tested ([29]): a hand-built minimal ride JSON (the Wahoo export is plain JSON, so unlike fit it can be synthesised in full, no binary reader needed) driven through `ride_to_gpx` and `main`.  Same shape as the fit test, with the Wahoo quirks: the file is UTF-8 *with a BOM* -> opened `utf-8-sig` so the "RIDE" key still parses; "no fix" rows (`LAT/LON == 0`) at the start *and* end are dropped; the `ALT == 0` "no altitude" sentinel is forward/back-filled (all-zero -> no `<ele>`); absolute time = `STARTTIME` + `SECS` written with a UTC "Z"; `LAT`/`LON` are already decimal degrees and `KPH` already km/h so both pass through untouched; `--ext` embeds the six `power`/`speed_kmh`/`cadence`/`heartrate`/`grade`/`temperature` `<trkpt><extensions>` tags (a plain ride embeds none); the device/sport/athlete land in the `<desc>`/`author` (no rewording, unlike fit); `_ride_date` reads the Wahoo-style stem (no in-file fallback, the stem is always dated); and `main` converts a folder, composes `--since`/`--until`, skips undated and no-fix rides, and names the output after the JSON stem.
      DONE (2026-09-28): `tests/test_wahoo_to_gpx.py` (26 tests, a hand-built `make_ride()` JSON).  Verified: a no-fix lead-in and a trailing no-fix are dropped (`src` 4 -> `n` 3 / `n` 2), `all_no_fix` yields no GPX (`None`, `{}`), the `0 m` sentinel is back-filled (`[0,304,306]` -> `[304,304,306]`) and an all-zero ride has `have_alt` False with every `<ele>` absent, `47.0` deg / `14.0` km/h pass through, times are `STARTTIME+SECS` UTC with a "Z", `--ext` embeds all six telemetry tags (a telemetry-free ride embeds none), the `Device:`/`Sport:`/athlete land in the `<desc>` (`Device: ?` when the key is absent), a BOM'd file still parses, `_ride_date` reads the stem and a foreign name is undated, and `main` names the output after the JSON stem, keeps the right ride under `--since`/`--until`, skips an undated and a no-fix ride, and an empty dir reports "nothing to convert".  Full suite now 101 pass, 1 skip.
+
+Auxiliary helpers
+[31] [done] Integrate the ad-hoc FIT diagnostics in `tools/` into the repo.  The folder held
+     two scripts that predate `fit_to_gpx.py` ([29]) plus their personal `.fit` inputs and
+     `_records.json` dumps: `garmin_fit_reader.py` (a `fitparse`-based *diagnostic* that prints
+     the file/session/lap/record layout + a stats summary and dumps the record stream to a
+     sibling `<name>_records.json`) and `garmin_fit_reader_standalone.py` (a *dependency-free*
+     fallback that, with no `fitparse`, reads only the FIT header + a hex dump + the embedded
+     strings and points at `fitparse`/`fit_to_gpx.py`).  Make them part of the repo and
+     document them, without turning them into the converter (that role is `fit_to_gpx.py`).
+     DONE (2026-09-29): both scripts are now repo-aware (no-argument -> the most recent
+     `fit/*.fit`, explicit path(s) override, mirroring `fit_to_gpx.py`'s `fit/` default) and
+     cleaned up: `garmin_fit_reader.py`'s JSON export now dumps the *full* record stream (it
+     previously capped at the first 20, so the sample `_records.json` files were incomplete)
+     while the console keeps a 20-row preview, and `garmin_fit_reader_standalone.py` drops its
+     dead half-implemented `FITReader` parser (a no-op `_parse_record`) in favour of the
+     working `SimpleFITAnalyzer` + a module-level `hex_dump`.  The `.fit` inputs (personal ride
+     data, like `fit/`/`gc/`/`gpx/`) and the dumped `*_records.json` (regenerable output, like
+     `output/`) are git-ignored in `.gitignore` so only the two `.py` helpers are tracked; a new
+     "Helper tools (`tools/`)" section in CLAUDE.md and README.md documents them, and being
+     diagnostics rather than the tool they are intentionally *not* in the `tests/` suite.

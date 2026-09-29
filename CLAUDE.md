@@ -182,6 +182,34 @@ Non-obvious FIT/fitparse quirks the converter handles (and why):
   `<trkpt><extensions>` children), so `trackview.py --ext` reads them back the
   same way (and the grade caveat above applies unchanged).
 
+## Helper tools (`tools/`)
+
+`tools/` holds two *ad-hoc FIT diagnostics* that predate — and are **not** — the
+`fit_to_gpx.py` converter that actually feeds `trackview.py`.  They are for
+*inspecting* a ride's `.fit`, not for producing the `gpx/` the tool renders:
+
+```bash
+.venv/bin/python tools/garmin_fit_reader.py               # most recent fit/*.fit
+.venv/bin/python tools/garmin_fit_reader.py <a.fit> [b.fit ..]
+.venv/bin/python tools/garmin_fit_reader_standalone.py    # no fitparse needed
+```
+
+- `garmin_fit_reader.py` (needs `fitparse`) prints the `file_id` / `session` /
+   `lap` / `record` layout plus a short stats summary, and dumps the **full**
+   record stream to a sibling `<name>_records.json` (the console preview shows
+   only the first 20 records; the JSON carries every one).
+- `garmin_fit_reader_standalone.py` is the *dependency-free* fallback: with no
+   `fitparse` it reads only what the raw bytes give for free — the 14-byte FIT
+   header, a 16-byte hex dump and the embedded strings — and then points at the
+   tools that *can* decode the rest (`fitparse`, the Fit SDK, `fit_to_gpx.py`).
+
+Both are no-argument aware (the most recent `fit/*.fit`) and accept explicit
+path(s) instead, and both read from the repo's git-ignored `fit/`.  The `.fit`
+inputs (personal ride data, like `fit/`/`gc/`/`gpx/`) and the dumped
+`*_records.json` (regenerable output, like `output/`) are git-ignored in
+`.gitignore`; only the two `.py` helpers are tracked.  Being diagnostics rather
+than the tool, they are **not** covered by the `tests/` suite.
+
 ## Notes / testing
 
 There is **no linter, formatter, or CI**, but there *is* an automated `pytest`
