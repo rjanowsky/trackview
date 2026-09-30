@@ -35,6 +35,12 @@ _TOP_BY = {
        "recent": "most recent",
 }
 
+# The month-abbreviation labels a report month reads by (indexed by calendar month
+# 1..12, index 0 a pad), shared by the --calendar activity grid and the --summary
+# year-in-review report.
+_MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 
 # --------------------------------- metadata -----------------------------------
 def _title_name(name: str) -> str:

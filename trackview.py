@@ -76,7 +76,7 @@ from trackview.geometry import latlon_to_merc, decimate, _distance_and_gain, _gr
 from trackview.helpers import (_title_name, _ride_date, _device_type, _sport_type,
                                _device_label, _device_groups, _filter_by_meta,
                                _select_top, _list_rides, _parse_argdate,
-                               _safe_filename, _short_label, _TOP_BY)
+                               _safe_filename, _short_label, _TOP_BY, _MONTH_ABBR)
 from trackview.metrics import (_point_telemetry, _metric_avg, _metric_avg_track,
                                _max_grade, _max_grade_group, _grade_cap,
                                _track_calories, _calories_burned,
@@ -618,8 +618,6 @@ _CALENDAR_METRICS = {
     "gain":     ("m gain / day",  "OrRd"),
     "rides":    ("rides / day",   "Blues"),
 }
-_MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
 def _calendar_days(tracks, metric="distance", year=None):
