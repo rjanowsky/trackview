@@ -72,6 +72,12 @@ from matplotlib.patheffects import withStroke as _with_stroke
 from matplotlib.ticker import FuncFormatter
 import matplotlib.dates as mdates
 
+from trackview.geometry import latlon_to_merc, decimate, _distance_and_gain, _grade_and_cumkm
+from trackview.helpers import (_title_name, _ride_date, _device_type, _sport_type,
+                               _device_label, _device_groups, _filter_by_meta,
+                               _select_top, _list_rides, _parse_argdate,
+                               _safe_filename, _short_label, _TOP_BY)
+
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
 OUTPUT_DIR  = Path(__file__).resolve().parent / "output"
@@ -182,36 +188,6 @@ METABOLIC_EFFICIENCY = 0.25     # only ~25% of food energy -> pedal work; rest i
 
 
 # --------------------------------- helpers -----------------------------------
-def latlon_to_merc(lat: float, lon: float) -> tuple[float, float]:
-    """WGS84 (lat, lon) -> Web-Mercator (x, y) in metres."""
-    x = lon * PI_R / 180.0
-    y = math.log(math.tan(math.pi / 4 + math.radians(lat) / 2)) * PI_R / math.pi
-    return x, y
-
-
-def decimate(points, min_m: float, carry=None):
-    """Keep only points spaced >= min_m apart (equirectangular distance).  Returns the kept
-    points; when `carry` (a parallel sequence, one entry per point -- e.g. the per-point
-    telemetry) is given, its kept entries are returned too, aligned with the kept points."""
-    if len(points) < 2:
-        return points, (carry if carry is not None else None)
-    n = len(points)
-    keep = [0]
-    last_lat, last_lon = points[0][0], points[0][1]
-    min_m2 = min_m * min_m
-    for i in range(1, n):
-        lat, lon = points[i][0], points[i][1]
-        lat_mid = math.radians((lat + last_lat) / 2.0)
-        dx = (lon - last_lon) * 111320.0 * math.cos(lat_mid)
-        dy = (lat - last_lat) * 110540.0
-        if dx * dx + dy * dy >= min_m2:
-            keep.append(i)
-            last_lat, last_lon = lat, lon
-    keep.append(n - 1)                     # always keep the last point
-    out = [points[i] for i in keep]
-    if carry is not None:
-        return out, [carry[i] for i in keep]
-    return out, None
 
 
 # Wahoo telemetry embedded under <trkpt><extensions> by `wahoo_to_gpx --ext`,
@@ -335,212 +311,11 @@ def _fmt_num(v, spec: str) -> str:
     return "-" if v is None else f"{v:{spec}}"
 
 
-_NAME_DATE_RE = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?=_|$)")
-# `wahoo_to_gpx` stamps a "Device: <name>" and a "Sport: <name>" line into the
-# GPX <desc> (e.g. "Wahoo ELEMNT BOLT", "Bike"); a plain komoot track has
-# neither, and an undated/foreign file may carry one but not the other.
-_DEVICE_RE = re.compile(r"(?im)^\s*Device:\s*(.+)$")
-_SPORT_RE  = re.compile(r"(?im)^\s*Sport:\s*(.+)$")
-
-
-def _title_name(name: str) -> str:
-    """For a --split single-track title, show a Wahoo-style date stem
-    (e.g. 2026_09_11_08_07_29) as just its calendar date (2026-09-11); any other
-    name (a descriptive komoot title) passes through unchanged."""
-    m = _NAME_DATE_RE.match(name)
-    if not m:
-        return name
-    try:
-        return date(int(m[1]), int(m[2]), int(m[3])).isoformat()
-    except ValueError:
-        return name
-
-
-def _ride_date(path: Path) -> date | None:
-    """Calendar date of a ride, read from the .gpx filename stem
-    (YYYY_MM_DD_HH_MM_SS, local time) - no GPX parse needed.  None when the
-    name isn't Wahoo-shaped, so a date filter can skip it rather than guess."""
-    m = _NAME_DATE_RE.match(path.stem)
-    if not m:
-        return None
-    try:
-        return date(int(m[1]), int(m[2]), int(m[3]))
-    except ValueError:
-        return None
-
-
-def _device_type(desc: str | None) -> str | None:
-    """Device type embedded by `wahoo_to_gpx` as a 'Device: <name>' line in the
-    GPX <desc> (e.g. 'Wahoo ELEMNT BOLT', 'Kickr Snap'); None when the track
-    carries no such line (e.g. a plain komoot track)."""
-    m = _DEVICE_RE.search(desc) if desc else None
-    return m.group(1).strip() if m else None
-
-
-def _sport_type(desc: str | None) -> str | None:
-    """Sport embedded by `wahoo_to_gpx` as a 'Sport: <name>' line in the GPX <desc>
-    (e.g. 'Bike'); None when the track carries no such line (e.g. a plain komoot
-    track), so a --sport filter can skip it rather than guess."""
-    m = _SPORT_RE.search(desc) if desc else None
-    return m.group(1).strip() if m else None
-
-
-def _device_label(device: str | None) -> str:
-    """Cell text for the ride-log 'Device' column; 'unknown' when the track
-    carries no Device line (e.g. a plain komoot track)."""
-    return device or "unknown"
-
-
-def _device_groups(tracks) -> list[tuple[str, list]]:
-    """Split the rides into (device label, [rides]) groups in first-seen order
-    (the (recursive) glob is date-ascending), so the ride-log can print one totals row per
-    device type.  A ride with no device line falls in its own 'unknown' group."""
-    order: list[str] = []
-    groups: dict[str, list] = {}
-    for t in tracks:
-        label = _device_label(t.get("device"))
-        if label not in groups:
-            groups[label] = []
-            order.append(label)
-        groups[label].append(t)
-    return [(lbl, groups[lbl]) for lbl in order]
-
-
-def _match_meta(t, device=None, sport=None) -> bool:
-    """True when a ride passes the active --device/--sport filter.  Each active filter
-    is an exact, case-insensitive, whitespace-trimmed match on the ride's own 'Device:' /
-    'Sport:' value (the same <desc> line _device_type / _sport_type read), so a ride
-    missing that line fails the filter (never guessed, as an undated ride under
-    --since/--until).  With no active filter every ride passes."""
-    if device and (t.get("device") or "").casefold() != device.casefold():
-        return False
-    if sport and (t.get("sport") or "").casefold() != sport.casefold():
-        return False
-    return True
-
-
-def _filter_by_meta(tracks, device=None, sport=None) -> list:
-    """Keep only the rides passing the active --device/--sport filter, so a mixed-
-    device/sport folder can be narrowed; the filter runs after load_tracks (the values
-    live in the parsed <desc>, not the filename).  A ride missing the line an active
-    filter names is skipped (never guessed); when nothing matches, the distinct values
-    the log *does* carry are printed so a typo is easy to fix.  Returns the kept rides
-    (unchanged when no filter is active)."""
-    if not (device or sport):
-        return tracks
-    kept = [t for t in tracks if _match_meta(t, device, sport)]
-    skipped = len(tracks) - len(kept)
-    if not skipped:
-        return kept
-    why = []
-    if device:
-        why.append(f"device '{device}'")
-    if sport:
-        why.append(f"sport '{sport}'")
-    print(f"      --device/--sport: {len(kept)}/{len(tracks)} track(s) match "
-          f"{' and '.join(why)}")
-    if not kept:
-        for key, val in (("device", device), ("sport", sport)):
-            if not val:
-                continue
-            present = sorted({(t.get(key) or "unknown") for t in tracks})
-            print(f"      --{key}: no ride matches '{val}'; "
-                  f"the log has: {', '.join(present)}")
-    return kept
-
-
-# The human phrasing for each --top ranking (--by value -> the adjective a "top N"
-# note reads as, e.g. "the 10 longest").  The dict order doubles as the --by choices.
-_TOP_BY = {
-     "km":      "longest",
-     "gain":    "highest-gain",
-     "recent": "most recent",
-}
-
-
-def _top_key(t, by: str) -> float:
-    """A ride's --top ranking value on `by` (a larger value ranks higher): 'km' is its
-    distance, 'gain' its elevation gain, and 'recent' its Wahoo-filename ride date as a day
-    ordinal (a ride with no date in the filename ranks as the oldest, so it drops out of a
-    most-recent selection first).  Pure geometry -- the values are already on the ride dict --
-    so it works with or without telemetry."""
-    if by == "km":
-        return t["dist_km"]
-    if by == "gain":
-        return t["gain_m"]
-    rd = _ride_date(t["path"])
-    return float(rd.toordinal()) if rd is not None else 0.0
-
-
-def _select_top(tracks, n: int, by: str) -> list:
-    """Keep only the top `n` rides ranked by `by` ('km'/'gain'/'recent', see _top_key),
-    then restore the kept rides to their original (date-ascending) order, so the map, the
-    ride-log/CSV and the stats/ reports read as usual -- e.g. the stats filename's
-    earliest->latest span (tracks[0]/tracks[-1]) and the ride-log's top-down listing.
-    Ties fall back to that original order (a stable rank on the already date-ascending list),
-    and `n` >= the ride count (or a non-positive `n`) is a no-op, so an unbounded run is
-    returned unchanged."""
-    if not n or n <= 0 or n >= len(tracks):
-        return tracks
-    order = sorted(range(len(tracks)), key=lambda i: _top_key(tracks[i], by),
-                   reverse=True)
-    picked = set(order[:n])
-    return [tracks[i] for i in range(len(tracks)) if i in picked]
-
-
-def _list_rides(tracks) -> None:
-    """The --list dry-run preview: one line per ride that survives *every* filter
-    (the --since/--until range, the --device/--sport filter and the --top N
-    selection, all applied upstream in main), giving its filename date, its name,
-    its distance and its gain, closed by a totals row -- the core of the ride-log
-    printed to stdout so a filter selection can be previewed cheaply.  It stops
-    before any basemap fetch, image or stats/CSV/report write, so it has no
-    output side effects.  A ride with no date in its filename shows 'undated'
-    (the date filter would already have skipped it, so this only arises under
-    --flat or for a foreign name)."""
-    if not tracks:
-        print("      --list: no ride matches the filters")
-        return
-    def date_cell(t):
-        rd = _ride_date(t["path"])
-        return rd.isoformat() if rd else "undated"
-    rows = [[date_cell(t), t["name"],
-             f"{t['dist_km']:,.1f}", f"{t['gain_m']:,.0f}"] for t in tracks]
-    head = ["Date", "Ride", "Dist (km)", "Gain (m)"]
-    right = [False, False, True, True]
-    total = ["TOTAL", "",
-             f"{sum(t['dist_km'] for t in tracks):,.1f}",
-             f"{sum(t['gain_m'] for t in tracks):,.0f}"]
-    widths = [max(len(head[i]), len(total[i]),
-                 max((len(r[i]) for r in rows), default=0))
-              for i in range(len(head))]
-    def fmt(cells):
-        return "      ".join((c.rjust(widths[i]) if right[i] else c.ljust(widths[i]))
-                             for i, c in enumerate(cells))
-    n = len(tracks)
-    print(f"      --list: {n} ride{'s' if n != 1 else ''} match the filters "
-          f"(no basemap fetched, no image written)")
-    print("     " + fmt(head))
-    print("     " + "      ".join("-" * w for w in widths))
-    for r in rows:
-        print("     " + fmt(r))
-    print("     " + "      ".join("-" * w for w in widths))
-    print("     " + fmt(total))
-
-
 # A "Kickr Snap" is a stationary smart trainer: its session has no route of its
 # own, so its points would just clutter the basemap.  Keep such tracks off the
 # rendered image, matched case-sensitively against the trimmed 'Device:' line -
 # they are still listed in the ride-log/CSV (a trainer ride is still a ride).
 SUPPRESSED_RENDER_DEVICES = {"Kickr Snap"}
-
-
-def _parse_argdate(s: str, flag: str) -> date:
-    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
-    try:
-        return date.fromisoformat(s)
-    except ValueError:
-        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
 
 
 def load_tracks(paths, decimate_m: float, with_ext: bool = False,
@@ -611,60 +386,6 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
     return tracks
 
 
-def _distance_and_gain(points, noise_m: float = 0.0) -> tuple[float, float]:
-    """Total distance (km) and positive elevation gain (m).  The gain is the sum of the
-    rises; a descent ends the climb in progress (resetting its base) only once it exceeds
-    noise_m metres, so a few cm of GPS vertical jitter can't be counted as fresh ascent on
-    the way back up.  noise_m = 0 counts every rising segment - the raw ascent."""
-    dist = 0.0
-    gain = 0.0
-    base = last = None                        # base/last (m) of the climb in progress
-    for i in range(1, len(points)):
-        la0, lo0, e0 = points[i - 1]
-        la1, lo1, e1 = points[i]
-        lat_mid = math.radians((la0 + la1) / 2.0)
-        dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
-        dy = (la1 - la0) * 110540.0
-        dist += math.hypot(dx, dy)
-        if e0 is None or e1 is None:          # some GPX points omit elevation
-            base = last = None
-            continue
-        if base is None:
-            base = last = e0
-        if e1 > last:
-            last = e1                         # track the top of the climb
-        elif last - e1 >= noise_m:            # a descent past the band ends the climb
-            gain += last - base
-            base = e1
-            last = e1
-    if base is not None:
-        gain += last - base                   # commit the climb still open at the end
-    return dist / 1000.0, gain
-
-
-def _grade_and_cumkm(points) -> tuple[list, list]:
-    """Per-segment grade (%) and per-point cumulative distance (km) of an
-      equirectangular (lat, lon, ele) track.  A segment's grade is its rise over
-      its horizontal run, x100; a segment with a missing end-elevation or a zero
-      run is None.  Cumulative distance is the running metre total over every
-      segment, reported in km at each point."""
-    grades = []
-    cum = [0.0]
-    dist = 0.0
-    for i in range(1, len(points)):
-        la0, lo0, e0 = points[i - 1]
-        la1, lo1, e1 = points[i]
-        lat_mid = math.radians((la0 + la1) / 2.0)
-        dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
-        dy = (la1 - la0) * 110540.0
-        run = math.hypot(dx, dy)
-        dist += run
-        cum.append(dist / 1000.0)
-        if e0 is not None and e1 is not None and run > 0.0:
-            grades.append((e1 - e0) / run * 100.0)
-        else:
-            grades.append(None)
-    return grades, cum
 
 
 def choose_detail(bbox, target_px: float = 1600.0, dmin: int = DETAIL_MIN, dmax: int = DETAIL_MAX) -> int:
@@ -683,15 +404,6 @@ def fit_aspect(bbox, aspect_wh: float) -> tuple:
         return (w - dw, s, e + dw, n)
     dh = (bw / aspect_wh - bh) / 2        # too wide   -> pad north/south
     return (w, s - dh, e, n + dh)
-
-
-_UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\s]+')
-
-
-def _safe_filename(name: str) -> str:
-    """Make a GPX file stem safe to use as an output filename."""
-    cleaned = _UNSAFE_CHARS.sub("_", name).strip("._")
-    return cleaned or "track"
 
 
 # --------------------------------- rendering ----------------------------------
@@ -766,11 +478,6 @@ def _draw_profile_metric(ax, t, key, label, color) -> None:
     ax.grid(True, alpha=0.3)
     ax.set_xlim(km[0], km[-1])
     ax.tick_params(axis="y", labelsize=7, colors=color)
-def _short_label(name, width=16) -> str:
-    """Compact per-ride label for a stacked colourbar: _title_name, truncated with an ellipsis so the bar stays narrow."""
-    s = _title_name(name) or str(name)
-    return s if len(s) <= width else s[: width - 1] + "…"
-
 def _stack_grade_colorbars(fig, ax, cmap, norms, labels, unit="Grade (%)"):
     """One compact vertical colourbar per ride, stacked on the right of the map, each labelled with its ride and a 3-tick range -- a combined grade map shows every ride's own cap."""
     ap = ax.get_position()

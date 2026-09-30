@@ -487,3 +487,25 @@ Auxiliary helpers
      `output/`) are git-ignored in `.gitignore` so only the two `.py` helpers are tracked; a new
      "Helper tools (`tools/`)" section in CLAUDE.md and README.md documents them, and being
      diagnostics rather than the tool they are intentionally *not* in the `tests/` suite.
+
+Refactoring
+[32] [in progress] Refactor the trackview.py monolith into a trackview/ package.
+     Split the single-file script into focused submodules (geometry, the
+     metadata/filter helpers, then parsing / rendering / stats / I/O -- see
+     PLAN.md), one module at a time, each a byte-for-byte move so behaviour is
+     unchanged and the test suite stays green.  A top-level trackview/ package
+     would shadow the same-named trackview.py module (`import trackview` picks the
+     package), so trackview/__init__.py is a re-export bridge: it loads the
+     monolith as the private submodule trackview._main (importlib, from its file)
+     and mirrors its namespace back into the package, so `import trackview`,
+     `python trackview.py`, and `from trackview.<mod> import ...` all keep working
+     under one import name (`__file__` stays the monolith's real path, so its
+     `Path(__file__).parent` config -- gpx/, output/, stats/, tiles/ -- still
+     resolves to the repo root).  The monolith re-imports each extracted name back
+     (names used only inside a moved block stay private to that submodule); the
+     bridge is deleted once every module has moved.  DONE (2026-09-30):
+     geometry (Phase 1.1, trackview/geometry.py -- latlon_to_merc, decimate,
+     _distance_and_gain, _grade_and_cumkm, PI_R) and the metadata/filter/selection
+     helpers (Phase 1.2, trackview/helpers.py -- the Wahoo-stem date + device/sport
+     <desc> readers, the --since/--until / --device/--sport / --top filters and the
+     string helpers).  Remaining: the rendering, stats and I/O clusters (1.3+).
