@@ -583,3 +583,27 @@ Refactoring
     decimate already lives in geometry.py, and there is no _load_stats), so it waits
     for Phase 1.6 to move the basemap helper -- then 1.5b (the climb/trend/calendar/
     summary report clusters) and 1.6 (I/O: HTML/Leaflet, gallery, basemap).
+
+     DONE (2026-09-30, Phase 1.5b): the sustained-climb detection + its ranking
+     report extracted into a new trackview/climbs.py, byte-for-byte (a 7-line
+    constant block and a 91-line function cluster, each verified identical to the
+    old monolith), the second report cluster on the same leaf-first principle as
+    1.5a.  The three are _ride_climbs (the sustained climbs in one ride: maximal
+    runs of *smoothed* grade >= min over >= min_len, ranked by a gain x average-grade
+     score), _all_climbs (every ride's climbs, ranked most-significant first) and
+    write_climbs (the top_n ranking as a self-describing .txt table).  The cluster
+    is pure over the parsed ride dicts -- the per-segment grade / cumulative-km /
+    elevation arrays -- and its only external names are _moving_avg (already in
+     trackview/rendering) and _title_name (trackview/helpers), so it has no back-edge
+    to the monolith.  The 3 detection thresholds (CLIMB_MIN_GR=4.0, CLIMB_MIN_LEN=
+    250.0, CLIMB_SMOOTH=9.0) and their prose comment move in with the cluster and
+    stay private -- used only inside the moved functions, so moving them keeps
+     climbs.py back-edge-free, the same discipline as 1.5a / 1.4b-i.  Only
+     write_climbs is still called by main (the optional .txt climb ranking), so the
+    monolith re-imports just that one name; _ride_climbs / _all_climbs and the
+     CLIMB_* constants are not re-imported.  No test changes: none of the cluster's
+    names is test-referenced.  101 pass, 1 skip.  Remaining under Phase 1.5: the
+    trend / calendar / summary report clusters (_trend_panels / write_trend,
+     _calendar_days / _month_ticks / write_calendar, _summary_groups / write_summary);
+    then 1.6 (I/O: HTML/Leaflet, gallery, and the _load_basemap helper that blocks
+    the 1.4b-ii figure cluster).

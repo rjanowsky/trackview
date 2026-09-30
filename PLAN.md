@@ -321,16 +321,22 @@ If the refactoring becomes too complex:
     `main`); keep `_stats_columns` private to `stats.py` -- no test references it
     (completed 2026-09-30)
 18. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-19. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
+19. ✅ Extract the climb-ranking cluster (`_ride_climbs`, `_all_climbs`, `write_climbs`)
+     + its 3 `CLIMB_*` detection thresholds into `trackview/climbs.py` (Phase 1.5b,
+    completed 2026-09-30)
+20. ✅ Re-import `write_climbs` into the monolith (the one `main` calls); `_ride_climbs` /
+     `_all_climbs` and the `CLIMB_*` constants stay private to `climbs.py` (2026-09-30)
+21. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+22. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
     figure *orchestration* cluster -- matplotlib-coupled.  Its only real monolith back-edge
     is `_load_basemap` (the network / contextily basemap plus the config constants); the
     earlier plan's `decimate` / `_load_stats` references are stale -- `decimate` already
     lives in `trackview/geometry.py` (re-imported) and there is no `_load_stats`, so the
     cluster waits for Phase 1.6 to move the basemap helper
-20. 🧳 Then Phase 1.5b (the climb / trend / calendar / summary report clusters --
-    `_ride_climbs` / `_all_climbs` / `write_climbs`, `_trend_panels` / `write_trend`,
-    `_calendar_days` / `_month_ticks` / `write_calendar`, `_summary_groups` /
-    `write_summary`) and Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the basemap helper)
+23. 🧳 Then the remaining report clusters (trend / calendar / summary --
+     `_trend_panels` / `write_trend`, `_calendar_days` / `_month_ticks` / `write_calendar`,
+     `_summary_groups` / `write_summary`) and Phase 1.6 (I/O: HTML / Leaflet, the gallery,
+     and the basemap helper)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -541,7 +547,51 @@ at ~1722), so the two are re-imported; the shared `_stats_columns` column defini
 used only inside them and stays private -- the same discipline as the 1.4b-i internal
 drawing helpers.  No test changes were needed: none of the three names is test-referenced,
 and `write_stats` / `write_csv` resolve through the re-export bridge for `main`.
+### Revised Phase 1.5b: Climb-Ranking Report Module (done)
+
+The second report cluster, on the same leaf-first principle as 1.5a: the sustained-climb
+detection and its ranking table.  It is pure over the parsed ride dicts -- the per-segment
+`grade` / `cum_km` / `ele` arrays -- and its only external names are `_moving_avg` (already in
+`trackview/rendering`) and `_title_name` (`trackview/helpers`), so it has **no back-edge to
+the monolith**.
+
+**Constants (moved in with the cluster, now private to the module -- used only inside it):**
+- `CLIMB_MIN_GR = 4.0` -- the smoothed grade (%) a segment must clear to count as climbing
+- `CLIMB_MIN_LEN = 250.0` -- the min horizontal run length (m) for a climb
+- `CLIMB_SMOOTH = 9.0` -- the centred moving-avg window over which the grade is smoothed
+
+**Functions to extract**:
+- `_ride_climbs` -- the sustained climbs in one ride (maximal runs of smoothed grade >= min
+   over >= min_len; a `score` = gain x average grade ranks a long climb against a short steep one)
+- `_all_climbs` -- every ride's climbs, ranked by `score`
+- `write_climbs` -- the `top_n` ranking written as a self-describing `.txt` table
+
+**Implementation**:
+1. ✅ Extract `_ride_climbs` / `_all_climbs` / `write_climbs` plus the `CLIMB_*` thresholds
+   (and their prose comment) into `trackview/climbs.py` byte-for-byte -- a 7-line constant
+   block and a 91-line function cluster, each verified identical to the old monolith --
+    adding the `numpy` / `Path` / `helpers._title_name` / `rendering._moving_avg` imports
+   (2026-09-30)
+2. ✅ Replace both blocks in the monolith with a single
+    `from trackview.climbs import (write_climbs)` -- the one name `main` still calls; the
+    two internal helpers and the three `CLIMB_*` constants are not re-imported (private)
+   (2026-09-30)
+3. ✅ No test changes: none of the cluster's names is test-referenced, so the bridge needs
+    no re-pointing (2026-09-30)
+4. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/climbs.py` now holds the climb-ranking cluster, copied
+byte-for-byte out of the monolith so behaviour is unchanged.  Only `write_climbs` is still
+called by `main` (the optional `.txt` climb ranking at ~line 1700), so it is re-imported; the
+internal `_ride_climbs` / `_all_climbs` and the `CLIMB_MIN_GR` / `CLIMB_MIN_LEN` / `CLIMB_SMOOTH`
+ thresholds stay private to the module -- moving the thresholds in (rather than importing them)
+keeps `climbs.py` back-edge-free, the same discipline as the 1.5a / 1.4b-i extractions.
+No test changes were needed: none of the cluster's names is test-referenced.  Remaining under
+Phase 1.5: the trend / calendar / summary report clusters; then Phase 1.6 (I/O: HTML /
+Leaflet, the gallery, and the `_load_basemap` helper that blocks the 1.4b-ii figure cluster).
+---
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.5a (stats / ride-log report module) complete -- 101 tests green; next up Phase 1.4b-ii (the render/write_* orchestration cluster, blocked on the `_load_basemap` basemap helper) and Phase 1.5b (climb / trend / calendar / summary clusters)
+**Status**: Phase 1.5b (climb-ranking report module) complete -- 101 tests green; next up the remaining report clusters (trend / calendar / summary), then Phase 1.6 (I/O) and Phase 1.4b-ii (the render/write_* cluster, blocked on `_load_basemap`)
