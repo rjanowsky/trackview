@@ -327,16 +327,25 @@ If the refactoring becomes too complex:
 20. ✅ Re-import `write_climbs` into the monolith (the one `main` calls); `_ride_climbs` /
      `_all_climbs` and the `CLIMB_*` constants stay private to `climbs.py` (2026-09-30)
 21. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-22. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
-    figure *orchestration* cluster -- matplotlib-coupled.  Its only real monolith back-edge
-    is `_load_basemap` (the network / contextily basemap plus the config constants); the
-    earlier plan's `decimate` / `_load_stats` references are stale -- `decimate` already
-    lives in `trackview/geometry.py` (re-imported) and there is no `_load_stats`, so the
-    cluster waits for Phase 1.6 to move the basemap helper
-23. 🧳 Then the remaining report clusters (trend / calendar / summary --
-     `_trend_panels` / `write_trend`, `_calendar_days` / `_month_ticks` / `write_calendar`,
-     `_summary_groups` / `write_summary`) and Phase 1.6 (I/O: HTML / Leaflet, the gallery,
-     and the basemap helper)
+22. ✅ Relocate the shared `_MONTH_ABBR` display constant into `trackview/helpers.py` -- its
+   shared home, alongside `_short_label` -- and re-import it into the monolith, so both the
+   staying calendar cluster (`_month_ticks`) and the moving summary cluster (`write_summary`)
+   read it there (Phase 1.5c-i, completed 2026-09-30)
+23. ✅ Extract the summary report cluster (`_summary_groups`, `write_summary`) into
+    `trackview/summary.py` (Phase 1.5c-ii, completed 2026-09-30)
+24. ✅ Re-import `write_summary` into the monolith (the one `main` calls); keep `_summary_groups`
+   private; no test references the cluster, so no bridge re-pointing (2026-09-30)
+25. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+26. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
+   figure *orchestration* cluster -- matplotlib-coupled.  Its only real monolith back-edge
+   is `_load_basemap` (the network / contextily basemap plus the config constants); the
+   earlier plan's `decimate` / `_load_stats` references are stale -- `decimate` already
+   lives in `trackview/geometry.py` (re-imported) and there is no `_load_stats`, so the
+   cluster waits for Phase 1.6 to move the basemap helper
+27. 🧳 Then the remaining report clusters (trend / calendar --
+    `_trend_panels` / `write_trend`, `_calendar_days` / `_month_ticks` / `write_calendar`; the
+   summary cluster moved in 1.5c) and Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the
+   basemap helper)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -589,9 +598,59 @@ keeps `climbs.py` back-edge-free, the same discipline as the 1.5a / 1.4b-i extra
 No test changes were needed: none of the cluster's names is test-referenced.  Remaining under
 Phase 1.5: the trend / calendar / summary report clusters; then Phase 1.6 (I/O: HTML /
 Leaflet, the gallery, and the `_load_basemap` helper that blocks the 1.4b-ii figure cluster).
+
+### Revised Phase 1.5c: Summary Report Module (done)
+
+The third report cluster, on the same leaf-first principle as 1.5a / 1.5b: the --summary
+year-in-review report.  It is pure over the parsed ride dicts -- no rendering, so it writes
+even under --no-map -- and its only external names are _ride_date / _MONTH_ABBR
+(`trackview/helpers`) and _metric_avg / _fmt_num (`trackview/metrics`), so it has **no
+back-edge to the monolith**.  One wrinkle made it a two-part move: _MONTH_ABBR (the
+month-abbreviation labels a report month reads by) is shared by *both* this cluster and the
+not-yet-moved calendar cluster (_month_ticks), so the constant first relocates to the
+shared helpers module and is re-imported by the monolith before the cluster moves.
+
+**The shared constant (relocated to `trackview/helpers.py`, re-imported by the monolith):**
+- `_MONTH_ABBR` -- the 13-entry month-abbreviation table (index 0 a pad, 1..12 the
+  months), used by both the --calendar activity grid and the --summary report; it sits with
+  the other display helpers like `_short_label`, and the monolith re-imports it so the
+  still-migrated calendar cluster keeps reading it
+
+**Functions to extract:**
+- `_summary_groups` -- the rides split by calendar year then month ({year: {month: [rides]}}),
+  plus an 'undated' list of a filename carrying no date (private: only write_summary calls it)
+- `write_summary` -- one block of monthly rows per year (count / distance / gain / hours, plus
+  a per-group point-weighted average power under --ext), each closed by a TOTAL row, an
+   'ALL years' grand total when the log spans >1 year, and an undated-rides note; the one name
+   `main` calls
+
+**Implementation:**
+1. ✅ Relocate the shared `_MONTH_ABBR` constant into `trackview/helpers.py` (its shared home,
+   with `_short_label`) and re-import it into the monolith, so both the staying calendar
+   cluster and the moving summary cluster read it there -- the byte-identical literal (Phase
+    1.5c-i, 2026-09-30)
+2. ✅ Extract `_summary_groups` / `write_summary` into `trackview/summary.py` byte-for-byte -- a
+    93-line cluster verified identical to the old monolith -- adding the `helpers`
+    (_ride_date, _MONTH_ABBR) and `metrics` (_fmt_num, _metric_avg) imports; no stdlib needed
+    (no Path / csv / numpy / plt) (Phase 1.5c-ii, 2026-09-30)
+3. ✅ Replace the cluster in the monolith with a single
+    `from trackview.summary import (write_summary)` -- the one name `main` still calls;
+    `_summary_groups` is not re-imported (private) (2026-09-30)
+4. ✅ No test changes: none of the cluster's names is test-referenced, so the bridge needs
+   no re-pointing (2026-09-30)
+5. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/summary.py` now holds the summary report cluster, copied
+byte-for-byte out of the monolith so behaviour is unchanged.  Only `write_summary` is still
+called by `main`, so it is re-imported; the internal `_summary_groups` stays private.  Because
+`_MONTH_ABBR` is shared with the calendar cluster, it was first relocated to `trackview/helpers`
+(the shared display-constant home) and re-imported by the monolith, keeping `summary.py`
+back-edge-free -- the same discipline as 1.5a / 1.5b / 1.4b-i.  No test changes were needed.
+Remaining under Phase 1.5: the trend / calendar report clusters; then Phase 1.6 (I/O: HTML /
+Leaflet, the gallery, and the `_load_basemap` helper that blocks the 1.4b-ii figure cluster).
 ---
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.5b (climb-ranking report module) complete -- 101 tests green; next up the remaining report clusters (trend / calendar / summary), then Phase 1.6 (I/O) and Phase 1.4b-ii (the render/write_* cluster, blocked on `_load_basemap`)
+**Status**: Phase 1.5c (summary report module) complete -- 101 tests green; next up the remaining report clusters (trend / calendar), then Phase 1.6 (I/O) and Phase 1.4b-ii (the render/write_* cluster, blocked on `_load_basemap`)
