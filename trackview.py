@@ -81,6 +81,9 @@ from trackview.metrics import (_point_telemetry, _metric_avg, _metric_avg_track,
                                _max_grade, _max_grade_group, _grade_cap,
                                _track_calories, _calories_burned,
                                _fmt_duration, _fmt_dur_or_dash, _fmt_num)
+from trackview.rendering import (_metric_norm, _moving_avg,
+                                 CMAPEED, GRADE_CBAR_MAX,
+                                 SUPPRESSED_RENDER_DEVICES)
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -108,13 +111,6 @@ GRADE_STOPS = [
      "#f6a895", "#d73027", "#7f0000",    # gentle -> steep climb (red)
 ]
 CMAPGRADE = LinearSegmentedColormap.from_list("grade", GRADE_STOPS)
-# A sequential "effort" ramp for the telemetry colourings (--color-by speed/power):
-# low = cold/dark, high = hot/bright, perceptually uniform so a rider reads pacing
-# and effort at a glance (fast / high power at the hot end).  Paired with the same
-# dark under-lay as the grade shading so even the cold low end pops on a pale basemap.
-CMAPEED = "inferno"
-GRADE_CBAR_MAX = 4.0      # max rides that each get their own grade colourbar on a
-                              # combined map; beyond it a single shared scale is used (and noted)
 GRADE_SMOOTH   = 5.0       # centred moving-average window (segments) for the profile's
                               # per-segment grade line: GPS jitter makes it noisy otherwise
 # A "climb" (see _ride_climbs) is a sustained run of segments whose *smoothed* grade stays
@@ -183,28 +179,6 @@ DETAIL_MAX = 16                      # auto-chosen detail never rises past this 
 
 
 # --------------------------------- helpers -----------------------------------
-
-
-def _metric_norm(vals, lo_pct: float = 2.0, hi_pct: float = 98.0):
-    """A robust sequential colour norm for a telemetry metric (--color-by speed/power):
-    the [lo_pct, hi_pct] percentiles of the per-segment values, so a lone outlier (a GPS
-    speed spike, a one-off sprint) can't squash the ramp the way an un-capped min/max would.
-    Returns None when there are no values (the caller then falls back to flat colour)."""
-    if not vals:
-        return None
-    a = np.asarray(vals, dtype=float)
-    lo = float(np.percentile(a, lo_pct))
-    hi = float(np.percentile(a, hi_pct))
-    if hi <= lo:
-        hi = lo + 1.0
-    return Normalize(vmin=lo, vmax=hi, clip=True)
-
-
-# A "Kickr Snap" is a stationary smart trainer: its session has no route of its
-# own, so its points would just clutter the basemap.  Keep such tracks off the
-# rendered image, matched case-sensitively against the trimmed 'Device:' line -
-# they are still listed in the ride-log/CSV (a trainer ride is still a ride).
-SUPPRESSED_RENDER_DEVICES = {"Kickr Snap"}
 
 
 def load_tracks(paths, decimate_m: float, with_ext: bool = False,
@@ -296,17 +270,6 @@ def fit_aspect(bbox, aspect_wh: float) -> tuple:
 
 
 # --------------------------------- rendering ----------------------------------
-def _moving_avg(arr, window: int) -> "np.ndarray":
-    """Centred moving average over a fixed (odd) window, skipping NaN so a gap just shortens the window (quiet the GPS jitter in a per-segment grade line)."""
-    w = max(1, int(window))
-    half = w // 2
-    out = np.full(len(arr), np.nan)
-    for i in range(len(arr)):
-        seg = arr[max(0, i - half): i + half + 1]
-        good = seg[np.isfinite(seg)]
-        if good.size:
-            out[i] = good.mean()
-    return out
 
 def _draw_profile(ax, t, x_label: bool = True) -> None:
     """Elevation + grade vs. cumulative distance for one track (grade on a twin

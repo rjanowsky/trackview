@@ -516,3 +516,22 @@ Refactoring
      trackview.metrics).  Remaining: the rendering cluster (_metric_norm, _moving_avg,
      the colour constants and the render/write_* figures -- Phase 1.4), then stats and
      I/O (1.5-1.6).
+
+     DONE (2026-09-30, Phase 1.4a): the *leaf* rendering helpers --
+     trackview/rendering.py holds _metric_norm (the robust percentile colour
+     norm), _moving_avg (the centred, NaN-skipping moving average) and the three
+     constants CMAPEED (the "inferno" effort ramp), GRADE_CBAR_MAX (4.0, the max
+     per-ride grade colourbars on a combined map) and SUPPRESSED_RENDER_DEVICES
+     ({"Kickr Snap"}, a trainer's route-less session kept off the image but still
+     logged).  Copied byte-for-byte so behaviour is unchanged; rendering.py is
+     leaner than metrics.py -- it imports only numpy + matplotlib.colors.Normalize,
+     with no back-edge to the monolith and no metrics dependency.  All 5 names are
+     still used by code that stays in the monolith (render colours by CMAPEED via
+     _metric_norm; the profile and _ride_climbs run _moving_avg over a GRADE_SMOOTH
+     window; main keeps SUPPRESSED tags off the image), so all 5 are re-imported and
+     none is private to the module.  No test changes: tv._moving_avg resolves via the
+     bridge and the 3 constants + _metric_norm have no test references.  101 pass, 1
+     skip.  Remaining under Phase 1.4: the render/write_* figure cluster (1.4b,
+     matplotlib-coupled, a back-edge to _load_basemap/decimate/_short_label/
+     _title_name/_load_stats -- waits until those helpers move), then stats (1.5)
+     and I/O (1.6).

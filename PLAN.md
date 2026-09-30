@@ -306,11 +306,18 @@ If the refactoring becomes too complex:
 10. ✅ Re-import the 11 functions; keep the 6 constants private; re-point the 4
    `GRADE_CAP_*` test references to `trackview.metrics` (completed 2026-09-30)
 11. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
-12. ⏳ Next module (Phase 1.4): the *rendering* helpers — `_metric_norm`,
-   `_moving_avg`, the `CMAPEED` / `GRADE_CBAR_MAX` / `SUPPRESSED_RENDER_DEVICES`
-   constants and the `render` / `write_*` figure cluster (the matplotlib-coupled
-   half of the original "Rendering" phase)
-13. ⏳ Then Phase 1.5 (stats) and Phase 1.6 (I/O)
+12. ✅ Extract the *leaf* rendering helpers into `trackview/rendering.py`
+   (Phase 1.4a, completed 2026-09-30)
+13. ✅ Re-import the 5 names (`_metric_norm`, `_moving_avg`, `CMAPEED`,
+     `GRADE_CBAR_MAX`, `SUPPRESSED_RENDER_DEVICES`) into the monolith; none are
+   private to the module — all 5 are still called by the remaining render /
+     `_draw_profile` / `main` code (completed 2026-09-30)
+14. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
+15. ⏳ Next sub-step (Phase 1.4b): the big `render` / `render_*` / `write_*`
+    figure cluster — matplotlib-coupled, with a *back-edge* to the monolith's
+    helpers (`_load_basemap`, `decimate`, `_short_label`, `_title_name`,
+      `_load_stats`, ...); modularised after enough of those helpers have moved
+16. ⏳ Then Phase 1.5 (stats) and Phase 1.6 (I/O)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -414,7 +421,33 @@ to the repo root.  `import trackview`, `python trackview.py`, and
 working under this one import name; the bridge is deleted once every module has
 moved and the package stands on its own.
 
+
+### Revised Phase 1.4: Rendering Helpers Module (leaf extraction, done)
+
+**File**: `trackview/rendering.py`
+
+The matplotlib-coupled half of the old "Rendering" phase, done in two parts.
+This sub-step (1.4a) moves the *leaf* helpers that have no back-edge to the
+monolith; the big figure cluster (1.4b) stays for later.
+
+**Constants**:
+- `CMAPEED = "inferno"` -- the sequential "effort" colour ramp for --color-by speed/power
+- `GRADE_CBAR_MAX = 4.0` -- the max number of rides that each get their own grade colourbar on a combined map (beyond it a single shared scale is used and noted)
+- `SUPPRESSED_RENDER_DEVICES = {"Kickr Snap"}` -- a stationary smart trainer's session has no route of its own, so it is kept off the rendered image (but still listed in the ride-log/CSV)
+
+**Functions to extract**:
+- `_metric_norm` -- the robust percentile colour norm for a telemetry metric (falls back to flat colour via None when there are no values)
+- `_moving_avg` -- the centred, NaN-skipping moving average (quiet the GPS jitter in a per-segment grade line)
+
+**Implementation**:
+1. ✅ Create new file `trackview/rendering.py` (2026-09-30)
+2. ✅ Copy the cluster byte-for-byte out of the monolith (numpy-coupled, matplotlib.colors.Normalize; no back-edge to the monolith, no dependency on metrics.py) (2026-09-30)
+3. ✅ Re-import the 5 names into the monolith -- all 5 are still called by the remaining render / `_draw_profile` / `main` code, so none stays private (2026-09-30)
+4. ✅ No test re-pointing: only `tv._moving_avg` is test-referenced, and it resolves via the bridge because the monolith re-imports it; the 3 constants and `_metric_norm` have no test references (2026-09-30)
+5. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**.  `trackview/rendering.py` now holds the leaf rendering helpers, copied byte-for-byte out of the monolith so behaviour is unchanged.  Unlike `metrics.py`, all 5 names are still *used* by code that stays in the monolith (`render` colours by `CMAPEED` through `_metric_norm`, the profile and climb detection run `_moving_avg` over a `GRADE_SMOOTH` window, and `main` keeps `SUPPRESSED_RENDER_DEVICES`-tagged trainer tracks off the image while still listing them), so every one is re-imported and none is private to the module.  `rendering.py` is even leaner than `metrics.py`: it imports only `numpy` and `matplotlib.colors.Normalize`, with no back-edge to the monolith and no dependency on `metrics.py`.  The big `render` / `render_*` / `write_*` figure cluster is deliberately *not* moved yet -- it has a back-edge (it calls `_load_basemap`, `decimate`, `_short_label`, `_title_name`, `_load_stats`, ... still in the monolith), so it waits for Phase 1.4b, after enough of those helpers have moved.  No test changes were needed: `tv._moving_avg` resolves through the re-export bridge, and the 3 constants plus `_metric_norm` have no test references.
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.3 (metrics) complete — 101 tests green; on to Phase 1.4 (rendering)
+**Status**: Phase 1.4a (rendering helpers) complete -- 101 tests green; on to Phase 1.4b (the render/write_* figure cluster)
