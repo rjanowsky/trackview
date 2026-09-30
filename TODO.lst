@@ -535,3 +535,27 @@ Refactoring
      matplotlib-coupled, a back-edge to _load_basemap/decimate/_short_label/
      _title_name/_load_stats -- waits until those helpers move), then stats (1.5)
      and I/O (1.6).
+
+     DONE (2026-09-30, Phase 1.4b-i): the profile / heat / scale-bar *drawing*
+     helpers folded into the same trackview/rendering.py, byte-for-byte --
+     _draw_profile (the elevation + grade ride-profile silhouette, grade on a twin
+     axis), _has_metric_pts (the gate that a mini-panel is drawn only when the ride
+     carries the per-point array), _draw_profile_metric (one --profile "ride card"
+     telemetry strip), _stack_grade_colorbars (one compact per-ride grade colourbar
+     on a combined map), _nice_m + _fmt_len + _draw_scale_bar (the white-cased
+     "0 .. N km/m" bar in the lower-right corner), and _dwell_times + _fmt_heat_time
+     + _draw_heat (the --heat 2-D "time on route" density: a masked, percentile-
+     capped imshow under the lines).  Their 4 constants (GRADE_SMOOTH, HEAT_GRID,
+     HEAT_CAP_PCT, HEAT_ALPHA) move in too, since they are used only inside the moved
+     functions -- moving them keeps rendering.py back-edge-free, the same discipline
+     as metrics.py/helpers.py.  7 of the 10 helpers are still called by code that
+     stays in the monolith (render/main assemble the profile card, the grade
+     colourbars, the scale bar and the heat overlay), so they are re-imported; the
+     other 3 (_nice_m, _fmt_len, _dwell_times) and the 4 constants stay private to
+     the module.  rendering.py now imports math + matplotlib.pyplot + withStroke in
+     addition to the 1.4a numpy/Normalize.  No test changes: none of the 10
+     functions or 4 constants is test-referenced.   101 pass, 1 skip.  Remaining
+     under Phase 1.4: the render/write_* figure *orchestration* cluster (1.4b-ii)
+     -- matplotlib-coupled, a back-edge to _load_basemap/decimate/_short_label/
+     _title_name/_load_stats, so it waits until those helpers move -- then stats
+     (1.5) and I/O (1.6).

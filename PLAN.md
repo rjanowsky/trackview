@@ -313,11 +313,13 @@ If the refactoring becomes too complex:
    private to the module — all 5 are still called by the remaining render /
      `_draw_profile` / `main` code (completed 2026-09-30)
 14. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
-15. ⏳ Next sub-step (Phase 1.4b): the big `render` / `render_*` / `write_*`
-    figure cluster — matplotlib-coupled, with a *back-edge* to the monolith's
-    helpers (`_load_basemap`, `decimate`, `_short_label`, `_title_name`,
-      `_load_stats`, ...); modularised after enough of those helpers have moved
-16. ⏳ Then Phase 1.5 (stats) and Phase 1.6 (I/O)
+15. ✅ Extract the profile / heat / scale-bar *drawing helpers* into
+     `trackview/rendering.py` (Phase 1.4b-i, completed 2026-09-30)
+16. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*
+    figure *orchestration* cluster — matplotlib-coupled, with a *back-edge* to the
+    monolith's helpers (`_load_basemap`, `decimate`, `_short_label`, `_title_name`,
+        `_load_stats`, ...); modularised after enough of those helpers have moved
+17. 🧳 Then Phase 1.5 (stats) and Phase 1.6 (I/O)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -447,7 +449,41 @@ monolith; the big figure cluster (1.4b) stays for later.
 5. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
 
 **Done (2026-09-30)**.  `trackview/rendering.py` now holds the leaf rendering helpers, copied byte-for-byte out of the monolith so behaviour is unchanged.  Unlike `metrics.py`, all 5 names are still *used* by code that stays in the monolith (`render` colours by `CMAPEED` through `_metric_norm`, the profile and climb detection run `_moving_avg` over a `GRADE_SMOOTH` window, and `main` keeps `SUPPRESSED_RENDER_DEVICES`-tagged trainer tracks off the image while still listing them), so every one is re-imported and none is private to the module.  `rendering.py` is even leaner than `metrics.py`: it imports only `numpy` and `matplotlib.colors.Normalize`, with no back-edge to the monolith and no dependency on `metrics.py`.  The big `render` / `render_*` / `write_*` figure cluster is deliberately *not* moved yet -- it has a back-edge (it calls `_load_basemap`, `decimate`, `_short_label`, `_title_name`, `_load_stats`, ... still in the monolith), so it waits for Phase 1.4b, after enough of those helpers have moved.  No test changes were needed: `tv._moving_avg` resolves through the re-export bridge, and the 3 constants plus `_metric_norm` have no test references.
+
+### Revised Phase 1.4b-i: Drawing Helpers Module (done)
+
+The second half of `trackview/rendering.py`, done after 1.4a: the
+profile / heat / scale-bar *drawing helpers* the figures assemble, moved on the
+same leaf-first principle -- they build on the 1.4a leaves (`_moving_avg`,
+`CMAPEED`) but have **no back-edge to the monolith** (each takes its `ax`/
+`fig`/`t`/`bbox` as arguments and touches no monolith helper), so they move
+before the orchestration cluster that *calls* them.
+
+**Constants (now private to the module -- used only inside the moved functions):**
+- `GRADE_SMOOTH = 5.0` -- the centred moving-avg window the profile's per-segment grade line runs `_moving_avg` over
+- `HEAT_GRID = 300` -- cells across the bbox for the `--heat` 2-D "time on route" histogram
+- `HEAT_CAP_PCT = 98.0` -- the heat colour cap (% of non-empty cells)
+- `HEAT_ALPHA = 0.55` -- the heat overlay opacity
+
+**Functions to extract**:
+- `_draw_profile` -- the elevation + grade ride-profile silhouette (grade on a twin axis)
+- `_has_metric_pts` -- whether a ride carries a per-point telemetry array (gate for a mini-panel)
+- `_draw_profile_metric` -- one telemetry mini-panel of the `--profile` "ride card"
+- `_stack_grade_colorbars` -- one compact per-ride grade colourbar, stacked on the right of a combined map
+- `_nice_m` / `_fmt_len` -- the scale-bar "nice length" rounding and its `m`/`km` label
+- `_draw_scale_bar` -- the lower-right `0 .. N km/m` scale bar (white-cased)
+- `_dwell_times` -- per-point "time on route" for the heat weighting
+- `_fmt_heat_time` -- the heat colourbar tick (`N s` / `N m` / `Nh Mm`)
+- `_draw_heat` -- the 2-D `--heat` density overlay (a masked, percentile-capped `imshow`)
+
+**Implementation**:
+1. ✅ Fold the 10 drawing helpers + 4 constants into the existing `trackview/rendering.py`, byte-for-byte (added `math`, `matplotlib.pyplot`, `withStroke` to its imports); no back-edge, no `metrics` dependency (2026-09-30)
+2. ✅ Extend the monolith's `from trackview.rendering import (...)` with the 7 helpers the *remaining* code still calls (`_draw_profile`, `_has_metric_pts`, `_draw_profile_metric`, `_stack_grade_colorbars`, `_draw_scale_bar`, `_fmt_heat_time`, `_draw_heat`); the 3 internal helpers (`_nice_m`, `_fmt_len`, `_dwell_times`) and the 4 constants stay private to the module (2026-09-30)
+3. ✅ No test changes: none of the 10 functions or 4 constants is test-referenced, so the bridge needs no re-pointing (2026-09-30)
+4. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/rendering.py` now holds the *drawing* helpers alongside the 1.4a leaves. Unlike the 1.4a names, **7 of the 10** are still called by code that stays in the monolith (`render`/`main` assemble the profile card, the per-ride grade colourbars, the scale bar and the heat overlay), so they are re-imported; the other 3 (`_nice_m`, `_fmt_len`, `_dwell_times`) are used *only* inside the moved helpers and stay private, as do the 4 constants (`GRADE_SMOOTH`, `HEAT_GRID`, `HEAT_CAP_PCT`, `HEAT_ALPHA`) -- moving them in (rather than importing them) keeps `rendering.py` back-edge-free, the same discipline as `metrics.py`/`helpers.py`. No test changes were needed: none of the new names is test-referenced.
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.4a (rendering helpers) complete -- 101 tests green; on to Phase 1.4b (the render/write_* figure cluster)
+**Status**: Phase 1.4b-i (drawing helpers) complete -- 101 tests green; on to Phase 1.4b-ii (the render/write_* orchestration cluster)
