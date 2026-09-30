@@ -315,11 +315,22 @@ If the refactoring becomes too complex:
 14. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
 15. ✅ Extract the profile / heat / scale-bar *drawing helpers* into
      `trackview/rendering.py` (Phase 1.4b-i, completed 2026-09-30)
-16. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*
-    figure *orchestration* cluster — matplotlib-coupled, with a *back-edge* to the
-    monolith's helpers (`_load_basemap`, `decimate`, `_short_label`, `_title_name`,
-        `_load_stats`, ...); modularised after enough of those helpers have moved
-17. 🧳 Then Phase 1.5 (stats) and Phase 1.6 (I/O)
+16. ✅ Extract the stats / ride-log report cluster (`_stats_columns`, `write_stats`,
+    `write_csv`) into `trackview/stats.py` (Phase 1.5a, completed 2026-09-30)
+17. ✅ Re-import `write_stats` / `write_csv` into the monolith (both are still called by
+    `main`); keep `_stats_columns` private to `stats.py` -- no test references it
+    (completed 2026-09-30)
+18. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+19. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
+    figure *orchestration* cluster -- matplotlib-coupled.  Its only real monolith back-edge
+    is `_load_basemap` (the network / contextily basemap plus the config constants); the
+    earlier plan's `decimate` / `_load_stats` references are stale -- `decimate` already
+    lives in `trackview/geometry.py` (re-imported) and there is no `_load_stats`, so the
+    cluster waits for Phase 1.6 to move the basemap helper
+20. 🧳 Then Phase 1.5b (the climb / trend / calendar / summary report clusters --
+    `_ride_climbs` / `_all_climbs` / `write_climbs`, `_trend_panels` / `write_trend`,
+    `_calendar_days` / `_month_ticks` / `write_calendar`, `_summary_groups` /
+    `write_summary`) and Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the basemap helper)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -485,5 +496,52 @@ before the orchestration cluster that *calls* them.
 **Done (2026-09-30)**. `trackview/rendering.py` now holds the *drawing* helpers alongside the 1.4a leaves. Unlike the 1.4a names, **7 of the 10** are still called by code that stays in the monolith (`render`/`main` assemble the profile card, the per-ride grade colourbars, the scale bar and the heat overlay), so they are re-imported; the other 3 (`_nice_m`, `_fmt_len`, `_dwell_times`) are used *only* inside the moved helpers and stay private, as do the 4 constants (`GRADE_SMOOTH`, `HEAT_GRID`, `HEAT_CAP_PCT`, `HEAT_ALPHA`) -- moving them in (rather than importing them) keeps `rendering.py` back-edge-free, the same discipline as `metrics.py`/`helpers.py`. No test changes were needed: none of the new names is test-referenced.
 ---
 
+### Revised Phase 1.5a: Stats / Ride-Log Report Module (done)
+
+The first clean leaf after the rendering helpers: the *table* report the CLI
+emits -- the shared ride-log column definition and the two writers that print it
+(`.txt` and `.csv`).  It is pure over the already-parsed ride dicts (no
+matplotlib), and its only external names are the metadata / metric helpers already
+moved to `trackview/helpers` and `trackview/metrics`, so it has **no back-edge to
+the monolith** -- the same leaf-first criterion that let `metrics.py` and
+`rendering.py` move first.
+
+**Functions to extract**:
+- `_stats_columns(show_ext)` -- the shared ride-log column definition (one
+  `(header, numeric?, per-ride formatter, per-device-group summary)` 4-tuple per
+  column; `show_ext` toggles the extended power / HR / cadence columns)
+- `write_stats(tracks, out_path, show_ext)` -- the per-device `.txt` ride-log table
+- `write_csv(tracks, out_path, show_ext, delimiter=";")` -- the same columns as a `.csv`
+
+**Re-export / privacy**:
+- `write_stats` and `write_csv` are still called by `main`, so the monolith
+  re-imports them; `_stats_columns` is used *only* inside the two writers, so it
+  stays private to the module (no test references it)
+- the module imports its external names from `trackview.helpers`
+  (`_title_name`, `_device_label`, `_device_groups`) and `trackview.metrics`
+  (`_fmt_dur_or_dash`, `_fmt_num`, `_track_calories`, `_calories_burned`,
+  `_metric_avg`, `_metric_avg_track`, `_max_grade`, `_max_grade_group`), plus
+  the stdlib `csv` -- no back-edge to the monolith
+
+**Implementation**:
+1. ✅ Extract `_stats_columns` / `write_stats` / `write_csv` into `trackview/stats.py`
+   byte-for-byte (124-line block, verified identical to the old monolith), with a
+   module docstring and the `helpers` / `metrics` / `csv` imports (2026-09-30)
+2. ✅ Replace the block in the monolith with a single
+   `from trackview.stats import (write_stats, write_csv)`; `_stats_columns` is not
+   re-imported -- it is private to `stats.py` (2026-09-30)
+3. ✅ No test changes: none of the three names is test-referenced, so the bridge
+   needs no re-pointing (2026-09-30)
+4. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/stats.py` now holds the ride-log report cluster,
+copied byte-for-byte out of the monolith so behaviour is unchanged.  Both writers are
+still called by `main` (the `.txt` table at line ~1716 and the optional `.csv` ride-log
+at ~1722), so the two are re-imported; the shared `_stats_columns` column definition is
+used only inside them and stays private -- the same discipline as the 1.4b-i internal
+drawing helpers.  No test changes were needed: none of the three names is test-referenced,
+and `write_stats` / `write_csv` resolve through the re-export bridge for `main`.
+---
+
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.4b-i (drawing helpers) complete -- 101 tests green; on to Phase 1.4b-ii (the render/write_* orchestration cluster)
+**Status**: Phase 1.5a (stats / ride-log report module) complete -- 101 tests green; next up Phase 1.4b-ii (the render/write_* orchestration cluster, blocked on the `_load_basemap` basemap helper) and Phase 1.5b (climb / trend / calendar / summary clusters)

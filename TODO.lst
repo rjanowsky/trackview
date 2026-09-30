@@ -559,3 +559,27 @@ Refactoring
      -- matplotlib-coupled, a back-edge to _load_basemap/decimate/_short_label/
      _title_name/_load_stats, so it waits until those helpers move -- then stats
      (1.5) and I/O (1.6).
+
+     DONE (2026-09-30, Phase 1.5a): the stats / ride-log report cluster -- the
+     shared column definition and its two writers -- extracted into a new
+    trackview/stats.py, byte-for-byte (the 124-line block verified identical to the
+    old monolith), the first clean leaf after the rendering helpers.  The three are
+    _stats_columns (the shared ride-log column definition, one (header, numeric?,
+    per-ride formatter, per-device-group summary) 4-tuple per column; show_ext toggles
+    the extended power/HR/cadence columns), write_stats (the per-device .txt ride-log
+    table) and write_csv (the same columns as a .csv).  The cluster is pure over the
+    parsed ride dicts -- no matplotlib -- and its only external names are the metadata
+    / metric helpers already moved to trackview/helpers (_title_name, _device_label,
+    _device_groups) and trackview/metrics (_fmt_dur_or_dash, _fmt_num, _track_calories,
+    _calories_burned, _metric_avg, _metric_avg_track, _max_grade, _max_grade_group)
+    plus stdlib csv, so the module has no back-edge to the monolith.  Both writers are
+    still called by main (the .txt table and the optional .csv ride-log), so the
+    monolith re-imports them; the shared _stats_columns is used only inside the two
+    writers and stays private to stats.py -- the same discipline as the 1.4b-i
+    internal drawing helpers.  No test changes: none of the three names is
+    test-referenced.  101 pass, 1 skip.  Remaining: the render/write_* figure
+    *orchestration* cluster (1.4b-ii) -- now known to depend on the monolith only via
+    _load_basemap (the earlier plan's decimate/_load_stats references are stale:
+    decimate already lives in geometry.py, and there is no _load_stats), so it waits
+    for Phase 1.6 to move the basemap helper -- then 1.5b (the climb/trend/calendar/
+    summary report clusters) and 1.6 (I/O: HTML/Leaflet, gallery, basemap).
