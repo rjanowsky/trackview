@@ -301,8 +301,16 @@ If the refactoring becomes too complex:
 6. ✅ Extract helper functions from trackview.py (completed 2026-09-30)
 7. ✅ Update imports in trackview.py (completed 2026-09-30)
 8. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
-9. ⏳ Proceed to next module (Phase 1.3 — the original "Parsing" functions don't exist
-   as named; next is the largest remaining cluster, the rendering helpers)
+9. ✅ Extract the metric / telemetry / calorie cluster into `trackview/metrics.py`
+   (Phase 1.3, completed 2026-09-30)
+10. ✅ Re-import the 11 functions; keep the 6 constants private; re-point the 4
+   `GRADE_CAP_*` test references to `trackview.metrics` (completed 2026-09-30)
+11. ✅ Run test suite — 101 passed, 1 deselected (completed 2026-09-30)
+12. ⏳ Next module (Phase 1.4): the *rendering* helpers — `_metric_norm`,
+   `_moving_avg`, the `CMAPEED` / `GRADE_CBAR_MAX` / `SUPPRESSED_RENDER_DEVICES`
+   constants and the `render` / `write_*` figure cluster (the matplotlib-coupled
+   half of the original "Rendering" phase)
+13. ⏳ Then Phase 1.5 (stats) and Phase 1.6 (I/O)
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -334,7 +342,7 @@ Let me create a more realistic module structure based on what actually exists in
 2. ✅ Copy all helper functions from trackview.py (2026-09-30)
 3. ✅ Update imports in trackview.py (2026-09-30)
 4. ✅ Run test suite — 101 passed, 1 deselected, no regressions (2026-09-30)
-5. ⏳ Proceed to next module
+5. ✅ Proceed to next module — Phase 1.3 (metrics, completed 2026-09-30)
 
 **Done (2026-09-30)**.  `trackview/helpers.py` now holds the pure metadata/filter/
 selection helpers, copied byte-for-byte out of the monolith so behaviour is
@@ -354,6 +362,47 @@ _UNSAFE_CHARS`) stay private to `helpers.py`.  `SUPPRESSED_RENDER_DEVICES`
 (a rendering concern) and `_moving_avg` (a rendering helper, Phase 1.4) were left
 in the monolith.
 
+### Revised Phase 1.3: Metrics Module
+
+**File**: `trackview/metrics.py`
+
+The metric / telemetry / calorie / formatting helpers the ride-log, the stats
+report and the colour scales share -- pure over the already-parsed ride dicts
+(numpy for the percentile capping), no I/O, no rendering.
+
+**Constants (private to the module, used only inside the moved functions)**:
+`GRADE_CAP_PCT`, `GRADE_CAP_FLOOR`, `GRADE_CAP_CEIL`, `JOULES_PER_KCAL`,
+`METABOLIC_EFFICIENCY`, `_TELE_TAGS`
+
+**Functions to extract**:
+- `_point_telemetry` - a trackpoint's optional Wahoo telemetry -> `{key: float}`
+- `_metric_avg`, `_metric_avg_track` - point-weighted per-track / per-ride averages
+- `_max_grade`, `_max_grade_group` - steepest grade of a ride / a group of rides
+- `_grade_cap` - the robust (percentile, floor-capped) `|grade|` colour range
+- `_track_calories`, `_calories_burned` - the power x time calorie estimate
+- `_fmt_duration`, `_fmt_dur_or_dash`, `_fmt_num` - the shared "value or a dash" formatters
+
+**Implementation**:
+1. ✅ Create new file `trackview/metrics.py` (2026-09-30)
+2. ✅ Copy the cluster byte-for-byte out of the monolith (numpy-coupled, no matplotlib)
+3. ✅ Re-import the 11 functions the remaining code still calls into the monolith;
+   the 6 constants stay private to `metrics.py` (2026-09-30)
+4. ✅ Re-point the 4 `TestGradeCap` cases that read the grade-cap boundary constants
+   through the `tv.` facade to import them from `trackview.metrics` (2026-09-30)
+5. ✅ Run test suite — 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**.  `trackview/metrics.py` now holds the metric / telemetry /
+calorie / formatting helpers, copied byte-for-byte out of the monolith so behaviour
+is unchanged.  The one *rendering-coupled* neighbour, `_metric_norm` (it returns a
+matplotlib `Normalize`), was deliberately left in the monolith for the rendering
+phase -- as were the rendering constants `CMAPEED` / `GRADE_CBAR_MAX`, `DETAIL_MAX`
+and `SUPPRESSED_RENDER_DEVICES`.  The 6 constants are used *only* inside the moved
+functions, so they stay private to `metrics.py`; the 11 functions the remaining code
+still calls are re-imported into the monolith.  Four `TestGradeCap` cases that read
+the grade-cap boundary constants through the `tv.` facade now import them from
+`trackview.metrics` (their new home); `tv._grade_cap` itself stays on the facade, as
+do the other re-imported helpers.
+
 **Backward-compatibility bridge.**  The top-level `trackview/` package shadows the
 same-named `trackview.py` module (`import trackview` picks the package), so
 `trackview/__init__.py` loads the monolith from its file as the private submodule
@@ -368,4 +417,4 @@ moved and the package stands on its own.
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.2 (helpers) complete — 101 tests green; on to Phase 1.3
+**Status**: Phase 1.3 (metrics) complete — 101 tests green; on to Phase 1.4 (rendering)

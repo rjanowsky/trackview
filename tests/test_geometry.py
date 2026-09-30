@@ -5,13 +5,14 @@ import numpy as np
 import pytest
 
 import trackview as tv
+from trackview.metrics import GRADE_CAP_CEIL, GRADE_CAP_FLOOR, GRADE_CAP_PCT
 
 
 class TestGradeCap:
     def test_auto_cap_is_the_high_percentile(self):
         # 0..10 % -> p98 lands mid-range, inside [FLOOR, CEIL] so it is returned as-is
         grades = list(range(0, 11))
-        expected = float(np.percentile(np.abs(np.array(grades, float)), tv.GRADE_CAP_PCT))
+        expected = float(np.percentile(np.abs(np.array(grades, float)), GRADE_CAP_PCT))
         assert tv._grade_cap(grades, None) == pytest.approx(expected)
 
     def test_pinned_cap_wins_over_the_auto(self):
@@ -28,14 +29,14 @@ class TestGradeCap:
 
     def test_floor_clamps_an_all_flat_ride(self):
         # an all-flat ride's p98 is ~0, so the floor keeps it coloured
-        assert tv._grade_cap([0.1, -0.2, 0.0, 0.05], None) == tv.GRADE_CAP_FLOOR
+        assert tv._grade_cap([0.1, -0.2, 0.0, 0.05], None) == GRADE_CAP_FLOOR
 
     def test_ceil_clamps_a_steeper_range(self):
         # a 50 % grade would blow past the ramp, so it is clamped to the ceiling
-        assert tv._grade_cap([50.0, 60.0, 40.0], None) == tv.GRADE_CAP_CEIL
+        assert tv._grade_cap([50.0, 60.0, 40.0], None) == GRADE_CAP_CEIL
 
     def test_empty_grades_returns_the_floor(self):
-        assert tv._grade_cap([], None) == tv.GRADE_CAP_FLOOR
+        assert tv._grade_cap([], None) == GRADE_CAP_FLOOR
 
 
 class TestMovingAvg:

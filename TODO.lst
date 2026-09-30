@@ -505,7 +505,14 @@ Refactoring
      (names used only inside a moved block stay private to that submodule); the
      bridge is deleted once every module has moved.  DONE (2026-09-30):
      geometry (Phase 1.1, trackview/geometry.py -- latlon_to_merc, decimate,
-     _distance_and_gain, _grade_and_cumkm, PI_R) and the metadata/filter/selection
+     _distance_and_gain, _grade_and_cumkm, PI_R), the metadata/filter/selection
      helpers (Phase 1.2, trackview/helpers.py -- the Wahoo-stem date + device/sport
      <desc> readers, the --since/--until / --device/--sport / --top filters and the
-     string helpers).  Remaining: the rendering, stats and I/O clusters (1.3+).
+     string helpers) and the metric/telemetry/calorie/formatting helpers (Phase 1.3,
+     trackview/metrics.py -- _point_telemetry, the per-track/ride metric averages and
+     steepest grades, the robust grade-colour cap, the power x time calorie estimate and
+     the shared "value or a dash" formatters; the 6 boundary constants stay private, the
+     11 functions are re-imported, and the 4 TestGradeCap cases now read GRADE_CAP_* from
+     trackview.metrics).  Remaining: the rendering cluster (_metric_norm, _moving_avg,
+     the colour constants and the render/write_* figures -- Phase 1.4), then stats and
+     I/O (1.5-1.6).
