@@ -49,6 +49,12 @@ HEAT_GRID         = 300            # cells across the bbox (a HEAT_GRID x HEAT_G
 HEAT_CAP_PCT      = 98.0           # colour cap: % of non-empty cells inside the (capped) range
 HEAT_ALPHA        = 0.55           # overlay opacity (the route lines stay readable on top)
 
+# The figure save-resolution (a fixed 150 DPI for every rendered figure -- the
+# map, the ride-profile, and the trend / calendar charts).  Shared by the not-yet-
+# migrated render / write_html / write_gallery clusters too, so it lives here and the
+# monolith re-imports it.
+DPI          = 150
+
 
 # --- functions ---------------------------------------------------------------
 def _metric_norm(vals, lo_pct: float = 2.0, hi_pct: float = 98.0):

@@ -83,7 +83,7 @@ from trackview.metrics import (_point_telemetry, _metric_avg, _metric_avg_track,
                                _fmt_duration, _fmt_dur_or_dash, _fmt_num)
 from trackview.rendering import (_metric_norm, _moving_avg,
                                  CMAPEED, GRADE_CBAR_MAX,
-                                 SUPPRESSED_RENDER_DEVICES,
+                                 SUPPRESSED_RENDER_DEVICES, DPI,
                                   _draw_profile, _has_metric_pts,
                                   _draw_profile_metric,
                                   _stack_grade_colorbars, _draw_scale_bar,
@@ -104,7 +104,6 @@ TILE_CACHE_DIR = Path(__file__).resolve().parent / "tiles"
 DECIMATE_M  = 5.0       # drop track points closer than this (m): keeps the shape,
                         # cuts ~68k points to a few thousand for crisp, fast drawing
 PAD_FRAC    = 0.10      # blank margin around the tracks (fraction of bbox)
-DPI         = 150
 FIGURE_IN   = (11, 11)  # square, so the map image is never letter-boxed
 # Colour ramps.  Elevation uses viridis (perceptually uniform: a dark low
 # end and a bright high end both read on a pale basemap, unlike the old
