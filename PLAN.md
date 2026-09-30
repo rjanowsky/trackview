@@ -336,16 +336,23 @@ If the refactoring becomes too complex:
 24. ✅ Re-import `write_summary` into the monolith (the one `main` calls); keep `_summary_groups`
    private; no test references the cluster, so no bridge re-pointing (2026-09-30)
 25. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-26. 🧳 Next sub-step (Phase 1.4b-ii): the big `render` / `render_*` / `write_*`
-   figure *orchestration* cluster -- matplotlib-coupled.  Its only real monolith back-edge
-   is `_load_basemap` (the network / contextily basemap plus the config constants); the
-   earlier plan's `decimate` / `_load_stats` references are stale -- `decimate` already
-   lives in `trackview/geometry.py` (re-imported) and there is no `_load_stats`, so the
-   cluster waits for Phase 1.6 to move the basemap helper
-27. 🧳 Then the remaining report clusters (trend / calendar --
-    `_trend_panels` / `write_trend`, `_calendar_days` / `_month_ticks` / `write_calendar`; the
-   summary cluster moved in 1.5c) and Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the
-   basemap helper)
+26. ✅ Relocate the shared `DPI` figure-resolution constant into `trackview/rendering.py` -- its
+   figure-constant home alongside `CMAPEED` / `HEAT_*` -- and re-import it into the monolith, so
+   both the staying render cluster and the moving trend / calendar clusters read it there
+    (Phase 1.5d-i, completed 2026-09-30)
+27. ✅ Extract the calendar activity-grid cluster (`_calendar_days`, `_month_ticks`, `write_calendar`,
+     the `_CALENDAR_METRICS` table) into `trackview/calendar.py` (Phase 1.5d-ii, completed 2026-09-30)
+28. ✅ Re-import `write_calendar` *and* `_CALENDAR_METRICS` (the latter feeds `main`'s --calendar-by
+   choices); keep `_calendar_days` / `_month_ticks` private (2026-09-30)
+29. ✅ Extract the training-trend cluster (`_trend_panels`, `_TREND_COLORS`, `write_trend`) into
+     `trackview/trend.py` (Phase 1.5d-iii, completed 2026-09-30)
+30. ✅ Re-import `write_trend` into the monolith (the one `main` calls); keep `_trend_panels` /
+   `_TREND_COLORS` private; no test references the clusters, so no bridge re-pointing (2026-09-30)
+31. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+32. 🧳 Phase 1.6 (I/O): the big `render` / `render_*` / `write_*` figure *orchestration* cluster
+   (matplotlib-coupled) plus the HTML / Leaflet export and the gallery -- the only real monolith
+   back-edge is `_load_basemap` (the network / contextily basemap plus the config constants), so
+   move that helper first, then the cluster
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -648,9 +655,73 @@ called by `main`, so it is re-imported; the internal `_summary_groups` stays pri
 back-edge-free -- the same discipline as 1.5a / 1.5b / 1.4b-i.  No test changes were needed.
 Remaining under Phase 1.5: the trend / calendar report clusters; then Phase 1.6 (I/O: HTML /
 Leaflet, the gallery, and the `_load_basemap` helper that blocks the 1.4b-ii figure cluster).
+### Revised Phase 1.5d: Trend / Calendar Figure Clusters (done)
+
+The last two report clusters -- the --trend chart and the --calendar activity grid -- on the
+same leaf-first principle as 1.5a / 1.5b / 1.5c.  Both are *standalone* figure writers: they
+plot the parsed ride dicts with plain matplotlib (subplots / a 7xweeks grid), with **no basemap
+and no network**, so they write even under --no-map -- which is why they are movable now, ahead
+of the render / write_html / write_gallery cluster that *does* reach back to `_load_basemap`
+(Phase 1.6).  Each has no back-edge to the monolith; their only external names live in the
+already-extracted modules.
+
+**The shared constant (relocated to `trackview/rendering.py`, re-imported by the monolith):**
+- `DPI` -- the fixed 150-DPI figure save-resolution, shared by *every* rendered figure: the not-
+  yet-migrated render / write_html / write_gallery cluster *and* these two new clusters.  Because
+  it is read by both a staying cluster and the moving ones it cannot go private to either, so it
+  sits with the other figure constants (CMAPEED / HEAT_*) in `rendering.py` and the monolith
+  re-imports it (Phase 1.5d-i)
+
+**Functions / names to extract:**
+- `_calendar_days` -- the rides bucketed by calendar year then weekday (the 7 x weeks grid data;
+  private: only write_calendar calls it)
+- `_month_ticks` -- the month-boundary tick positions + labels for the calendar x-axis (private)
+- `write_calendar` -- the GitHub-style contribution grid, one 7 x weeks block per calendar year
+  each day coloured by that day's total of the chosen metric; the one name `main` calls
+- `_CALENDAR_METRICS` -- the {metric-key: (ylabel, cmap)} table behind --calendar-by; `main`'s
+  argparse reads `list(_CALENDAR_METRICS)` for the choices, so it stays in the module *and* is
+  re-imported by the monolith (the only re-import besides write_calendar)
+- `_trend_panels` -- the --trend chart's per-metric panels over ride date (distance / gain /
+  duration, plus a calories panel when any ride carries a power average; private)
+- `_TREND_COLORS` -- the panel colour ramp (private, module-local)
+- `write_trend` -- the multi-panel training-trend figure; the one name `main` calls
+
+**Implementation:**
+1. ✅ Relocate the shared `DPI` constant into `trackview/rendering.py` (its figure-constant home,
+   with CMAPEED / HEAT_*) and re-import it into the monolith, so both the staying render cluster
+   and the moving trend / calendar clusters read it there -- the byte-identical literal (Phase
+     1.5d-i, 2026-09-30)
+2. ✅ Extract `_calendar_days` / `_month_ticks` / `write_calendar` (+ the `_CALENDAR_METRICS`
+   table) into `trackview/calendar.py` byte-for-byte -- a 131-line cluster verified identical to
+   the old monolith -- adding the `helpers` (_ride_date, _MONTH_ABBR) and `rendering` (DPI)
+   imports plus `numpy` / `matplotlib.pyplot` / `matplotlib.colors.Normalize`; re-import
+   `write_calendar` *and* `_CALENDAR_METRICS` (the latter feeds `main`'s --calendar-by choices)
+     (Phase 1.5d-ii, 2026-09-30)
+3. ✅ Extract `_trend_panels` / `_TREND_COLORS` / `write_trend` into `trackview/trend.py` byte-
+   for-byte -- a 71-line cluster verified identical -- adding the `helpers` (_ride_date),
+   `metrics` (_track_calories) and `rendering` (DPI) imports plus `matplotlib.dates`; re-import
+   `write_trend` (the one name `main` calls; `_trend_panels` / `_TREND_COLORS` stay private)
+     (Phase 1.5d-iii, 2026-09-30)
+4. ✅ No test changes: none of the clusters' names is test-referenced, so the bridge needs no
+   re-pointing -- the re-imported `write_trend` / `write_calendar` / `_CALENDAR_METRICS` / `DPI`
+   resolve through the bridge as before (2026-09-30)
+5. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/calendar.py` and `trackview/trend.py` now hold the calendar
+and trend figure clusters, copied byte-for-byte out of the monolith so behaviour is unchanged.
+Only `write_calendar` and `write_trend` are still called by `main`, so they are re-imported;
+`_CALENDAR_METRICS` is re-imported too (it feeds the --calendar-by argparse choices), while the
+internal `_calendar_days` / `_month_ticks` / `_trend_panels` / `_TREND_COLORS` stay private.
+Because `DPI` is shared with the not-yet-migrated render / write_html / write_gallery cluster it
+was first relocated to `trackview/rendering` (the figure-constant home) and re-imported by the
+monolith, keeping both new modules back-edge-free -- the same discipline as 1.5a / 1.5b / 1.5c /
+1.4b-i.  No test changes were needed.  This closes out the remaining report clusters of Phase
+1.5; next up Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the `_load_basemap` helper that
+blocks the 1.4b-ii render / write_* figure cluster).
+
 ---
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.5c (summary report module) complete -- 101 tests green; next up the remaining report clusters (trend / calendar), then Phase 1.6 (I/O) and Phase 1.4b-ii (the render/write_* cluster, blocked on `_load_basemap`)
+**Status**: Phase 1.5d (trend / calendar figure clusters) complete -- 101 tests green; next up Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the `_load_basemap` helper) and Phase 1.4b-ii (the render / write_* cluster, blocked on `_load_basemap`)
