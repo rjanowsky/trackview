@@ -6,6 +6,7 @@ plain komoot-style track -- carries no telemetry values.  The climb/descent/flat
 profile is readable straight off the raw points via the pure geometry helpers.
 """
 from conftest import build_ride, gpx_points, write_ride
+from trackview.geometry import _distance_and_gain, _grade_and_cumkm
 import trackview as tv
 
 
@@ -57,14 +58,14 @@ def test_profile_reads_as_climb_then_descent():
     elev = [e for (_la, _lo, e) in raw]
      # flat -> climb -> peak -> descent -> flat: a rise and then a fall
     assert max(elev) - min(elev) == 200.0
-    dist_km, gain_m = tv._distance_and_gain(raw)
+    dist_km, gain_m = _distance_and_gain(raw)
     assert gain_m > 0.0
     assert dist_km > 0.0
 
 
 def test_grade_and_cumkm_shape():
     raw = gpx_points(build_ride("2026_09_07_08_12_47", telemetry=False))
-    grade, cum_km = tv._grade_and_cumkm(raw)
+    grade, cum_km = _grade_and_cumkm(raw)
      # one grade per segment (n-1), one cumulative distance per point (n)
     assert len(grade) == len(raw) - 1
     assert len(cum_km) == len(raw)
