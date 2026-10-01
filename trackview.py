@@ -93,6 +93,7 @@ from trackview.climbs import (write_climbs)
 from trackview.summary import (write_summary)
 from trackview.calendar import (write_calendar, _CALENDAR_METRICS)
 from trackview.trend import (write_trend)
+from trackview.io import (USER_AGENT, SOURCES, ATTRIBUTION)
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -144,25 +145,6 @@ STRONG_COLORS = [
       "#ffff33",   # yellow
       "#999999",   # grey
 ]
-USER_AGENT    = "trackview/1.0 (static GPX->map renderer)"
- # A contact/URL can be appended here (e.g. " ...; contact: you@...") so a
- # a tile provider can reach out about rate-limiting; left blank on purpose
- # rather than ship a dead placeholder address nobody will read.
-
-# Base-map tile providers, tried in order until one loads. OpenStreetMap is the
-# default; the others are fallbacks (OpenTopoMap's contours suit MTB/cycling).
-SOURCES = {
-    "topo":   "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    "sat":    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "terrain":"https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}",
-    "osm":    "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
-}
-ATTRIBUTION = {
-    "topo":   "© OpenTopoMap (CC-BY-SA)",
-    "sat":    "© Esri, Maxar, Earthstar Geographics",
-    "terrain":"© Esri, USGS, NOAA",
-    "osm":    "© OpenStreetMap contributors",
-}
 
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
 EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for detail
