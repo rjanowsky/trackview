@@ -5,7 +5,8 @@ import numpy as np
 import pytest
 
 import trackview as tv
-from trackview.metrics import GRADE_CAP_CEIL, GRADE_CAP_FLOOR, GRADE_CAP_PCT
+from trackview.metrics import GRADE_CAP_CEIL, GRADE_CAP_FLOOR, GRADE_CAP_PCT, _grade_cap
+from trackview.rendering import _moving_avg
 
 
 class TestGradeCap:
@@ -13,60 +14,60 @@ class TestGradeCap:
         # 0..10 % -> p98 lands mid-range, inside [FLOOR, CEIL] so it is returned as-is
         grades = list(range(0, 11))
         expected = float(np.percentile(np.abs(np.array(grades, float)), GRADE_CAP_PCT))
-        assert tv._grade_cap(grades, None) == pytest.approx(expected)
+        assert _grade_cap(grades, None) == pytest.approx(expected)
 
     def test_pinned_cap_wins_over_the_auto(self):
-        assert tv._grade_cap([0.0, 1.0, 2.0], 8.0) == 8.0
+        assert _grade_cap([0.0, 1.0, 2.0], 8.0) == 8.0
 
     def test_pinned_cap_beats_a_noise_spike(self):
         # a lone 40 % blip would clamp the auto cap to CEIL, but a pin ignores it
-        assert tv._grade_cap(list(range(0, 11)) + [40.0], 8.0) == 8.0
+        assert _grade_cap(list(range(0, 11)) + [40.0], 8.0) == 8.0
 
     def test_pinned_zero_falls_back_to_auto(self):
         # a non-positive pin is "unset", so the auto percentile takes over
         flat = [0.1, -0.2, 0.0]
-        assert tv._grade_cap(flat, 0.0) == tv._grade_cap(flat, None)
+        assert _grade_cap(flat, 0.0) == _grade_cap(flat, None)
 
     def test_floor_clamps_an_all_flat_ride(self):
         # an all-flat ride's p98 is ~0, so the floor keeps it coloured
-        assert tv._grade_cap([0.1, -0.2, 0.0, 0.05], None) == GRADE_CAP_FLOOR
+        assert _grade_cap([0.1, -0.2, 0.0, 0.05], None) == GRADE_CAP_FLOOR
 
     def test_ceil_clamps_a_steeper_range(self):
         # a 50 % grade would blow past the ramp, so it is clamped to the ceiling
-        assert tv._grade_cap([50.0, 60.0, 40.0], None) == GRADE_CAP_CEIL
+        assert _grade_cap([50.0, 60.0, 40.0], None) == GRADE_CAP_CEIL
 
     def test_empty_grades_returns_the_floor(self):
-        assert tv._grade_cap([], None) == GRADE_CAP_FLOOR
+        assert _grade_cap([], None) == GRADE_CAP_FLOOR
 
 
 class TestMovingAvg:
     def test_window_3_over_a_linear_series(self):
         # half=1: the interior is a 3-window mean, the ends drop to a 2-window
-        out = tv._moving_avg(np.array([1.0, 2, 3, 4, 5]), 3)
+        out = _moving_avg(np.array([1.0, 2, 3, 4, 5]), 3)
         assert out.tolist() == pytest.approx([1.5, 2.0, 3.0, 4.0, 4.5])
 
     def test_window_5_over_a_linear_series(self):
-        out = tv._moving_avg(np.array([1.0, 2, 3, 4, 5]), 5)
+        out = _moving_avg(np.array([1.0, 2, 3, 4, 5]), 5)
         assert out.tolist() == pytest.approx([2.0, 2.5, 3.0, 3.5, 4.0])
 
     def test_skips_nan(self):
         # a NaN in the middle shortens that window but never poisons the result
-        out = tv._moving_avg(np.array([1.0, np.nan, 3.0, 4.0]), 3)
+        out = _moving_avg(np.array([1.0, np.nan, 3.0, 4.0]), 3)
         assert out.tolist() == pytest.approx([1.0, 2.0, 3.5, 3.5])
 
     def test_all_nan_stays_nan(self):
-        out = tv._moving_avg(np.array([np.nan, np.nan, np.nan]), 3)
+        out = _moving_avg(np.array([np.nan, np.nan, np.nan]), 3)
         assert out.shape == (3,)
         assert np.isnan(out).all()
 
     def test_window_below_one_is_a_no_op(self):
         # w = max(1, int(window)): a sub-1 window means no averaging at all
-        out = tv._moving_avg(np.array([2.0, 4.0]), 0.5)
+        out = _moving_avg(np.array([2.0, 4.0]), 0.5)
         assert out.tolist() == pytest.approx([2.0, 4.0])
 
     def test_output_length_matches_input(self):
         arr = np.arange(17.0)
-        assert tv._moving_avg(arr, 5).shape == arr.shape
+        assert _moving_avg(arr, 5).shape == arr.shape
 
 
 def track(stem, dist_km, gain_m):
