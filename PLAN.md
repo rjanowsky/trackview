@@ -397,9 +397,18 @@ If the refactoring becomes too complex:
 45. ✅ Re-point `test_load_tracks`'s `tv._distance_and_gain` / `tv._grade_and_cumkm` to
        `trackview.geometry` -- the bridge no longer mirrors the pruned names (Phase 1.7, 2026-09-30)
 46. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-47. 🧳 Phase 1 -- the last leaves: the config constants (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` /
-       `TILE_CACHE_DIR` / `DECIMATE_M` / `PI_R`, Phase 3.1) and the `main` entry point, and finally delete the
-    re-export bridge once `trackview.py` is a thin CLI
+47. ✅ Extract the config constants into a new `trackview/config.py` -- a pure leaf (Phase 3.1, item 47):
+        a fresh top-of-tree module, since the monolith's `# ---- configuration ----` constants are the top of the
+    dependency order -- consumed by `main` but importing nothing internal -- so a new module, not an existing one
+48. ✅ Create `config.py` byte-value-equivalent: the paths resolve to the *same* repo root (`gpx` / `output` /
+        `stats` / `tiles`), with the one-level `__file__` shift (`.parent.parent`) documented; `DECIMATE_M` and
+    `PI_R` are byte-identical; the module imports only `__future__` + `pathlib` (acyclic, no back-edge)
+49. ✅ Re-import the five *live* constants (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` / `TILE_CACHE_DIR` /
+        `DECIMATE_M`) into the monolith and prune the `# ---- configuration ----` section; `PI_R` is the only dead
+    one -- the monolith no longer touches it -- so it moves to `config.py` but is *not* re-imported (no orphan)
+50. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+51. 🧳 Phase 1 -- the last two leaves: the `main` entry point (Phase 3.1, into `trackview/cli.py`), and then
+    delete the re-export bridge (`trackview/__init__.py`) once `trackview.py` is a thin CLI
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -934,8 +943,43 @@ module rather than in `io` (already transitively importing `rendering`).  Only `
 / metrics imports (and the `_device_type` / `_sport_type` helpers re-import).  With this the monolith is down
 to the config constants, the `main` entry point, and the re-export bridge -- the last three leaves of Phase 1.
 
+### Revised Phase 3.1: Configuration Module (done)
+
+The config constants were the next leaf: the monolith's `# ---- configuration ----` block (`GPX_DIR` /
+`OUTPUT_DIR` / `STATS_DIR` / `TILE_CACHE_DIR` / `DECIMATE_M` / `PI_R`) is the top of the dependency order --
+consumed by `main` but importing nothing internal -- so it lands in a new pure-leaf `trackview/config.py`
+(only `__future__` + `pathlib`).  The values are byte-value-identical, with the one deliberate exception that
+`__file__` sits one level deeper inside the package, so the paths use `.parent.parent` to resolve the *same*
+repo root (`gpx` / `output` / `stats` / `tiles`) the monolith did; `DECIMATE_M` and `PI_R` are byte-identical.
+
+**Names to extract into `trackview/config.py`:**
+- `GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` / `TILE_CACHE_DIR` -- the four path roots, resolved to the repo root
+    via `.parent.parent` (the monolith's `.parent`, one level shallower)
+- `DECIMATE_M` -- the 5.0 m decimation threshold, copied verbatim with its comment
+- `PI_R` -- `20037508.342789244` (`pi*R`, the Web-Mercator scale), moved verbatim; it is now a *dead* constant
+    -- the monolith no longer touches it -- so it is the documented home but is **not** re-imported
+
+**Implementation:**
+1. ✅ Copy the `# ---- configuration ----` block byte-value-equivalent into a new `trackview/config.py` -- the
+     four path roots with the one-level `__file__` shift (`.parent.parent`) and `DECIMATE_M` / `PI_R`
+     verbatim -- importing only `__future__` + `pathlib`, so it is a pure leaf with no back-edge (Phase 3.1,
+       2026-09-30)
+2. ✅ Re-import the five *live* constants (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` / `TILE_CACHE_DIR` /
+       `DECIMATE_M`) into the monolith and prune the `# ---- configuration ----` section; `PI_R` is the only
+     dead one, so it moves to `config.py` but is **not** re-imported (no orphan re-import) (Phase 3.1,
+       2026-09-30)
+3. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/config.py` now holds the configuration, copied value-for-value out of the
+monolith so behaviour is unchanged; the one deviation is the `__file__` depth (`.parent.parent` instead of
+`.parent`), which resolves the *same* repo-root paths.  The five constants `main` still touches are
+re-imported, so the bridge keeps mirroring them and `tv.OUTPUT_DIR` / `tv.STATS_DIR` (which
+`conftest.run_main` monkeypatches) keep working untouched; `PI_R` -- now dead -- moves over but is not
+re-imported, the move's only true orphan.  With this the monolith is down to just the `main` entry point and
+the re-export bridge -- the last two leaves of Phase 1.
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.7 (the `load_tracks` GPX reader, now in `trackview/load.py`) complete -- 101 tests green; the monolith is down to the config constants, the `main` entry point, and the re-export bridge.  Next up: extract the config constants (Phase 3.1) and the `main` entry point, then delete the re-export bridge once `trackview.py` is a thin CLI
+**Status**: Phase 3.1 (the configuration constants, now in `trackview/config.py`) complete -- 101 tests green; the monolith is down to just the `main` entry point and the re-export bridge.  Next up: extract the `main` entry point (into `trackview/cli.py`), then delete the re-export bridge once `trackview.py` is a thin CLI
 

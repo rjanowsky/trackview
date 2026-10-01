@@ -744,3 +744,17 @@ Refactoring
       nine tv.load_tracks refs need no change because main still re-imports the name).    101
       pass, 1 skip.  This leaves the monolith down to the config constants, the main entry
       point, and the re-export bridge -- the last three leaves of Phase 1.
+
+      DONE (2026-09-30, Phase 3.1): the configuration constants -- the monolith's `# ---- configuration ----`
+      block (GPX_DIR / OUTPUT_DIR / STATS_DIR / TILE_CACHE_DIR / DECIMATE_M / PI_R), the top of the
+      dependency order (consumed by main, importing nothing internal) -- extracted into a new pure-leaf
+      trackview/config.py (only `__future__` + pathlib, so it has no back-edge).  The values are
+      byte-value-identical with one deliberate exception: `__file__` sits one level deeper inside the
+      package, so the four path roots use `.parent.parent` to resolve the *same* repo-root (gpx / output /
+      stats / tiles) the monolith's shallower `.parent` gave; DECIMATE_M and PI_R are byte-identical.
+      The five constants main still touches are re-imported (`from trackview.config import (...)`), so the
+      bridge keeps mirroring them -- tv.OUTPUT_DIR / tv.STATS_DIR, which conftest.run_main monkeypatches,
+      keep working untouched.  PI_R is the only *dead* one (the monolith no longer touches it), so it moves
+      to config.py but is NOT re-imported -- the move's only true orphan.     101 pass, 1 skip.  This
+      leaves the monolith down to just the main entry point and the re-export bridge -- the last two
+      leaves of Phase 1.
