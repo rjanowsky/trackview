@@ -489,7 +489,7 @@ Auxiliary helpers
      diagnostics rather than the tool they are intentionally *not* in the `tests/` suite.
 
 Refactoring
-[32] [in progress] Refactor the trackview.py monolith into a trackview/ package.
+[32] [done] Refactor the trackview.py monolith into a trackview/ package.
      Split the single-file script into focused submodules (geometry, the
      metadata/filter helpers, then parsing / rendering / stats / I/O -- see
      PLAN.md), one module at a time, each a byte-for-byte move so behaviour is
@@ -780,3 +780,22 @@ Refactoring
       stays -- the final leaf of Phase 1 is to re-point those ~7 tv.<name> test refs at their submodules
       (trackview.load / trackview.mapfig / trackview.helpers), prune the now bridge-only monolith re-imports,
       and delete the bridge so trackview.py is a thin CLI.
+      DONE (2026-09-30, Phase 3.1 / bridge): the re-export bridge -- the last leaf of Phase 1 -- deleted, so
+      trackview.py is a thin CLI.  Three things moved, in order: (a) the ~7 tv.<name> test refs were re-pointed
+      at their submodules -- load_tracks -> trackview.load, render -> trackview.mapfig, main -> trackview.cli, and
+      the helpers (_list_rides / _parse_argdate / _ride_date / _filter_by_meta / _select_top, plus GPX_DIR /
+      OUTPUT_DIR / STATS_DIR that conftest.run_main monkeypatches) -> trackview.helpers -- across conftest + the 6
+      test files (test_dry_run / test_filters / test_geometry / test_load_tracks / test_parse_helpers /
+      test_render_smoke); (b) the now-bridge-only `from trackview.* import (...)` leaf re-imports were pruned out of
+      the monolith (no tv. consumer left), leaving a thin CLI -- its docstring, `from __future__ import
+      annotations`, the pre-existing-dead `import csv` / `import re` (left for a separate cleanup), a
+      `from trackview.cli import main`, and the `if __name__` / `main()` guard; and (c) the bridge
+      itself -- trackview/__init__.py (the importlib monolith mirror that loaded ../trackview.py as
+      trackview._main and re-mirrored its non-dunder namespace) -- was replaced by an *empty* init (a 0-byte file,
+      not a missing one: an empty init keeps trackview a regular package the submodules import directly, a deleted
+      init would make Python treat the dir as a non-package and break the submodule imports).  With no monolith
+      names re-exported, `import trackview` carries no leaf names (`hasattr(trackview, "load_tracks")` is now False).
+       101 pass, 1 skip; `import trackview` resolves, every submodule imports, and `python trackview.py --list` runs
+      end-to-end.  With the bridge gone there is no path left by which the monolith is pulled into the package, so
+      the monolith->package refactor ([32]) closes -- **Phase 1 complete.**
+
