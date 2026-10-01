@@ -23,15 +23,20 @@ the monolith.
 from __future__ import annotations
 
 import json
+import math
 import time
 import urllib.request
 from pathlib import Path
 
 import contextily as cx
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")                  # headless, no GUI needed (shared with the monolith)
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
 
-from trackview.helpers import _title_name
-from trackview.rendering import STRONG_COLORS
+from trackview.helpers import _title_name, _ride_date
+from trackview.rendering import STRONG_COLORS, PAD_FRAC, DPI
 
 USER_AGENT    = "trackview/1.0 (static GPX->map renderer)"
  # A contact/URL can be appended here (e.g. " ...; contact: you@...") so a
@@ -362,3 +367,130 @@ def write_html(tracks, out_path, style: str = "osm",
     how = ("inlined, offline single file" if mode == "inline"
               else "via CDN (needs internet to view)")
     print(f"  wrote {out_path}      ({out_path.stat().st_size // 1024} KB, leaflet {how})")
+
+
+# ---- Tile-detail choice + the gallery contact sheet (TODO [32]) ------------------
+# choose_detail picks the basemap zoom the fetch consumes (its companion in
+# _load_basemap); the gallery tiles the most-recent rides into one mosaic sheet
+# (the --split alternative, one image instead of N).
+EQUATOR   = 40075016.686            # 2*pi*R: equatorial circumference, used for detail
+DETAIL_MIN = 10                      # auto-chosen detail never drops below this level
+DETAIL_MAX = 16                      # auto-chosen detail never rises past this level
+
+
+def choose_detail(bbox, target_px: float = 1600.0, dmin: int = DETAIL_MIN, dmax: int = DETAIL_MAX) -> int:
+    """Pick a tile detail level so the bbox spans roughly target_px pixels."""
+    w_m = bbox[2] - bbox[0]
+    d = math.log2(EQUATOR * target_px / (256.0 * w_m))
+    return int(round(min(dmax, max(dmin, d))))
+
+
+# ---- Gallery mosaic (TODO [32]) -----------------------------------------------
+# write_gallery tiles the N most-recent rides into one contact sheet: a single-ride
+# basemap + white-haloed flat route + start/stop markers + a caption per cell.
+# Its back-edges are all in-module now (SOURCES/ATTRIBUTION/_load_basemap above, the
+# detail unit just added) plus rendering's DPI/PAD_FRAC/STRONG_COLORS and helpers'
+# _ride_date/_title_name, re-imported here -- so it carries no monolith back-edge.
+def _gallery_grid(n: int) -> tuple:
+    """Rows x cols that fit `n` cells with as few empty slots as possible -- a near-
+    square mosaic (a 3x3 for the 9 rides the bare --gallery draws, a 2x3 for 5, a
+     3x4 for 12, etc.).  The empty trailing slots of a ragged last row are just left
+     blank on the sheet."""
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    return rows, cols
+
+
+def _gallery_cell(ax, t, idx, style, detail):
+    """Draw one mosaic cell: a single-ride basemap + its white-haloed, flat-coloured
+    route with green/red start/stop markers and a name/distance/gain caption above it
+     -- the flat per-track look of a --split map, shrunk to a thumbnail.  The tile
+    detail (zoom) is auto per cell from the ride's own extent unless `detail` pins it,
+    so each ride zooms to itself rather than the whole set.  Returns the basemap
+    provider actually loaded, so the figure can attribute every source it used."""
+    merc = np.asarray(t["merc"], dtype=float)
+    w, s, e, n = (merc[:, 0].min(), merc[:, 1].min(),
+                  merc[:, 0].max(), merc[:, 1].max())
+    dx, dy = (e - w) * PAD_FRAC, (n - s) * PAD_FRAC
+    bbox = (w - dx, s - dy, e + dx, n + dy)
+    if detail is None:
+        detail = choose_detail(bbox)
+    ordered = [style] + [k for k in SOURCES if k != style]
+    loaded = _load_basemap(ax, bbox, ordered, detail)
+
+    seg = np.array([[merc[j], merc[j + 1]] for j in range(len(merc) - 1)])
+    halo = LineCollection(seg, colors="white", linewidths=3.0, alpha=0.9)
+    halo.set_zorder(4)
+    ax.add_collection(halo)
+    lc = LineCollection(seg, colors=[STRONG_COLORS[idx % len(STRONG_COLORS)]],
+                        linewidths=2.2, alpha=0.95)
+    lc.set_zorder(5)
+    ax.add_collection(lc)
+    x0, y0 = merc[0]
+    x1, y1 = merc[-1]
+    ax.scatter([x0], [y0], s=40, color="lime", edgecolors="k",
+               linewidths=0.5, zorder=7)
+    ax.scatter([x1], [y1], s=40, color="red", edgecolors="k",
+               linewidths=0.5, zorder=7)
+    ax.axis("off")
+    cap = (f"{_title_name(t['name'])}      "
+           f"{t['dist_km']:,.0f} km      ▲ {t['gain_m']:,.0f} m")
+    ax.set_title(cap, fontsize=9, pad=3)
+    return loaded
+
+
+def write_gallery(tracks, out_path, style="osm", n=9, detail=None):
+    """Tile the `n` most recent rides into one mosaic contact sheet -- a 'recent
+    rides' overview without opening N files, the mosaic alternative to --split (one
+    image instead of N).  Each cell is a single-ride basemap + route with a caption
+    (see _gallery_cell); the rides are the most recent (by filename date) of the
+    already --since/--until/--device/--sport/--top-filtered tracks, shown newest-first
+    so the top-left cell is the latest ride, and a ride with no date in its name ranks
+    last so it drops out of a 'most recent' view first.  A ride with no route (< 2
+    points, e.g. a suppressed trainer ride that slipped through) is skipped like the
+    map, and an empty set is a no-op -- a line on stdout, nothing written.  A map
+    output (a basemap per cell), so it fetches tiles and is skipped under --no-map."""
+    def _recency(t):
+        rd = _ride_date(t["path"])
+        return rd.toordinal() if rd is not None else -1
+    routed = [t for t in sorted(tracks, key=_recency, reverse=True)
+              if len(t.get("merc") or []) >= 2]
+    cells = routed if not n or n >= len(routed) else routed[:n]
+    if not cells:
+        print("      --gallery: no ride has a route to tile.")
+        return
+    rows, cols = _gallery_grid(len(cells))
+    cell = 3.3                       # inches per cell; a 3x3 -> ~10x11 in, the base size
+    fig = plt.figure(figsize=(cols * cell, rows * cell + 0.9), dpi=DPI)
+    gs = fig.add_gridspec(rows, cols, hspace=0.24, wspace=0.20,
+                          left=0.01, right=0.99, top=0.90, bottom=0.04)
+    loaded_keys = []
+    for k, t in enumerate(cells):
+        r, c = divmod(k, cols)
+        ax = fig.add_subplot(gs[r, c])
+        loaded_keys.append(_gallery_cell(ax, t, k, style, detail))
+
+    total_km = sum(t["dist_km"] for t in cells)
+    total_gain = sum(t["gain_m"] for t in cells)
+    if len(cells) > 1:
+        span = (f"{_title_name(cells[-1]['name'])} .. "
+                f"{_title_name(cells[0]['name'])}")
+        title = f"trackview - {len(cells)} most recent rides   ({span})"
+    else:
+        name = _title_name(cells[0]["name"]) or cells[0]["name"]
+        title = f"trackview - {name}   ({total_km:,.0f} km)"
+    fig.suptitle(title, fontsize=13, fontweight="bold", y=0.985)
+
+    # one attribution line, a distinct entry per basemap provider actually loaded
+    used = "    ·    ".join(
+        ATTRIBUTION.get(k, "© OpenStreetMap contributors")
+        for k in dict.fromkeys(loaded_keys))
+    fig.text(0.006, 0.005, used, fontsize=7, color="#555")
+    if detail is not None:
+        fig.text(0.994, 0.005, f"detail {detail}", fontsize=7,
+                 color="#555", ha="right")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
+    plt.close(fig)
+    print(f"  wrote {out_path}    ({out_path.stat().st_size // 1024} KB)")
