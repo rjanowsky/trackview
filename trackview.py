@@ -58,6 +58,8 @@ import contextily as cx
 import matplotlib
 matplotlib.use("Agg")                        # headless, no GUI needed
 
+from trackview.config import (GPX_DIR, OUTPUT_DIR, STATS_DIR,
+                              TILE_CACHE_DIR, DECIMATE_M)
 from trackview.helpers import (_title_name, _ride_date,
                                _device_label, _device_groups, _filter_by_meta,
                                _select_top, _list_rides, _parse_argdate,
@@ -72,21 +74,6 @@ from trackview.io import (USER_AGENT, SOURCES, write_html,
                                 DETAIL_MIN, DETAIL_MAX, write_gallery)
 from trackview.mapfig import (render, PROF_METRICS)
 from trackview.load import load_tracks
-
-# ------------------------------- configuration -------------------------------
-GPX_DIR     = Path(__file__).resolve().parent / "gpx"
-OUTPUT_DIR  = Path(__file__).resolve().parent / "output"
-STATS_DIR   = Path(__file__).resolve().parent / "stats"
-# Basemap tiles are cached to disk under here (contextily's on-disk tile cache,
-# keyed by z/x/y per provider), so re-renders and offline runs reuse the downloaded
-# tiles instead of refetching them; --no-cache disables it, tiles/ is git-ignored.
-TILE_CACHE_DIR = Path(__file__).resolve().parent / "tiles"
-
-DECIMATE_M  = 5.0       # drop track points closer than this (m): keeps the shape,
-                        # cuts ~68k points to a few thousand for crisp, fast drawing
-
-PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
-
 
 # --------------------------------- entry point --------------------------------
 def main() -> None:
