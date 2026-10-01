@@ -54,7 +54,6 @@ import json
 import math
 import os
 import re
-import time
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -93,7 +92,7 @@ from trackview.climbs import (write_climbs)
 from trackview.summary import (write_summary)
 from trackview.calendar import (write_calendar, _CALENDAR_METRICS)
 from trackview.trend import (write_trend)
-from trackview.io import (USER_AGENT, SOURCES, ATTRIBUTION)
+from trackview.io import (USER_AGENT, SOURCES, ATTRIBUTION, _load_basemap)
 
 # ------------------------------- configuration -------------------------------
 GPX_DIR     = Path(__file__).resolve().parent / "gpx"
@@ -778,53 +777,6 @@ def write_html(tracks, out_path, style: str = "osm",
     how = ("inlined, offline single file" if mode == "inline"
               else "via CDN (needs internet to view)")
     print(f"  wrote {out_path}      ({out_path.stat().st_size // 1024} KB, leaflet {how})")
-
-
-def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
-                  retries: int = 3, backoff_s: float = 2.0) -> str:
-    """Fall back through tile providers until one shows real tiles.
-    A transient fetch failure (a reset or closed connection, common when many
-    tiles are pulled at once) is retried a few times with growing backoff; a
-    blank fetch (near-zero pixel variance) or an empty response then moves on to
-    the next provider, each after a short, polite delay."""
-    for key in order:
-        ax.clear()
-        ax.set_xlim(bbox[0], bbox[2])
-        ax.set_ylim(bbox[1], bbox[3])
-        ax.set_aspect("equal")
-        loaded = False
-        for attempt in range(1, retries + 1):
-            try:
-                cx.add_basemap(ax, zoom=detail, source=SOURCES[key],    # contextily's kwarg is "zoom" (tile level)
-                               headers={"User-Agent": USER_AGENT},
-                               reset_extent=False)
-                loaded = True
-                break
-            except Exception as exc:                # pragma: no cover
-                if attempt < retries:
-                    delay = backoff_s * (2 ** (attempt - 1))
-                    print(f"  base-map '{key}' attempt {attempt}/{retries} failed "
-                          f"({type(exc).__name__}); retrying in {delay:.0f}s")
-                    time.sleep(delay)
-                else:
-                    print(f"  base-map '{key}' failed after {retries} attempts: "
-                          f"{type(exc).__name__}: {exc}")
-        if not loaded:
-            time.sleep(2)
-            continue                               # give up on this provider, try the next
-        if ax.images:
-            arr = np.asarray(ax.images[0].get_array()).astype(float)
-            var = float(arr.var())
-            if var < min_var:
-                print(f"  base-map '{key}' returned blank tiles, trying next")
-                time.sleep(2)
-                continue
-        else:
-            print(f"  base-map '{key}' added no image, trying next")
-            time.sleep(2)
-            continue
-        return key
-    raise RuntimeError("all base-map sources failed")
 
 
 def _gallery_grid(n: int) -> tuple:
