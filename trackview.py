@@ -86,7 +86,8 @@ from trackview.rendering import (_metric_norm, _moving_avg,
                                   _draw_profile, _has_metric_pts,
                                   _draw_profile_metric,
                                   _stack_grade_colorbars, _draw_scale_bar,
-                                  _fmt_heat_time, _draw_heat)
+                                  _fmt_heat_time, _draw_heat,
+                                 STRONG_COLORS, PAD_FRAC)
 from trackview.stats import (write_stats, write_csv)
 from trackview.climbs import (write_climbs)
 from trackview.summary import (write_summary)
@@ -105,7 +106,6 @@ TILE_CACHE_DIR = Path(__file__).resolve().parent / "tiles"
 
 DECIMATE_M  = 5.0       # drop track points closer than this (m): keeps the shape,
                         # cuts ~68k points to a few thousand for crisp, fast drawing
-PAD_FRAC    = 0.10      # blank margin around the tracks (fraction of bbox)
 FIGURE_IN   = (11, 11)  # square, so the map image is never letter-boxed
 # Colour ramps.  Elevation uses viridis (perceptually uniform: a dark low
 # end and a bright high end both read on a pale basemap, unlike the old
@@ -129,20 +129,6 @@ PROF_METRICS = [
          ("speed_pts",    "Speed (km/h)",   "#1f78b4"),
          ("hr_pts",       "HR (bpm)",       "#2a9d8f"),
          ("cadence_pts", "Cadence (rpm)",  "#8c564b"),
-]
-# Bold, saturated hues used per track when NOT shaded by elevation, so several
-# routes stay distinct against a busy basemap (paired with the white halo).
-STRONG_COLORS = [
-      "#e41a1c",   # red
-      "#377eb8",   # blue
-      "#4daf4a",   # green
-      "#ff7f0e",   # orange
-      "#984ea3",   # purple
-      "#17becf",   # cyan
-      "#a65628",   # brown
-      "#f781bf",   # pink
-      "#ffff33",   # yellow
-      "#999999",   # grey
 ]
 
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection

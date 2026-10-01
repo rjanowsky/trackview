@@ -56,6 +56,23 @@ HEAT_ALPHA        = 0.55           # overlay opacity (the route lines stay reada
 DPI          = 150
 
 
+# Bold, saturated hues used per track when NOT shaded by elevation, so several
+# routes stay distinct against a busy basemap (paired with the white halo).
+STRONG_COLORS = [
+      "#e41a1c",   # red
+      "#377eb8",   # blue
+      "#4daf4a",   # green
+      "#ff7f0e",   # orange
+      "#984ea3",   # purple
+      "#17becf",   # cyan
+      "#a65628",   # brown
+      "#f781bf",   # pink
+      "#ffff33",   # yellow
+      "#999999",   # grey
+]
+
+PAD_FRAC    = 0.10      # blank margin around the tracks (fraction of bbox)
+
 # --- functions ---------------------------------------------------------------
 def _metric_norm(vals, lo_pct: float = 2.0, hi_pct: float = 98.0):
     """A robust sequential colour norm for a telemetry metric (--color-by speed/power):
