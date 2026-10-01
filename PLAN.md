@@ -407,8 +407,13 @@ If the refactoring becomes too complex:
         `DECIMATE_M`) into the monolith and prune the `# ---- configuration ----` section; `PI_R` is the only dead
     one -- the monolith no longer touches it -- so it moves to `config.py` but is *not* re-imported (no orphan)
 50. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-51. 🧳 Phase 1 -- the last two leaves: the `main` entry point (Phase 3.1, into `trackview/cli.py`), and then
-    delete the re-export bridge (`trackview/__init__.py`) once `trackview.py` is a thin CLI
+51. ✅ Extract the `main` entry point (Phase 3.1, into `trackview/cli.py`) -- the last in-module user of the
+     leaf re-imports; it travels out, dragging the stdlib it consumed, and the monolith keeps the re-imports
+    purely to feed the bridge (see the "Revised Phase 3.1 (cont.)" section, below) (completed 2026-09-30)
+52. 🧳 Delete the re-export bridge (`trackview/__init__.py`) once `trackview.py` is a thin CLI -- the final leaf
+    of Phase 1: re-point the ~7 `tv.<name>` test refs to their submodules (`load_tracks` -> `trackview.load`,
+      `render` -> `trackview.mapfig`, `_list_rides` / `_parse_argdate` / `_ride_date` / `_filter_by_meta` /
+      `_select_top` -> `trackview.helpers`), prune the now-bridge-only monolith re-imports, then delete the bridge
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -978,8 +983,55 @@ re-imported, so the bridge keeps mirroring them and `tv.OUTPUT_DIR` / `tv.STATS_
 re-imported, the move's only true orphan.  With this the monolith is down to just the `main` entry point and
 the re-export bridge -- the last two leaves of Phase 1.
 
+### Revised Phase 3.1 (cont.): CLI / `main` Entry Point (done)
+
+The `main` entry point was the next -- and, within Phase 1, the last-but-one -- leaf: it is the *orchestrator*,
+the only in-module consumer of nearly every extracted leaf (the config constants, `load_tracks`, `render`,
+the helpers, the `write_*` writers), so it lands in a new `trackview/cli.py`.  `main` travels out with the
+stdlib it consumed -- `argparse`, `from datetime import date`, `from pathlib import Path`, the
+`import contextily as cx`, and the headless `import matplotlib` + `matplotlib.use("Agg")` guard (a module-level
+side effect that must run before the first figure, now placed in `cli.py` *before* the `from
+trackview.mapfig / ...` imports that pull in matplotlib) -- leaving the monolith a thin re-export shell.
+
+**Design -- the re-imports stay, to feed the bridge.**  The move is *not* a full de-import: `main` was the only
+*in-module* user of the `from trackview.* import (...)` leaf re-imports, so on their face they look orphaned --
+but the re-export bridge (`trackview/__init__.py`) mirrors the monolith's namespace, and the test suite still
+reaches ~7 of those names via `tv.` (`load_tracks`, `render`, `_list_rides`, `_parse_argdate`, `_ride_date`,
+`_filter_by_meta`, `_select_top`, plus `GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR`, which `conftest.run_main`
+monkeypatches).  So the monolith **keeps every `from trackview.* import (...)` line** -- they now exist purely to
+keep the bridge mirroring those names -- and gains one line, `from trackview.cli import main`.  Pruning the now
+bridge-only re-imports (and deleting the bridge itself) is the *following* leaf, once the ~7 `tv.<name>` test
+refs are re-pointed at their submodules.
+
+**Names to extract into `trackview/cli.py`:**
+- `main` -- the whole CLI entry point, copied byte-for-byte (its `def main() -> None:` signature + body are
+    identical across the two files; `argparse` / `contextily` / `date` / `Path` / the matplotlib `Agg` guard
+    travel with it as its own stdlib imports)
+
+**Implementation:**
+1. ✅ Copy `main` byte-for-byte into a new `trackview/cli.py` -- its own docstring + the stdlib imports it
+     consumed (`argparse` / `contextily as cx` / `date` / `Path` + the `matplotlib.use("Agg")` guard, placed
+     before the `trackview.mapfig / ...` re-imports so the backend is set first) + the leaf re-imports it uses;
+     `cli.py` imports only already-extracted leaves + stdlib, so it is acyclic with no back-edge to the monolith
+     (Phase 3.1, 2026-09-30)
+2. ✅ Re-import `main` into the monolith (`from trackview.cli import main`) and prune the stdlib the move
+    orphans -- `argparse` / `date` / `Path` / `contextily as cx` + the matplotlib guard -- while **keeping** the
+     `from trackview.* import (...)` leaf re-imports (now bridge-serving) and the pre-existing-dead
+     `import csv` / `import re` (a separate cleanup) (Phase 3.1, 2026-09-30)
+3. ✅ Run test suite -- 101 passed, 1 deselected; the bridge still mirrors `main` (resolving to
+     `trackview.cli`) and every leaf name; `python trackview.py --list` runs end-to-end through the moved
+     entry point (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/cli.py` now holds `main`, copied byte-for-byte so behaviour is unchanged
+(`main()` is byte- and AST-identical in both files; `cli.py` is back-edge-free, importing only the extracted
+leaves + stdlib); the monolith is down to its docstring, a `from trackview.cli import main`, the
+`from trackview.* import (...)` re-imports that now feed the bridge, and the `__main__` guard.  The move
+orphaned only the stdlib `main` consumed (pruned); the leaf re-imports stay because the bridge keeps mirroring
+the ~7 names the test suite reaches via `tv.` -- so the bridge stays, and deleting it is the final leaf, once
+those test refs are re-pointed at their submodules.
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 3.1 (the configuration constants, now in `trackview/config.py`) complete -- 101 tests green; the monolith is down to just the `main` entry point and the re-export bridge.  Next up: extract the `main` entry point (into `trackview/cli.py`), then delete the re-export bridge once `trackview.py` is a thin CLI
+**Status**: Phase 3.1 continues -- the `main` entry point is now in `trackview/cli.py`, so the monolith is a thin re-export shell (docstring + `from trackview.cli import main` + the bridge-serving leaf re-imports + the `__main__` guard); 101 tests green.  Next up: the last leaf of Phase 1 -- re-point the ~7 `tv.<name>` test refs at their submodules (`load` / `mapfig` / `helpers`), prune the now bridge-only monolith re-imports, and delete the re-export bridge (`trackview/__init__.py`) so `trackview.py` is a thin CLI
 
