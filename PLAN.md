@@ -383,10 +383,23 @@ If the refactoring becomes too complex:
     (`trackview.metrics` / `trackview.rendering`) -- the bridge no longer mirrors the pruned names
     (2026-09-30)
 41. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-42. 🧳 Phase 1 (Module Extraction) -- the next leaf: `load_tracks` (the GPX loader) is now back-edge-free
-    (its geometry / metrics / helpers deps are all extracted), so it is the last non-entry-point function in
-    the monolith.  Extract it, then the config constants (Phase 3.1) and the `main` entry point, and finally
-    delete the re-export bridge once `trackview.py` is a thin CLI
+42. ✅ Extract `load_tracks` (the GPX reader) into a new top-of-tree `trackview/load.py` -- the last
+    non-entry-point function in the monolith, now back-edge-free since its geometry / metrics / helpers
+    deps are all extracted (Phase 1.7, completed 2026-09-30)
+43. ✅ Copy `load_tracks` byte-for-byte into a new `trackview/load.py`, importing its leaves
+      (`latlon_to_merc` / `decimate` / `_distance_and_gain` / `_grade_and_cumkm` from `trackview.geometry`,
+       `_device_type` / `_sport_type` from `trackview.helpers`, `_point_telemetry` from `trackview.metrics`) --
+    so it has no back-edge to the monolith (Phase 1.7, 2026-09-30)
+44. ✅ Re-import `load_tracks` from `trackview.load` and prune the imports the move orphans: `import os` +
+       `import gpxpy`, the now-fully-dead `from trackview.geometry import (...)` line and
+       `from trackview.metrics import (...)` block, and `_device_type` / `_sport_type` from the helpers
+    re-import (Phase 1.7, 2026-09-30)
+45. ✅ Re-point `test_load_tracks`'s `tv._distance_and_gain` / `tv._grade_and_cumkm` to
+       `trackview.geometry` -- the bridge no longer mirrors the pruned names (Phase 1.7, 2026-09-30)
+46. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+47. 🧳 Phase 1 -- the last leaves: the config constants (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` /
+       `TILE_CACHE_DIR` / `DECIMATE_M` / `PI_R`, Phase 3.1) and the `main` entry point, and finally delete the
+    re-export bridge once `trackview.py` is a thin CLI
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -879,8 +892,50 @@ imports (the backend guard stays) and the `_short_label` / `_metric_avg` / `_gra
 the `load_tracks` GPX loader (now back-edge-free -- the next leaf to extract), and the `main` entry point,
 after which the re-export bridge can go.
 
+
+### Revised Phase 1.7: GPX Loader Module (done)
+
+`load_tracks` was the last non-entry-point function in the monolith, and it is now back-edge-free: its only
+dependencies -- `latlon_to_merc` / `decimate` / `_distance_and_gain` / `_grade_and_cumkm` from
+`trackview.geometry`, `_device_type` / `_sport_type` from `trackview.helpers`, and `_point_telemetry` from
+`trackview.metrics` -- are all extracted leaves, so it lands in a new top-of-tree `trackview/load.py` rather
+than being appended to `trackview/io` (which already imports `rendering` and would only lengthen the chain);
+a fresh module keeps the single reader self-contained.
+
+**Names to extract into `trackview/load.py`:**
+- `load_tracks` -- the one GPX reader: it parses each caller-discovered-and-filtered `.gpx` file with gpxpy,
+    merges its track segments into one polyline, decimates by `decimate_m`, and -- over the pre-decimation
+    samples -- accumulates the Wahoo `--ext` per-point telemetry arrays (`power_pts` / `speed_pts`), the
+    `[sum, count]` telemetry dict, and the ride's first->last timestamp span (its duration, feeding the
+    calories-burned estimate); the only reader `main` calls
+
+**Implementation:**
+1. ✅ Copy `load_tracks` byte-for-byte into a new `trackview/load.py`, importing its leaves
+    (`latlon_to_merc` / `decimate` / `_distance_and_gain` / `_grade_and_cumkm` from `trackview.geometry`,
+      `_device_type` / `_sport_type` from `trackview.helpers`, `_point_telemetry` from `trackview.metrics`) --
+    so it has no back-edge to the monolith; verified byte-identical to the old monolith and acyclic (Phase
+    1.7, 2026-09-30)
+2. ✅ Re-point the monolith at the new module -- `from trackview.load import load_tracks` -- and prune the
+    imports the move orphans: `import os` + `import gpxpy`, the now-fully-dead `from trackview.geometry
+    import (...)` line and `from trackview.metrics import (...)` block (both are reached only *through* the
+      moved reader), plus `_device_type` / `_sport_type` from the helpers re-import -- `load_tracks` is the
+    only caller of all six, and it now lives in `load` (Phase 1.7, 2026-09-30)
+3. ✅ Re-point `test_load_tracks`'s `tv._distance_and_gain` / `tv._grade_and_cumkm` to `trackview.geometry` --
+    pruning the geometry import stops the bridge from mirroring them, but two tests still reach those names
+      via `tv.`; the nine `tv.load_tracks` refs need no change because `main` still re-imports the name
+    (Phase 1.7, 2026-09-30)
+4. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/load.py` now holds `load_tracks`, the GPX reader, copied byte-for-byte out
+of the monolith so behaviour is unchanged; it is back-edge-free (importing only the extracted leaves
+`geometry` / `helpers` / `metrics`, none of which import back), which is why it lands in a fresh top-of-tree
+module rather than in `io` (already transitively importing `rendering`).  Only `load_tracks` is re-imported
+(the one name `main` still touches), and the move orphans the monolith's now-unused `os` / `gpxpy` / geometry
+/ metrics imports (and the `_device_type` / `_sport_type` helpers re-import).  With this the monolith is down
+to the config constants, the `main` entry point, and the re-export bridge -- the last three leaves of Phase 1.
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.4b-ii (the render / write_* figure-orchestration cluster, now in `trackview/mapfig.py`) complete -- 101 tests green; every report and figure cluster has moved into `trackview/`.  Next up: extract the `load_tracks` GPX loader (now back-edge-free -- the last non-entry-point function in the monolith), then the config constants (Phase 3.1) and the `main` entry point, and finally delete the re-export bridge
+**Status**: Phase 1.7 (the `load_tracks` GPX reader, now in `trackview/load.py`) complete -- 101 tests green; the monolith is down to the config constants, the `main` entry point, and the re-export bridge.  Next up: extract the config constants (Phase 3.1) and the `main` entry point, then delete the re-export bridge once `trackview.py` is a thin CLI
 

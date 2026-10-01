@@ -725,3 +725,22 @@ Refactoring
       every report and figure cluster of Phase 1: the monolith is down to the config
       constants, the load_tracks GPX loader (now back-edge-free -- the next leaf to
       extract) and the main entry point, after which the re-export bridge can go.
+
+      DONE (2026-09-30, Phase 1.7): the load_tracks GPX reader -- the last non-entry-point
+      function in the monolith, now back-edge-free since its geometry / metrics / helpers deps
+      are all extracted leaves -- extracted into a new top-of-tree trackview/load.py, byte-for-
+      byte (verified identical to the old monolith, and acyclic), on the same leaf-first, byte-
+      identical principle as 1.4a / 1.4b-i / 1.4b-ii / 1.5 / 1.6.  It lands in a *fresh* module,
+      not io.py: it imports the geometry / helpers / metrics leaves (none import back) but io
+      already imports rendering, so appending the reader there would only lengthen the chain -- a
+      fresh module keeps the single reader self-contained.  The monolith now reaches load_tracks
+      only through `from trackview.load import load_tracks`; with that the only staying use it
+      prunes the imports the move orphans -- import os + import gpxpy, the now-fully-dead `from
+      trackview.geometry import (...)` line and `from trackview.metrics import (...)` block
+      (both are reached only *through* the moved reader) and the _device_type / _sport_type
+      helpers re-import.  One test change: test_load_tracks's tv._distance_and_gain /
+      tv._grade_and_cumkm now import from trackview.geometry -- pruning the geometry import
+      stops the bridge mirroring them, and the two tests still reach those names via tv. (the
+      nine tv.load_tracks refs need no change because main still re-imports the name).    101
+      pass, 1 skip.  This leaves the monolith down to the config constants, the main entry
+      point, and the re-export bridge -- the last three leaves of Phase 1.
