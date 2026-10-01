@@ -701,3 +701,27 @@ Refactoring
      / write_* figure-orchestration cluster, now back-edge-free since _load_basemap
      moved) and -- once every module has moved -- deleting the re-export bridge.
 
+      DONE (2026-09-30, Phase 1.4b-ii): the big render / render_* / write_* figure-
+      orchestration cluster -- the render orchestrator (its --profile ride-card and
+        --heat overlay), the fit_aspect bbox-aspect helper and the figure constants
+        (FIGURE_IN, the CMAPEL / GRADE_STOPS / CMAPGRADE ramps, the --profile
+      PROF_METRICS table) -- extracted into a new top-of-tree trackview/mapfig.py,
+      byte-for-byte (each block verified identical to the old monolith), the last
+      figure cluster on the same leaf-first, byte-identical principle as 1.4a / 1.4b-i
+        / 1.5 / 1.6.  It lands in a *fresh* module, not rendering.py: it imports the
+      drawing leaves from rendering, the basemap / tile machinery from io, and the
+      small metric helpers from metrics / helpers -- none import back, so there is no
+      cycle -- whereas rendering is already imported, transitively, by io (a rendering
+        -> io -> rendering cycle would result).  The monolith now reaches render +
+      PROF_METRICS only through `from trackview.mapfig import (render,
+      PROF_METRICS)`; with those the only staying uses it prunes the imports the move
+      orphans -- import numpy as np + the seven matplotlib sub-imports (the
+        `import matplotlib` + use("Agg") backend guard stays, so headless figures still
+      render) and the now-unused _short_label / _metric_avg / _grade_cap /
+       _calories_burned / _fmt_duration / ATTRIBUTION / _load_basemap / choose_detail
+      re-imports.  One test change: test_geometry's tv._grade_cap / tv._moving_avg now
+      import from their new submodules (trackview.metrics / trackview.rendering) -- the
+      bridge no longer mirrors the pruned names.     101 pass, 1 skip.  This closes out
+      every report and figure cluster of Phase 1: the monolith is down to the config
+      constants, the load_tracks GPX loader (now back-edge-free -- the next leaf to
+      extract) and the main entry point, after which the re-export bridge can go.

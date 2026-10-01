@@ -370,9 +370,23 @@ If the refactoring becomes too complex:
     (`render` still calls `choose_detail`), keep `EQUATOR` / the gallery helpers private (Phase 1.6-v,
      completed 2026-09-30)
 37. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-38. 🧳 Phase 1.4b-ii: the big `render` / `render_*` / `write_*` figure-orchestration cluster (matplotlib-
-    coupled) -- its only monolith back-edge, `_load_basemap`, has now moved to `io.py`, so the cluster is
-    back-edge-free and can move next; then, once every module has moved, delete the re-export bridge
+38. ✅ Extract the big `render` / `render_*` / `write_*` figure-orchestration cluster -- the `render`
+    orchestrator (its `--profile` ride-card and `--heat` overlay), the `fit_aspect` bbox-aspect helper and
+    the figure constants (`FIGURE_IN`, the `CMAPEL` / `GRADE_STOPS` / `CMAPGRADE` ramps, the `--profile`
+    `PROF_METRICS` table) -- into a new top-of-tree `trackview/mapfig.py` (Phase 1.4b-ii, completed 2026-09-30)
+39. ✅ Re-import `render` + `PROF_METRICS` (the two `main` still touches) from `trackview.mapfig`; with
+    those the only staying uses, prune the imports the move orphans -- `import numpy as np` + the seven
+    matplotlib sub-imports (the `import matplotlib` + `use("Agg")` backend guard stays, so headless figures
+    still render), and the now-unused `_short_label` / `_metric_avg` / `_grade_cap` / `_calories_burned` /
+    `_fmt_duration` / `ATTRIBUTION` / `_load_basemap` / `choose_detail` re-imports (2026-09-30)
+40. ✅ Re-point `test_geometry`'s `tv._grade_cap` / `tv._moving_avg` to their new submodules
+    (`trackview.metrics` / `trackview.rendering`) -- the bridge no longer mirrors the pruned names
+    (2026-09-30)
+41. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+42. 🧳 Phase 1 (Module Extraction) -- the next leaf: `load_tracks` (the GPX loader) is now back-edge-free
+    (its geometry / metrics / helpers deps are all extracted), so it is the last non-entry-point function in
+    the monolith.  Extract it, then the config constants (Phase 3.1) and the `main` entry point, and finally
+    delete the re-export bridge once `trackview.py` is a thin CLI
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -817,8 +831,56 @@ unblocking the 1.4b-ii render / `write_*` figure-orchestration cluster, the only
 / `write_*` figure-orchestration cluster (now back-edge-free, since `_load_basemap` moved) and -- once
 every module has moved -- deleting the re-export bridge.
 
+### Revised Phase 1.4b-ii: Figure-Orchestration Module (done)
+
+The last monolith back-edge the figure cluster was blocked on -- `_load_basemap` -- moved to
+`trackview/io.py` in Phase 1.6, so the big `render` / `render_*` / `write_*` figure-orchestration cluster
+can finally move.  It is the top of the figure dependency tree, so it lands in a *new* module
+`trackview/mapfig.py` rather than in `trackview/rendering.py`: it imports the drawing leaves from
+`rendering`, the basemap / tile machinery from `io`, and the small metric helpers from `metrics` /
+`helpers` -- none of which import back, so there is no cycle -- whereas `rendering` is already imported,
+transitively, by `io` (a `rendering` -> `io` -> `rendering` cycle would result).
+
+**Names to extract into `trackview/mapfig.py`:**
+- the figure constants -- `FIGURE_IN` (the square figure size), the `CMAPEL` / `GRADE_STOPS` / `CMAPGRADE`
+    colour ramps and the `--profile` `PROF_METRICS` table -- the constants that belong to the map figure
+- `fit_aspect` -- the bbox-aspect helper (fit a Mercator bbox into a square figure with the right margins)
+- `render` -- the orchestrator that builds and saves a ride map (plus its `--profile` ride-card and
+    `--heat` overlay); the only figure-cluster name `main` calls (alongside the `write_*` exporters)
+
+**Implementation:**
+1. ✅ Copy the figure constants + `fit_aspect` + `render` byte-for-byte into a new `trackview/mapfig.py`,
+    importing the drawing leaves (`PAD_FRAC` / `DPI` / `CMAPEED` / `GRADE_CBAR_MAX` / `STRONG_COLORS` /
+     `_metric_norm` / `_draw_profile` / `_has_metric_pts` / ...) from `trackview.rendering`, the basemap /
+    tile machinery (`SOURCES` / `_load_basemap` / `ATTRIBUTION` / `choose_detail`) from `trackview.io`, and
+    the small metric helpers (`_metric_avg` / `_grade_cap` / `_calories_burned` / `_fmt_duration`) from
+     `trackview.metrics` + `_short_label` / `_title_name` from `trackview.helpers`; the three moved blocks
+    are each verified byte-identical to the old monolith (Phase 1.4b-ii, 2026-09-30)
+2. ✅ Re-point the monolith at the new module -- `from trackview.mapfig import (render, PROF_METRICS)` -- and
+    prune the imports the move orphans: `import numpy as np` and the seven matplotlib sub-imports (the
+     `import matplotlib` + `use("Agg")` backend guard stays, so headless figures still render), plus the
+    now-unused `_short_label` / `_metric_avg` / `_grade_cap` / `_calories_burned` / `_fmt_duration` /
+     `ATTRIBUTION` / `_load_basemap` / `choose_detail` re-imports (`render` is the only caller left of
+     `choose_detail` / `_load_basemap`, and it now lives in `mapfig`) (Phase 1.4b-ii, 2026-09-30)
+3. ✅ Re-point `test_geometry`'s `tv._grade_cap` / `tv._moving_avg` to their new submodules
+     (`trackview.metrics` / `trackview.rendering`) -- the bridge no longer mirrors the pruned names (Phase
+     1.4b-ii, 2026-09-30)
+4. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/mapfig.py` now holds the figure constants, `fit_aspect` and the `render`
+orchestrator, copied byte-for-byte out of the monolith so behaviour is unchanged; it is the top of the
+figure dependency tree (importing the leaves from `rendering`, the basemap from `io`, the metric helpers
+from `metrics` / `helpers` -- none import back), which is why the map figure lands in a fresh module rather
+than in `rendering` (already imported, transitively, by `io`).  Only `render` + `PROF_METRICS` are
+re-imported (the two `main` still touches); the move orphans the monolith's now-unused numpy / matplotlib
+imports (the backend guard stays) and the `_short_label` / `_metric_avg` / `_grade_cap` / `_calories_burned`
+/ `_fmt_duration` / `ATTRIBUTION` / `_load_basemap` / `choose_detail` re-imports.  With this, every
+*report* and *figure* cluster has moved into `trackview/`; the monolith is down to the config constants,
+the `load_tracks` GPX loader (now back-edge-free -- the next leaf to extract), and the `main` entry point,
+after which the re-export bridge can go.
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.6 (I/O: the tile / basemap machinery, the HTML / Leaflet export and the gallery cluster, now all in `trackview/io.py`) complete -- 101 tests green; next up Phase 1.4b-ii (the render / write_* figure-orchestration cluster, now back-edge-free since `_load_basemap` moved) and, once every module has moved, deleting the re-export bridge
+**Status**: Phase 1.4b-ii (the render / write_* figure-orchestration cluster, now in `trackview/mapfig.py`) complete -- 101 tests green; every report and figure cluster has moved into `trackview/`.  Next up: extract the `load_tracks` GPX loader (now back-edge-free -- the last non-entry-point function in the monolith), then the config constants (Phase 3.1) and the `main` entry point, and finally delete the re-export bridge
 
