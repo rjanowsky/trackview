@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 # Constants
-PI_R = 6378137.0  # Earth radius in metres (WGS84)
+PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
 
 
 def latlon_to_merc(lat: float, lon: float) -> tuple[float, float]:
