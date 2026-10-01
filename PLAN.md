@@ -349,10 +349,30 @@ If the refactoring becomes too complex:
 30. ✅ Re-import `write_trend` into the monolith (the one `main` calls); keep `_trend_panels` /
    `_TREND_COLORS` private; no test references the clusters, so no bridge re-pointing (2026-09-30)
 31. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
-32. 🧳 Phase 1.6 (I/O): the big `render` / `render_*` / `write_*` figure *orchestration* cluster
-   (matplotlib-coupled) plus the HTML / Leaflet export and the gallery -- the only real monolith
-   back-edge is `_load_basemap` (the network / contextily basemap plus the config constants), so
-   move that helper first, then the cluster
+32. ✅ Relocate the tile / HTTP provider constants (`USER_AGENT` / `SOURCES` / `ATTRIBUTION`) into
+    `trackview/io.py` -- a new module -- and re-import them (the monolith reads `SOURCES` for its
+    --style choices; `USER_AGENT` / `ATTRIBUTION` travel with the provider table) (Phase 1.6-i,
+     completed 2026-09-30)
+33. ✅ Extract `_load_basemap` (the contextily basemap fetch: provider fail-over, retry/backoff and a
+    variance blank-check) into `trackview/io.py`, dropping the monolith's now-unused `import time` --
+    the one network back-edge the figure cluster was blocked on, so it moves first (Phase 1.6-ii,
+     completed 2026-09-30)
+34. ✅ Relocate the shared `STRONG_COLORS` + `PAD_FRAC` constants into `trackview/rendering.py` -- their
+    figure-constant home, alongside CMAPEED / HEAT_* / DPI -- and re-import them into the monolith, so the
+    staying render cluster and the moving gallery both read them there (Phase 1.6-iii, completed 2026-09-30)
+35. ✅ Extract the HTML / Leaflet export cluster (`_APP_JS` / `_fetch_text` / `_load_leaflet` /
+    `_ride_feature` / `_tracks_geojson` / `_leaflet_document` / `_html_escape` / `write_html`, with
+    `LEAFLET_DIR` relocated to the package-parent `lib/`) into `trackview/io.py`; re-import `write_html`
+    (the one `main` calls), keep the helpers private (Phase 1.6-iv, completed 2026-09-30)
+36. ✅ Extract the gallery + tile-detail unit (`choose_detail` + `EQUATOR` / `DETAIL_MIN` / `DETAIL_MAX`, and
+    `_gallery_grid` / `_gallery_cell` / `write_gallery`) into `trackview/io.py`, dropping the monolith's
+    now-unused `import math`; re-import `write_gallery` + `choose_detail` + `DETAIL_MIN` / `DETAIL_MAX`
+    (`render` still calls `choose_detail`), keep `EQUATOR` / the gallery helpers private (Phase 1.6-v,
+     completed 2026-09-30)
+37. ✅ Run test suite -- 101 passed, 1 deselected (completed 2026-09-30)
+38. 🧳 Phase 1.4b-ii: the big `render` / `render_*` / `write_*` figure-orchestration cluster (matplotlib-
+    coupled) -- its only monolith back-edge, `_load_basemap`, has now moved to `io.py`, so the cluster is
+    back-edge-free and can move next; then, once every module has moved, delete the re-export bridge
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -721,7 +741,84 @@ blocks the 1.4b-ii render / write_* figure cluster).
 
 ---
 
+### Revised Phase 1.6: I/O Module (done)
+
+The I/O leaf clusters -- the tile / basemap machinery, the HTML / Leaflet export and the gallery contact
+sheet -- on the same leaf-first principle as 1.5a / 1.5b / 1.5c / 1.5d, all into a new
+`trackview/io.py`.  They are the network-coupled half (the contextily basemap, an HTTP fetch of the
+Leaflet library, the gallery's per-ride basemap), so they write only with a basemap -- which is why the
+standalone report clusters (1.5) moved *first*.  Each moved block keeps no back-edge to the monolith:
+its external names live in the already-extracted modules (helpers / metrics / rendering) plus stdlib /
+contextily / matplotlib.
+
+**The shared constants (relocated to `trackview/rendering.py`, re-imported by the monolith):**
+- `STRONG_COLORS` + `PAD_FRAC` -- the per-track colour ramp and the bbox blank-margin fraction, read by
+   *both* the not-yet-migrated render / write_gallery figure cluster and the moving basemap / gallery code,
+  so they sit with the other figure constants (CMAPEED / HEAT_* / DPI) in `rendering.py` and the monolith
+  re-imports them (Phase 1.6-iii)
+
+**Names to extract into `trackview/io.py`:**
+- `USER_AGENT`, `SOURCES`, `ATTRIBUTION` -- the tile-provider table (one {z}/{x}/{y} URL + one credit per
+  source) and the polite User-Agent string every fetch carries; private to the I/O module, but re-imported
+  because `main` reads `SOURCES` for its --style choices (Phase 1.6-i)
+- `_load_basemap` -- the contextily basemap fetch with provider fail-over, retry/backoff and a variance
+  blank-check; the one network helper the figure cluster was blocked on, so it moves first (Phase 1.6-ii;
+  the now-unused `import time` stays *here*, in io.py, not the monolith)
+- the HTML / Leaflet export cluster -- `_APP_JS`, `_fetch_text`, `_load_leaflet`, `_ride_feature`,
+   `_tracks_geojson`, `_leaflet_document`, `_html_escape`, `write_html` (a static HTML + a ride GeoJSON,
+  optionally inlining the Leaflet library); the only name `main` calls (Phase 1.6-iv).   `LEAFLET_DIR` is
+   `__file__`-relative, so it is relocated to the repo's `lib/` via the package's own parent -- the depth
+  adjusts: the monolith's `Path(__file__).parent / "lib"` becomes `Path(__file__).parent.parent / "lib"`
+  read from `io.py`)
+- the gallery + tile-detail unit -- `choose_detail` (the auto tile-detail level from the bbox) with its
+   `EQUATOR` / `DETAIL_MIN` / `DETAIL_MAX` constants, plus `_gallery_grid` / `_gallery_cell` / `write_gallery`
+   (a contact sheet of the N most-recent rides); the only name `main` calls is `write_gallery`, and the
+   `render` cluster still calls `choose_detail` (Phase 1.6-v; the now-unused `import math` stays *here* in
+  io.py -- `choose_detail` uses `math.log2`, `_gallery_grid` uses `math.ceil` / `sqrt`)
+
+**Implementation:**
+1. ✅ Relocate the tile / HTTP provider constants (`USER_AGENT` / `SOURCES` / `ATTRIBUTION`) into
+   `trackview/io.py` -- a new 34-line module, byte-identical -- and re-import them (the monolith reads
+   `SOURCES` for --style; `USER_AGENT` / `ATTRIBUTION` travel with the provider table) (Phase 1.6-i,
+    2026-09-30)
+2. ✅ Extract `_load_basemap` into `trackview/io.py` byte-for-byte -- the contextily fetch with provider
+   fail-over + retry/backoff + a variance blank-check -- importing `contextily` / `numpy` / `time` and the
+   three provider constants now in-module; the monolith drops its now-unused `import time` (Phase 1.6-ii,
+    2026-09-30)
+3. ✅ Relocate the shared `STRONG_COLORS` + `PAD_FRAC` constants into `trackview/rendering.py` -- their
+   figure-constant home, alongside CMAPEED / HEAT_* / DPI -- and re-import them into the monolith, so both
+   the staying render cluster and the moving gallery read them there (Phase 1.6-iii, 2026-09-30)
+4. ✅ Extract the HTML / Leaflet export cluster (`_APP_JS` / `_fetch_text` / `_load_leaflet` /
+   `_ride_feature` / `_tracks_geojson` / `_leaflet_document` / `_html_escape` / `write_html` +
+   `LEAFLET_DIR`) into `trackview/io.py` byte-for-byte, relocating `LEAFLET_DIR` to
+   `Path(__file__).parent.parent / "lib"` so it still resolves to the repo's `lib/` from the new depth;
+   re-import `write_html` (the one `main` calls; the rest stay private) (Phase 1.6-iv, 2026-09-30)
+5. ✅ Extract the gallery + tile-detail unit (`choose_detail` + `EQUATOR` / `DETAIL_MIN` / `DETAIL_MAX`, and
+   `_gallery_grid` / `_gallery_cell` / `write_gallery`) into `trackview/io.py` byte-for-byte, adding the
+   `rendering` (STRONG_COLORS / PAD_FRAC / DPI) and `helpers` (_title_name / _ride_date) imports plus
+   `math` / `numpy` / `matplotlib`; re-import `write_gallery` (the one `main` calls) and `choose_detail` /
+   `DETAIL_MIN` / `DETAIL_MAX` (`render` still calls `choose_detail`, and its help string names the detail
+   caps); `EQUATOR` / `_gallery_grid` / `_gallery_cell` stay private, and the monolith drops its now-unused
+   `import math` (Phase 1.6-v, 2026-09-30)
+6. ✅ No test changes: none of the I/O names is test-referenced, so the re-imported `write_html` /
+   `write_gallery` / `choose_detail` / `DETAIL_MIN` / `DETAIL_MAX` / `STRONG_COLORS` / `PAD_FRAC` / `SOURCES`
+   / `USER_AGENT` / `ATTRIBUTION` / `_load_basemap` resolve through the bridge as before (2026-09-30)
+7. ✅ Run test suite -- 101 passed, 1 deselected, no regressions (2026-09-30)
+
+**Done (2026-09-30)**. `trackview/io.py` now holds the tile / basemap machinery, the HTML / Leaflet
+export and the gallery contact sheet, copied byte-for-byte out of the monolith so behaviour is unchanged;
+`STRONG_COLORS` + `PAD_FRAC` joined the other figure constants in `trackview/rendering.py`.  The basemap
+helper (`_load_basemap`) was the last network back-edge the figure cluster needed, so it moved first --
+unblocking the 1.4b-ii render / `write_*` figure-orchestration cluster, the only monolith back-edge left.
+ Re-imported by the monolith are the names its staying code still touches (`write_html`, `write_gallery`,
+`choose_detail`, `DETAIL_MIN` / `DETAIL_MAX`, `STRONG_COLORS` / `PAD_FRAC`, and the provider table
+`USER_AGENT` / `SOURCES` / `ATTRIBUTION` / `_load_basemap`); the internal `_gallery_grid` / `_gallery_cell`
+/ `EQUATOR` and the HTML helpers stay private.  No test changes were needed.  Next up: the 1.4b-ii render
+/ `write_*` figure-orchestration cluster (now back-edge-free, since `_load_basemap` moved) and -- once
+every module has moved -- deleting the re-export bridge.
+
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: Phase 1.5d (trend / calendar figure clusters) complete -- 101 tests green; next up Phase 1.6 (I/O: HTML / Leaflet, the gallery, and the `_load_basemap` helper) and Phase 1.4b-ii (the render / write_* cluster, blocked on `_load_basemap`)
+**Status**: Phase 1.6 (I/O: the tile / basemap machinery, the HTML / Leaflet export and the gallery cluster, now all in `trackview/io.py`) complete -- 101 tests green; next up Phase 1.4b-ii (the render / write_* figure-orchestration cluster, now back-edge-free since `_load_basemap` moved) and, once every module has moved, deleting the re-export bridge
+

@@ -655,3 +655,49 @@ Refactoring
      as before.  101 pass, 1 skip.  This closes out the remaining report clusters of Phase 1.5;
      next up Phase 1.6 (I/O: HTML/Leaflet, the gallery, and the _load_basemap helper that blocks
      the 1.4b-ii figure cluster).
+     DONE (2026-09-30, Phase 1.6-i..v): the I/O leaf clusters -- the tile / basemap
+     machinery, the HTML / Leaflet export and the gallery contact sheet -- extracted
+     into a new trackview/io.py, byte-for-byte (each copied out of the monolith so
+     behaviour is unchanged, 101 pass / 1 skip), on the same leaf-first principle as
+      1.5a..d.  They are the network-coupled half of the old 'Rendering' phase (the
+     contextily basemap, an HTTP fetch of the Leaflet library, the gallery's per-ride
+     basemap) -- which is why the standalone report clusters (1.5, no basemap) moved
+     *first* and these write only with a basemap.  Each moved block keeps no back-edge
+     to the monolith: its external names live in the already-extracted modules
+     (helpers / metrics / rendering) plus stdlib / contextily / matplotlib.
+     One wrinkle made the basemap helper move first: _load_basemap (the contextily
+     fetch with provider fail-over, retry/backoff and a variance blank-check) was the
+     *only* network back-edge the not-yet-moved render / write_* figure cluster needed,
+     so in Phase 1.6-ii it moved ahead of that cluster, unblocking it.  Two shared
+     constants went to a *different* module: in 1.6-iii STRONG_COLORS + PAD_FRAC (the
+     per-track colour ramp and the bbox blank-margin fraction) joined the other figure
+     constants in trackview/rendering.py -- alongside CMAPEED / HEAT_* / DPI -- and were
+     re-imported, so the staying render cluster and the moving gallery both read them
+     there.  And in 1.6-i the tile-provider table (USER_AGENT / SOURCES / ATTRIBUTION --
+     one {z}/{x}/{y} URL + one credit per source, and the polite User-Agent every fetch
+     carries) moved into io.py first, re-imported because main reads SOURCES for its
+     --style choices.  Then the two remaining clusters moved: in 1.6-iv the HTML /
+     Leaflet export (_APP_JS / _fetch_text / _load_leaflet / _ride_feature /
+     _tracks_geojson / _leaflet_document / _html_escape / write_html, with LEAFLET_DIR
+     -- __file__-relative -- relocated to the package's own parent so it still resolves
+     to the repo's lib/ from the new depth: the monolith's
+     Path(__file__).parent / 'lib' becomes Path(__file__).parent.parent / 'lib' read from
+     io.py), and in 1.6-v the gallery + tile-detail unit (choose_detail with EQUATOR /
+     DETAIL_MIN / DETAIL_MAX, and _gallery_grid / _gallery_cell / write_gallery).  main
+     calls only write_html and write_gallery, so the monolith re-imports those two; it
+     also re-imports choose_detail / DETAIL_MIN / DETAIL_MAX (render still calls
+     choose_detail and its --detail help string names the caps) and the provider table
+     USER_AGENT / SOURCES / ATTRIBUTION / _load_basemap, while EQUATOR / _gallery_grid /
+     _gallery_cell and the HTML helpers stay private.  As in 1.5c, an orphan-pruning
+     followed each move: 1.6-ii dropped the now-unused 'import time' from the monolith
+     (it stays in io.py, which uses it), and 1.6-v dropped 'import math' (which stays in
+     io.py -- choose_detail uses math.log2, _gallery_grid uses math.ceil / sqrt); the
+     EQUATOR constant was *not* re-imported because its only user, choose_detail, moved
+     to io.py.  No test changes: none of the I/O names is test-referenced, so the
+     re-imported names (write_html / write_gallery / choose_detail / DETAIL_MIN /
+     DETAIL_MAX / STRONG_COLORS / PAD_FRAC / SOURCES / USER_AGENT / ATTRIBUTION /
+     _load_basemap) resolve through the bridge as before.   101 pass, 1 skip.  This
+     closes out the I/O leaf clusters; next up Phase 1.4b-ii (the big render / render_*
+     / write_* figure-orchestration cluster, now back-edge-free since _load_basemap
+     moved) and -- once every module has moved -- deleting the re-export bridge.
+
