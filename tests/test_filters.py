@@ -7,7 +7,8 @@ compose, in that order.
 from datetime import date
 
 from conftest import build_ride, ride_paths, run_filters, run_main, write_ride
-import trackview as tv
+from trackview.load import load_tracks
+from trackview.helpers import _filter_by_meta
 
 
 # --------------------------------------------------------------------------- #
@@ -55,8 +56,8 @@ class TestMetaFilter:
     def test_non_match_prints_the_distinct_values(self, gpx_folder, capsys):
           # nothing matches -> the log prints the values it *does* carry (a typo
          # is easy to fix) and an 'unknown' marks the line-less ride
-        tracks = tv.load_tracks(ride_paths(gpx_folder), 1.0)
-        kept = tv._filter_by_meta(tracks, device="Garmin Forerunner 965")
+        tracks = load_tracks(ride_paths(gpx_folder), 1.0)
+        kept = _filter_by_meta(tracks, device="Garmin Forerunner 965")
         out = capsys.readouterr().out
         assert kept == []
         assert "no ride matches" in out
@@ -64,8 +65,8 @@ class TestMetaFilter:
         assert "unknown" in out
 
     def test_no_filter_passes_everything(self, gpx_folder):
-        tracks = tv.load_tracks(ride_paths(gpx_folder), 1.0)
-        assert tv._filter_by_meta(tracks) == tracks
+        tracks = load_tracks(ride_paths(gpx_folder), 1.0)
+        assert _filter_by_meta(tracks) == tracks
 
 
 # --------------------------------------------------------------------------- #

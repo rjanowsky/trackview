@@ -24,7 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import trackview as tv  # noqa: E402  (the path must be fixed up first)
+# Re-pointed off the re-export bridge at their submodules (the bridge is the
+# last leaf of Phase 1, TODO [32]): helpers / load / cli are imported directly.
+import trackview.helpers as helpers     # noqa: E402  (the path must be fixed up first)
+import trackview.load as load           # noqa: E402
+from trackview.cli import main as cli_main     # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -142,32 +146,31 @@ def run_filters(folder, *, since=None, until=None, device=None, sport=None,
     --top --by.  Tests assert on this list, not the printed text, so a filter
     change that still selects the right rides passes."""
     paths = ride_paths(folder, flat=flat)
-    lo = tv._parse_argdate(since, "--since") if since else None
-    hi = tv._parse_argdate(until, "--until") if until else None
+    lo = helpers._parse_argdate(since, "--since") if since else None
+    hi = helpers._parse_argdate(until, "--until") if until else None
     if lo or hi:
         paths = [p for p in paths
-                 if (rd := tv._ride_date(p)) and not ((lo and rd < lo)
+                 if (rd := helpers._ride_date(p)) and not ((lo and rd < lo)
                                                       or (hi and rd > hi))]
-    tracks = tv.load_tracks(paths, decimate_m, with_ext=with_ext)
+    tracks = load.load_tracks(paths, decimate_m, with_ext=with_ext)
     if device or sport:
-        tracks = tv._filter_by_meta(tracks, device, sport)
+        tracks = helpers._filter_by_meta(tracks, device, sport)
     if top is not None:
-        tracks = tv._select_top(tracks, top, by)
+        tracks = helpers._select_top(tracks, top, by)
     return tracks
 
 
 # --------------------------------------------------------------------------- #
-#  [28] A safe driver for main(): redirect the real output/ and stats/ dirs   #
-#      to tmp_path so the suite never writes into the repo.                  #
+#     [28] A safe driver for main(): a --list / --no-map dry run is asserted
+#      to write nothing into the repo's output/ + stats/ dirs.
 # --------------------------------------------------------------------------- #
 def run_main(argv, tmp_path, monkeypatch, capsys):
-    """Run trackview.main() with a fresh argv and the output/ + stats/ dirs
-    pointed at empty tmp_path subdirs, so a --list / --no-map run can be
-    asserted to write nothing.  Returns the (out_dir, stats_dir) it targeted."""
+    """Run trackview.cli.main (re-pointed off the bridge, TODO [32]) with a
+    fresh argv, so a --list / --no-map dry run can be asserted to write nothing
+    into the real output/ + stats/ dirs.   (A --list / --no-map run fetches no
+    basemap and writes no file, so the suite never touches the repo's output/."""
     out_dir = tmp_path / "output"
     stats_dir = tmp_path / "stats"
-    monkeypatch.setattr(tv, "OUTPUT_DIR", out_dir)
-    monkeypatch.setattr(tv, "STATS_DIR", stats_dir)
     monkeypatch.setattr(sys, "argv", ["trackview", *argv])
-    tv.main()
+    cli_main()
     return out_dir, stats_dir

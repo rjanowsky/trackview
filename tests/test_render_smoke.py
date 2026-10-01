@@ -11,7 +11,8 @@ import os
 
 import pytest
 
-import trackview as tv
+from trackview.load import load_tracks
+from trackview.mapfig import render
 from conftest import ride_paths
 
 
@@ -20,7 +21,7 @@ from conftest import ride_paths
 def test_render_a_combined_map(gpx_folder, tmp_path):
     if not os.environ.get("TRACKVIEW_TEST_NETWORK"):
         pytest.skip("set TRACKVIEW_TEST_NETWORK=1 to run the network/slow render")
-    tracks = tv.load_tracks(sorted(ride_paths(gpx_folder)), 5.0)
+    tracks = load_tracks(sorted(ride_paths(gpx_folder)), 5.0)
     out = tmp_path / "output" / "smoke.png"
-    tv.render(tracks, style="osm", out_path=out, detail=None, color_by="elev")
+    render(tracks, style="osm", out_path=out, detail=None, color_by="elev")
     assert out.exists() and out.stat().st_size > 0

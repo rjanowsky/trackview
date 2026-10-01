@@ -2,7 +2,8 @@
 from pathlib import Path
 
 from conftest import ride_paths, run_main
-import trackview as tv
+from trackview.helpers import _list_rides
+from trackview.load import load_tracks
 
 # the output artifacts a *rendered* run would write -- never a --list run
 _OUTPUT_EXTS = {".txt", ".csv", ".png", ".pdf", ".html"}
@@ -16,9 +17,9 @@ def _output_files(tmp_path):
 
 class TestListRidesTable:
     def test_header_rows_and_total(self, gpx_folder, capsys):
-        tracks = tv.load_tracks(ride_paths(gpx_folder), 1.0)
+        tracks = load_tracks(ride_paths(gpx_folder), 1.0)
         assert len(tracks) == 2
-        tv._list_rides(tracks)
+        _list_rides(tracks)
         out = capsys.readouterr().out
         # the header
         for col in ("Date", "Ride", "Dist (km)", "Gain (m)"):
@@ -30,7 +31,7 @@ class TestListRidesTable:
         assert "TOTAL" in out
 
     def test_empty_set_message(self, capsys):
-        tv._list_rides([])
+        _list_rides([])
         out = capsys.readouterr().out
         assert "no ride matches the filters" in out
         assert "TOTAL" not in out    # no table when there is nothing to list
@@ -39,7 +40,7 @@ class TestListRidesTable:
         # a foreign name (no date in the stem) shows 'undated', not a crash
         t = {"path": Path("komoot_loop.gpx"), "name": "komoot_loop",
              "dist_km": 12.3, "gain_m": 250.0}
-        tv._list_rides([t])
+        _list_rides([t])
         out = capsys.readouterr().out
         assert "undated" in out
 

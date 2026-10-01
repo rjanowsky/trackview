@@ -7,13 +7,13 @@ profile is readable straight off the raw points via the pure geometry helpers.
 """
 from conftest import build_ride, gpx_points, write_ride
 from trackview.geometry import _distance_and_gain, _grade_and_cumkm
-import trackview as tv
+from trackview.load import load_tracks
 
 
 def test_synthetic_gpx_fixture_has_telemetry(tmp_path, synthetic_gpx):
       # the "with <extensions>" fixture (a climb/descent/flat ride, device + sport)
     path = write_ride(synthetic_gpx, tmp_path / "2026_09_07_08_12_47.gpx")
-    (t,) = tv.load_tracks([path], 1.0, with_ext=True)
+    (t,) = load_tracks([path], 1.0, with_ext=True)
     assert all(v is not None for v in t["power_pts"])
     assert t["device"] == "Wahoo ELEMNT BOLT" and t["sport"] == "Bike"
 
@@ -21,7 +21,7 @@ def test_synthetic_gpx_fixture_has_telemetry(tmp_path, synthetic_gpx):
 def test_synthetic_gpx_plain_fixture_has_no_telemetry(tmp_path, synthetic_gpx_plain):
       # the "without <extensions>" fixture -- a plain komoot-style track
     path = write_ride(synthetic_gpx_plain, tmp_path / "komoot_loop.gpx")
-    (t,) = tv.load_tracks([path], 1.0, with_ext=True)
+    (t,) = load_tracks([path], 1.0, with_ext=True)
     assert all(v is None for v in t.get("power_pts", []))
     assert t["device"] is None and t["sport"] is None
 
@@ -29,7 +29,7 @@ def test_synthetic_gpx_plain_fixture_has_no_telemetry(tmp_path, synthetic_gpx_pl
 def test_telemetry_ride_carries_per_point_arrays(tmp_path):
     ride = build_ride("2026_09_07_08_12_47", telemetry=True)
     path = write_ride(ride, tmp_path / "2026_09_07_08_12_47.gpx")
-    (t,) = tv.load_tracks([path], 1.0, with_ext=True)
+    (t,) = load_tracks([path], 1.0, with_ext=True)
 
     # a per-point array, one value per decimated point (aligned with merc/ele)
     assert "power_pts" in t and "speed_pts" in t
@@ -46,7 +46,7 @@ def test_plain_ride_carries_no_telemetry_values(tmp_path):
      # per-point array is all-None and the [sum, count] telemetry counts zero samples
     ride = build_ride("komoot_loop", telemetry=False)
     path = write_ride(ride, tmp_path / "komoot_loop.gpx")
-    (t,) = tv.load_tracks([path], 1.0, with_ext=True)
+    (t,) = load_tracks([path], 1.0, with_ext=True)
 
     assert t.get("power") == [0.0, 0]                # no samples counted
     assert all(v is None for v in t.get("power_pts", []))   # ...so no per-point values

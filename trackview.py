@@ -51,22 +51,6 @@ from __future__ import annotations
 import csv
 import re
 
-from trackview.config import (GPX_DIR, OUTPUT_DIR, STATS_DIR,
-                              TILE_CACHE_DIR, DECIMATE_M)
-from trackview.helpers import (_title_name, _ride_date,
-                               _device_label, _device_groups, _filter_by_meta,
-                               _select_top, _list_rides, _parse_argdate,
-                               _safe_filename, _TOP_BY, _MONTH_ABBR)
-from trackview.rendering import (SUPPRESSED_RENDER_DEVICES, _has_metric_pts)
-from trackview.stats import (write_stats, write_csv)
-from trackview.climbs import (write_climbs)
-from trackview.summary import (write_summary)
-from trackview.calendar import (write_calendar, _CALENDAR_METRICS)
-from trackview.trend import (write_trend)
-from trackview.io import (USER_AGENT, SOURCES, write_html,
-                                DETAIL_MIN, DETAIL_MAX, write_gallery)
-from trackview.mapfig import (render, PROF_METRICS)
-from trackview.load import load_tracks
 from trackview.cli import main
 
 
