@@ -255,18 +255,23 @@ No source change.  Offline suite: **206 passed, 1 deselected.**
 
 **Phase 4.1 coverage is now complete for every pure leaf (2026-09-30).**  The five report
 builders (`calendar` / `trend` / `summary` / `climbs` / `stats`), the `helpers`
-metadata/grouping/naming leaves, the `--html` / Leaflet `io` writers and the `mapfig`
-aspect helper are each now backed by a dedicated offline test file -- 122 tests in all,
-plus the pre-existing `test_geometry` / `test_parse_helpers` / `test_filters` /
-`test_load_tracks` / `test_fit_to_gpx` / `test_dry_run` leaves (the suite now stands at
-**206 passed, 1 deselected**, the one deselected being the `network`+`slow` render smoke
-test).  The three remaining modules have no *dedicated* file but are not untested: `load`
-(the `--ext`-heavy reader) is exercised indirectly by `test_load_tracks`; `config` (a few
-plain constants) and the `cli` wiring (covered by `test_dry_run`'s `run_main`) carry no
-pure logic worth a leaf; the heavy `mapfig.render` orchestrator is the `@pytest.mark.slow`
-figure path.  This closes the "add unit tests for each module" / "improve test coverage"
-task for the pure leaves; the integration + mock-dependency tasks are met by the existing
-`test_dry_run` (`run_main`) and the `io` CDN-path leaf.
+metadata/grouping/naming leaves, the `--html` / Leaflet `io` writers, the `mapfig`
+aspect helper `fit_aspect` and the `config` constants are each now backed by a dedicated
+offline test file -- the last, `tests/test_config.py` (5 tests), locks the run-time
+directory layout and the two magic numbers (`DECIMATE_M` / `PI_R`) -- guarding the one
+value-affecting edit the config constants made when they moved from the repo-root
+monolith, the one-level `.parent.parent` shift that keeps the four dirs resolving to the
+repo-root `gpx` / `output` / `stats` / `tiles`.  Together with the pre-existing
+`test_geometry` / `test_parse_helpers` / `test_filters` / `test_load_tracks` /
+`test_fit_to_gpx` / `test_dry_run` leaves, the suite now stands at **211 passed,
+1 deselected** (the one deselected being the `network`+`slow` render smoke test).  The
+`load` reader needs no dedicated file -- its single `load_tracks` function is already
+covered by `test_load_tracks` -- and the only modules left without a dedicated file are
+the `cli` wiring (covered by `test_dry_run`'s `run_main`) and the heavy `mapfig.render`
+orchestrator (the `@pytest.mark.slow` figure path); neither carries pure logic worth a
+standalone leaf.  This closes the "add unit tests for each module" / "improve test
+coverage" task for every pure leaf; the integration + mock-dependency tasks are met by
+the existing `test_dry_run` (`run_main`) and the `io` CDN-path leaf.
 
 ## Phase 5: Documentation (Ongoing)
 
@@ -503,6 +508,27 @@ If the refactoring becomes too complex:
     delete the re-export bridge -- `trackview/__init__.py` (the importlib monolith mirror) is replaced by an
      *empty* init, so `trackview` stays a regular package the submodules import directly, with no monolith names
     re-exported.
+
+53. ✅ Add pure, offline unit tests for every untested *report builder* (`tests/test_calendar.py`
+    / `test_trend.py` / `test_summary.py` / `test_climbs.py` / `test_stats.py`, 52 tests) --
+    the first leaf of Phase 4/4.1 (2026-09-30); the `test_climbs` leaf exposed + fixed an
+    off-by-one in `trackview/climbs._ride_climbs`
+54. ✅ Add `tests/test_helpers.py` (30 tests) -- the metadata / grouping / naming leaves
+    (`_device_type` / `_sport_type` / `_device_label` / `_device_groups` / `_match_meta` /
+    `_top_key` / `_safe_filename` / `_short_label`); exposed + fixed a doc drift in
+    `_match_meta` (Phase 4/4.1, 2026-09-30)
+55. ✅ Add `tests/test_io.py` (17 tests) -- the `--html` / Leaflet writers, driven through the
+    `inline=False` CDN path so the suite stays offline (the "mock external dependencies" task);
+    then `tests/test_mapfig.py` (6 tests) for the pure `fit_aspect` bbox-aspect helper (Phase
+    4/4.1, 2026-09-30) -- with these, every *pure* module carries a dedicated offline test
+56. ✅ Add `tests/test_config.py` (5 tests -- the `config` constants: the four run-time
+    directories share one repo-root parent, the `gpx`/`output`/`stats`/`tiles` names, and the
+     `DECIMATE_M` / `PI_R` magic numbers, guarding the one-level `.parent.parent` shift) to close
+    out the last pure-constants module; the `load` reader needs no dedicated file (its single
+      `load_tracks` is already covered by `test_load_tracks`), and `cli` (the `main` wiring) stays
+    covered by `test_dry_run`'s `run_main` with the heavy `mapfig.render` by the `@pytest.mark.slow`
+      `test_render_smoke` -- so Phase 4/4.1 is complete for every pure leaf (2026-09-30).  Offline
+    suite: **211 passed, 1 deselected.**
 
 ### Detailed Next Steps for Helper Functions Module:
 
@@ -1192,36 +1218,43 @@ CDN path so the suite stays offline (the "mock external dependencies" task -- th
 is never fetched); no source change.  A `mapfig` geometry leaf (`tests/test_mapfig.py`,
 6 tests) then covered `fit_aspect` -- the one pure, figure-free helper in the render
 module (it grows a bbox to the figure's aspect so the map stays un-letterboxed); no
-source change.  That leaf closed out every pure module: the five report builders, the
-`helpers` leaves, the `io` writers and the `mapfig` aspect helper are each backed by a
-dedicated offline test file (122 tests); the only remaining modules -- `load` (exercised
-indirectly by `test_load_tracks`), the trivial `config` constants and the `cli` wiring
-(`test_dry_run`'s `run_main`) -- carry no pure leaf worth a file, and the heavy
-`mapfig.render` is the `@pytest.mark.slow` figure path.  Offline suite: **206 passed,
-1 deselected.**
+source change.  A final `config` leaf (`tests/test_config.py`, 5 tests) then closed out the
+last pure-constants module: it locks the run-time directory layout and the two magic numbers
+-- the four dirs share one repo-root parent (the `gpx` / `output` / `stats` / `tiles` names)
+and `DECIMATE_M` / `PI_R` hold their values -- guarding the one value-affecting edit the
+constants made when they moved from the repo-root monolith, the one-level `.parent.parent`
+shift that keeps the dirs resolving to the repo root.  The `load` reader needs no dedicated
+file: its single `load_tracks` is already covered by `test_load_tracks`.  No source change.
+Every pure module now carries a dedicated offline test; the only remaining modules -- the
+`cli` wiring (`test_dry_run`'s `run_main`) and the heavy `mapfig.render` (the
+`@pytest.mark.slow` figure path) -- carry no pure leaf worth a standalone file.  Offline
+suite: **211 passed, 1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
 **Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves (every pure module
 now carries a dedicated offline test: the report builders, the helpers, the `--html` /
-Leaflet export, the map-figure aspect helper, and the config constants).**
+Leaflet export, the map-figure aspect helper, and the config constants -- `cli` stays
+integration-covered via `run_main`, `mapfig.render` is the `slow` figure path).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
 CLI).  Phase 4/4.1 has added pure, offline unit tests for every previously-untested pure
 module -- the five report builders `calendar` / `trend` / `summary` / `climbs` / `stats`
 (`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
 `test_stats.py`, 52 tests), the `helpers` metadata / grouping / naming leaves
 (`tests/test_helpers.py`, 30 tests), the `--html` / Leaflet writers (`tests/test_io.py`,
-17 tests), the `mapfig` aspect helper `fit_aspect` (`tests/test_mapfig.py`, 6 tests)
-and the `config` constants (`tests/test_config.py`, 1 test -- an import + the
-`INPUT_DIR` / `OUTPUT_DIR` / `TILES_DIR` / `STATS_DIR` / `DEFAULT_FORMAT` defaults)
--- and fixed two real defects the new tests exposed: the off-by-one in
-`trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`) and a doc
-drift in `trackview/helpers._match_meta` (the filter is an exact, case-insensitive
+17 tests), the `mapfig` aspect helper `fit_aspect` (`tests/test_mapfig.py`, 6 tests) and the
+`config` constants (`tests/test_config.py`, 5 tests -- the four run-time directories share
+one repo-root parent and `DECIMATE_M` / `PI_R` hold their values, guarding the one-level
+`.parent.parent` shift) -- and fixed two real defects the new tests exposed: the off-by-one
+in `trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`) and a
+doc drift in `trackview/helpers._match_meta` (the filter is an exact, case-insensitive
 `casefold()` match, not "whitespace-trimmed" as its docstring claimed).  The `io` leaf was
 driven through the `inline=False` CDN path so the suite stayed offline (the "mock external
-dependencies" task -- the Leaflet library is never fetched).  Offline suite: **206 passed,
-1 deselected.**  Remaining modules without a dedicated test file: `load` (the `--ext`-heavy
-reader, exercised indirectly) and the heavy `render` orchestrator (the `@pytest.mark.slow`
-figure render in `test_render_smoke`), plus the wiring in `cli`.
+dependencies" task -- the Leaflet library is never fetched).  The `load` reader needs no
+dedicated file -- its single `load_tracks` is already covered by `test_load_tracks`.
+Offline suite: **211 passed, 1 deselected.**  Every pure module now carries a dedicated
+offline test; the only modules without a dedicated file -- the `cli` wiring (covered by
+`test_dry_run`'s `run_main`) and the heavy `render` orchestrator (the `@pytest.mark.slow`
+figure render in `test_render_smoke`) -- carry no pure leaf worth a standalone file.
 
