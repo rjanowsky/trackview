@@ -108,7 +108,7 @@ def _device_groups(tracks) -> list[tuple[str, list]]:
 
 def _match_meta(t, device=None, sport=None) -> bool:
     """True when a ride passes the active --device/--sport filter.  Each active filter
-    is an exact, case-insensitive, whitespace-trimmed match on the ride's own 'Device:' /
+    is an exact, case-insensitive match on the ride's own 'Device:' /
     'Sport:' value (the same <desc> line _device_type / _sport_type read), so a ride
     missing that line fails the filter (never guessed, as an undated ride under
     --since/--until).  With no active filter every ride passes."""

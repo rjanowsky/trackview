@@ -209,7 +209,22 @@ only under `show_ext`, the `Device` column always closing), the per-ride cells (
 telemetry-free ride shows a `"-"`), the per-device-group Summary totals (point-weighted
 averages), and the CSV's decimal-normalisation (no thousands grouping) + the default
 `;` vs an explicit `,` delimiter.  No source change: the writers are already correct.
-The offline suite now stands at 153 passed, 1 deselected.
+The offline suite stood at 153 passed, 1 deselected.
+
+**Plus a `helpers` leaf + one doc-drift fix (2026-09-30).**  `tests/test_helpers.py`
+(30 tests) covers the metadata / grouping / naming leaves not yet tested elsewhere
+(the date / parse helpers live in `test_parse_helpers`; `_select_top` / `_filter_by_meta`
+/ `_list_rides` in `test_geometry` / `test_filters` / `test_dry_run`): `_device_type` /
+`_sport_type` (the `<desc>` "Device:" / "Sport:" lines, trimmed, `None` when absent),
+`_device_label` (`"unknown"` for a plain track), `_device_groups` (first-seen
+`(device, [rides])` grouping, an unnamed ride in its own `unknown` group), `_match_meta`
+(a ride's pass/fail on a `--device`/`--sport` filter), `_top_key` (the `km` / `gain` /
+`recent` ranking value; an undated ride ranks oldest), `_safe_filename` (unsafe chars ->
+`_`, edge `.`/`_` stripped, blank -> `"track"`), and `_short_label` (a `_title_name`-
+rewritten, width-truncated, ellipsised colourbar label).  The `_match_meta` test exposed
+a doc drift: the source docstring called the filter "whitespace-trimmed", but the
+`casefold()` compare is exact -- the docstring was corrected to "exact, case-insensitive
+match".  Offline suite: **183 passed, 1 deselected.**
 
 ## Phase 5: Documentation (Ongoing)
 
@@ -1123,19 +1138,29 @@ behaviour-preserving (0 differing climbs / 0 crashes across 40 rides).  The stat
 (`_stats_columns` / `write_stats` / `write_csv`) built bare ride dicts and asserted the
 shared column list (the `--ext` block spliced in only under `show_ext`), the per-device
 Summary totals, and the CSV's decimal-normalisation + `;`/`,` delimiter -- no source change.
-Offline suite: **153 passed, 1 deselected.**
+A `helpers` leaf (`tests/test_helpers.py`, 30 tests) then covered the metadata / grouping /
+naming leaves not yet tested -- `_device_type` / `_sport_type` / `_device_label` /
+`_device_groups` / `_match_meta` / `_top_key` / `_safe_filename` / `_short_label` -- and
+exposed a doc drift (`_match_meta`'s docstring said "whitespace-trimmed" but the
+`casefold()` compare is exact; the docstring was corrected to "exact, case-insensitive
+match").  Offline suite: **183 passed, 1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: **Phase 1 complete; Phase 4/4.1 in progress (all pure report builders now covered).**
+**Status**: **Phase 1 complete; Phase 4/4.1 in progress (every pure report builder + the
+helpers leaves now covered).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
-CLI).  Phase 4/4.1 has added pure, offline unit tests for the five previously-untested report
-modules -- `calendar` / `trend` / `summary` / `climbs` / `stats`
+CLI).  Phase 4/4.1 has added pure, offline unit tests for every previously-untested pure
+module -- the five report builders `calendar` / `trend` / `summary` / `climbs` / `stats`
 (`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
-`test_stats.py`, 52 new tests) -- and fixed a real off-by-one the climbs test exposed in
-`trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`).  Offline
-suite: **153 passed, 1 deselected.**  Remaining modules without a dedicated test file:
-`load` / `mapfig` (the former is the `--ext`-heavy reader exercised indirectly; the latter
-is the `@pytest.mark.slow` figure render), plus the wiring in `helpers` / `cli` / `config`.
+`test_stats.py`, 52 tests) and the `helpers` metadata / grouping / naming leaves
+(`tests/test_helpers.py`, 30 tests) -- and fixed two real defects the new tests exposed:
+the off-by-one in `trackview/climbs._ride_climbs` (the run end clamps to
+`e = min(k + 1, n - 1)`) and a doc drift in `trackview/helpers._match_meta` (the filter is
+an exact, case-insensitive `casefold()` match, not "whitespace-trimmed" as its docstring
+claimed).  Offline suite: **183 passed, 1 deselected.**  Remaining modules without a
+dedicated test file: `load` / `mapfig` (the former is the `--ext`-heavy reader exercised
+indirectly; the latter is the `@pytest.mark.slow` figure render), plus the wiring in `cli`
+/ `config`.
 
