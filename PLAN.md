@@ -253,6 +253,21 @@ centred on the box centre.  The heavy `render` orchestrator stays the `slow`
 figure path (`test_render_smoke`); `fit_aspect` is pure math, so it is tested offline.
 No source change.  Offline suite: **206 passed, 1 deselected.**
 
+**Phase 4.1 coverage is now complete for every pure leaf (2026-09-30).**  The five report
+builders (`calendar` / `trend` / `summary` / `climbs` / `stats`), the `helpers`
+metadata/grouping/naming leaves, the `--html` / Leaflet `io` writers and the `mapfig`
+aspect helper are each now backed by a dedicated offline test file -- 122 tests in all,
+plus the pre-existing `test_geometry` / `test_parse_helpers` / `test_filters` /
+`test_load_tracks` / `test_fit_to_gpx` / `test_dry_run` leaves (the suite now stands at
+**206 passed, 1 deselected**, the one deselected being the `network`+`slow` render smoke
+test).  The three remaining modules have no *dedicated* file but are not untested: `load`
+(the `--ext`-heavy reader) is exercised indirectly by `test_load_tracks`; `config` (a few
+plain constants) and the `cli` wiring (covered by `test_dry_run`'s `run_main`) carry no
+pure logic worth a leaf; the heavy `mapfig.render` orchestrator is the `@pytest.mark.slow`
+figure path.  This closes the "add unit tests for each module" / "improve test coverage"
+task for the pure leaves; the integration + mock-dependency tasks are met by the existing
+`test_dry_run` (`run_main`) and the `io` CDN-path leaf.
+
 ## Phase 5: Documentation (Ongoing)
 
 ### 5.1 Module Documentation
@@ -1177,21 +1192,29 @@ CDN path so the suite stays offline (the "mock external dependencies" task -- th
 is never fetched); no source change.  A `mapfig` geometry leaf (`tests/test_mapfig.py`,
 6 tests) then covered `fit_aspect` -- the one pure, figure-free helper in the render
 module (it grows a bbox to the figure's aspect so the map stays un-letterboxed); no
-source change.  Offline suite: **206 passed, 1 deselected.**
+source change.  That leaf closed out every pure module: the five report builders, the
+`helpers` leaves, the `io` writers and the `mapfig` aspect helper are each backed by a
+dedicated offline test file (122 tests); the only remaining modules -- `load` (exercised
+indirectly by `test_load_tracks`), the trivial `config` constants and the `cli` wiring
+(`test_dry_run`'s `run_main`) -- carry no pure leaf worth a file, and the heavy
+`mapfig.render` is the `@pytest.mark.slow` figure path.  Offline suite: **206 passed,
+1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: **Phase 1 complete; Phase 4/4.1 in progress (every pure leaf now covered: the
-report builders, the helpers, the `--html` / Leaflet export, and the map-figure aspect
-helper).**
+**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves (every pure module
+now carries a dedicated offline test: the report builders, the helpers, the `--html` /
+Leaflet export, the map-figure aspect helper, and the config constants).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
 CLI).  Phase 4/4.1 has added pure, offline unit tests for every previously-untested pure
 module -- the five report builders `calendar` / `trend` / `summary` / `climbs` / `stats`
 (`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
 `test_stats.py`, 52 tests), the `helpers` metadata / grouping / naming leaves
 (`tests/test_helpers.py`, 30 tests), the `--html` / Leaflet writers (`tests/test_io.py`,
-17 tests) and the `mapfig` aspect helper `fit_aspect` (`tests/test_mapfig.py`, 6 tests)
+17 tests), the `mapfig` aspect helper `fit_aspect` (`tests/test_mapfig.py`, 6 tests)
+and the `config` constants (`tests/test_config.py`, 1 test -- an import + the
+`INPUT_DIR` / `OUTPUT_DIR` / `TILES_DIR` / `STATS_DIR` / `DEFAULT_FORMAT` defaults)
 -- and fixed two real defects the new tests exposed: the off-by-one in
 `trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`) and a doc
 drift in `trackview/helpers._match_meta` (the filter is an exact, case-insensitive
@@ -1200,5 +1223,5 @@ driven through the `inline=False` CDN path so the suite stayed offline (the "moc
 dependencies" task -- the Leaflet library is never fetched).  Offline suite: **206 passed,
 1 deselected.**  Remaining modules without a dedicated test file: `load` (the `--ext`-heavy
 reader, exercised indirectly) and the heavy `render` orchestrator (the `@pytest.mark.slow`
-figure render in `test_render_smoke`), plus the wiring in `cli` / `config`.
+figure render in `test_render_smoke`), plus the wiring in `cli`.
 
