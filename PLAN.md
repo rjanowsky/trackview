@@ -244,6 +244,15 @@ the "no ride has a route to plot." note, an unknown `--style` falls back to OSM)
 source change: the writers are already correct.  Offline suite: **200 passed, 1
 deselected.**
 
+**Plus a `mapfig` geometry leaf (2026-09-30).**  `tests/test_mapfig.py` (6 tests)
+covers `trackview/mapfig.fit_aspect` -- the one pure, figure-free helper in the
+render module: it grows a `(west, south, east, north)` bbox so its width:height
+matches the figure's `aspect_wh` (a square `FIGURE_IN` keeps the map un-letterboxed),
+padding east/west for a too-narrow box and north/south for a too-wide one, always
+centred on the box centre.  The heavy `render` orchestrator stays the `slow`
+figure path (`test_render_smoke`); `fit_aspect` is pure math, so it is tested offline.
+No source change.  Offline suite: **206 passed, 1 deselected.**
+
 ## Phase 5: Documentation (Ongoing)
 
 ### 5.1 Module Documentation
@@ -1165,26 +1174,31 @@ match").  An `io` leaf (`tests/test_io.py`, 17 tests) then covered the `--html` 
 writers (`_html_escape` / `_ride_feature` / `_tracks_geojson` / `_leaflet_document` /
 `_load_leaflet` / `write_html`) over hand-built ride dicts, driven through the `inline=False`
 CDN path so the suite stays offline (the "mock external dependencies" task -- the library
-is never fetched); no source change.  Offline suite: **200 passed, 1 deselected.**
+is never fetched); no source change.  A `mapfig` geometry leaf (`tests/test_mapfig.py`,
+6 tests) then covered `fit_aspect` -- the one pure, figure-free helper in the render
+module (it grows a bbox to the figure's aspect so the map stays un-letterboxed); no
+source change.  Offline suite: **206 passed, 1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
 **Status**: **Phase 1 complete; Phase 4/4.1 in progress (every pure leaf now covered: the
-report builders, the helpers, and the `--html` / Leaflet export).**
+report builders, the helpers, the `--html` / Leaflet export, and the map-figure aspect
+helper).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
 CLI).  Phase 4/4.1 has added pure, offline unit tests for every previously-untested pure
 module -- the five report builders `calendar` / `trend` / `summary` / `climbs` / `stats`
 (`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
 `test_stats.py`, 52 tests), the `helpers` metadata / grouping / naming leaves
-(`tests/test_helpers.py`, 30 tests) and the `--html` / Leaflet writers (`tests/test_io.py`,
-17 tests) -- and fixed two real defects the new tests exposed: the off-by-one in
+(`tests/test_helpers.py`, 30 tests), the `--html` / Leaflet writers (`tests/test_io.py`,
+17 tests) and the `mapfig` aspect helper `fit_aspect` (`tests/test_mapfig.py`, 6 tests)
+-- and fixed two real defects the new tests exposed: the off-by-one in
 `trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`) and a doc
 drift in `trackview/helpers._match_meta` (the filter is an exact, case-insensitive
 `casefold()` match, not "whitespace-trimmed" as its docstring claimed).  The `io` leaf was
 driven through the `inline=False` CDN path so the suite stayed offline (the "mock external
-dependencies" task -- the Leaflet library is never fetched).  Offline suite: **200 passed,
-1 deselected.**  Remaining modules without a dedicated test file: `load` / `mapfig` (the
-former is the `--ext`-heavy reader exercised indirectly; the latter is the
-`@pytest.mark.slow` figure render), plus the wiring in `cli` / `config`.
+dependencies" task -- the Leaflet library is never fetched).  Offline suite: **206 passed,
+1 deselected.**  Remaining modules without a dedicated test file: `load` (the `--ext`-heavy
+reader, exercised indirectly) and the heavy `render` orchestrator (the `@pytest.mark.slow`
+figure render in `test_render_smoke`), plus the wiring in `cli` / `config`.
 
