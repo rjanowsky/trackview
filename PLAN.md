@@ -184,7 +184,7 @@ The current `trackview.py` file contains:
 3. Add integration tests
 4. Ensure coverage
 
-**Done (2026-09-30) -- the report builders now carry pure, offline unit tests.**  Four
+**Done (2026-09-30) -- the report builders now carry pure, offline unit tests.**  Five
 leaves, one per untested report module (each a pure function over the already-parsed
 ride dicts / per-segment arrays, so the suite builds its fixtures by hand -- no GPX, no
 network, no figure):
@@ -192,6 +192,7 @@ network, no figure):
 - `tests/test_trend.py` (8 tests) -- `_trend_panels` / `_TREND_COLORS`
 - `tests/test_summary.py` (6 tests) -- `_summary_groups`
 - `tests/test_climbs.py` (9 tests) -- `_ride_climbs` / `_all_climbs`
+- `tests/test_stats.py` (19 tests) -- `_stats_columns` / `write_stats` / `write_csv`
 
 The `test_climbs` leaf exercised a climb that reaches the ride's *final* sample, which
 exposed a genuine off-by-one in `trackview/climbs._ride_climbs`: it indexed a phantom
@@ -201,7 +202,14 @@ Fixed by clamping the run end to `e = min(k + 1, n - 1)` (used for `len_km`, the
 sum range, `max_gr`, and `end_km`); verified behaviour-preserving -- 0 differing climbs
 and 0 crashes across 40 most-recent rides (those don't end on a climb, but the clamp
 only ever changes the phantom `cum[n]` case to the correct `cum[n - 1]`).
-The offline suite now stands at 134 passed, 1 deselected.
+The `test_stats` leaf builds bare ride dicts (distance / gain / duration + the
+`[sum, count]` telemetry pairs) by hand and points `write_stats` / `write_csv` at a
+`tmp_path`, asserting the shared column list (the `--ext` telemetry block spliced in
+only under `show_ext`, the `Device` column always closing), the per-ride cells (a
+telemetry-free ride shows a `"-"`), the per-device-group Summary totals (point-weighted
+averages), and the CSV's decimal-normalisation (no thousands grouping) + the default
+`;` vs an explicit `,` delimiter.  No source change: the writers are already correct.
+The offline suite now stands at 153 passed, 1 deselected.
 
 ## Phase 5: Documentation (Ongoing)
 
@@ -1104,24 +1112,30 @@ Monolith -> Package refactor (item [32]) closes.
 ---
 
 **Phase 4 / 4.1 -- report-builder unit tests + the `_ride_climbs` end-point fix (done, 2026-09-30).**
-The four report modules that had no test file each get a pure, offline test module:
+The report modules that had no test file each get a pure, offline test module:
 `tests/test_calendar.py` (10), `tests/test_trend.py` (8), `tests/test_summary.py` (6),
-`tests/test_climbs.py` (9).  Each tests the module's pure leaf over hand-built
-per-ride arrays (no GPX, no network, no figure).  The climbs leaf surfaced a real
-off-by-one in `trackview/climbs._ride_climbs` -- a run reaching the ride's last sample
-indexed a phantom `n`-th point (`cum[k + 1]` et al., when the last valid index is `n - 1`)
-and crashed `IndexError`; clamped to `e = min(k + 1, n - 1)`, verified behaviour-preserving
-(0 differing climbs / 0 crashes across 40 rides).  Offline suite: **134 passed, 1 deselected.**
+`tests/test_climbs.py` (9), `tests/test_stats.py` (19).  Each tests the module's pure leaf
+over hand-built per-ride arrays / dicts (no GPX, no network, no figure).  The climbs leaf
+surfaced a real off-by-one in `trackview/climbs._ride_climbs` -- a run reaching the ride's
+last sample indexed a phantom `n`-th point (`cum[k + 1]` et al., when the last valid index
+is `n - 1`) and crashed `IndexError`; clamped to `e = min(k + 1, n - 1)`, verified
+behaviour-preserving (0 differing climbs / 0 crashes across 40 rides).  The stats leaf
+(`_stats_columns` / `write_stats` / `write_csv`) built bare ride dicts and asserted the
+shared column list (the `--ext` block spliced in only under `show_ext`), the per-device
+Summary totals, and the CSV's decimal-normalisation + `;`/`,` delimiter -- no source change.
+Offline suite: **153 passed, 1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: **Phase 1 complete; Phase 4/4.1 in progress (report builders now covered).**
+**Status**: **Phase 1 complete; Phase 4/4.1 in progress (all pure report builders now covered).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
-CLI).  Phase 4/4.1 has added pure, offline unit tests for the four previously-untested report
-modules -- `calendar` / `trend` / `summary` / `climbs` (`tests/test_calendar.py` /
-`test_trend.py` / `test_summary.py` / `test_climbs.py`, 33 new tests) -- and fixed a real
-off-by-one the climbs test exposed in `trackview/climbs._ride_climbs` (the run end clamps to
-`e = min(k + 1, n - 1)`).  Offline suite: **134 passed, 1 deselected.**  Remaining pure-report
-modules without tests: `stats` / `load` / `mapfig` (plus `helpers` / `cli` / `config`).
+CLI).  Phase 4/4.1 has added pure, offline unit tests for the five previously-untested report
+modules -- `calendar` / `trend` / `summary` / `climbs` / `stats`
+(`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
+`test_stats.py`, 52 new tests) -- and fixed a real off-by-one the climbs test exposed in
+`trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`).  Offline
+suite: **153 passed, 1 deselected.**  Remaining modules without a dedicated test file:
+`load` / `mapfig` (the former is the `--ext`-heavy reader exercised indirectly; the latter
+is the `@pytest.mark.slow` figure render), plus the wiring in `helpers` / `cli` / `config`.
 
