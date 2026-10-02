@@ -57,15 +57,16 @@ def _ride_climbs(t, min_gr=CLIMB_MIN_GR, min_len_m=CLIMB_MIN_LEN,
             k += 1
              # run [j, k] spans points j..k+1: length from the cumulative km, the gain from
              # the positive elevation rise across it (the ascent of that climb)
-        len_km = cum[k + 1] - cum[j]
+        e = min(k + 1, n - 1)
+        len_km = cum[e] - cum[j]
         if len_km * 1000.0 >= min_len_m:
             gain_m = sum(max(0.0, (ele[j + 1] or 0.0) - (ele[j] or 0.0))
-                         for j2 in range(j, k + 1))
+                         for j2 in range(j, e))
             avg_gr = 100.0 * gain_m / (len_km * 1000.0) if len_km > 0 else 0.0
-            max_gr = float(np.nanmax(gs[j:k + 1]))
+            max_gr = float(np.nanmax(gs[j:e]))
             climbs.append({
                   "ride": t["name"], "device": t.get("device"),
-                  "start_km": cum[j], "end_km": cum[k + 1], "len_km": len_km,
+                  "start_km": cum[j], "end_km": cum[e], "len_km": len_km,
                   "gain_m": gain_m, "avg_gr": avg_gr, "max_gr": max_gr,
                   "score": gain_m * avg_gr,
              })
