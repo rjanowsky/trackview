@@ -226,6 +226,24 @@ a doc drift: the source docstring called the filter "whitespace-trimmed", but th
 `casefold()` compare is exact -- the docstring was corrected to "exact, case-insensitive
 match".  Offline suite: **183 passed, 1 deselected.**
 
+**Plus an `io` leaf -- the self-contained HTML / Leaflet export (2026-09-30).**
+`tests/test_io.py` (17 tests) covers the `--html` writers that build the single-file
+interactive map from the already-parsed ride dicts -- pure over the per-ride `(lat, lon)`
+arrays and strings, no figure, and (driven through the `inline=False` / CDN path) no
+network, so the suite stays offline: `_html_escape` (the HTML-significant chars in a ride
+name), `_ride_feature` (one ride as a GeoJSON LineString feature, coords `[lon, lat]`
+rounded to 5 decimals, the `name`/`dist_km`/`gain_m`/`duration_s`/`color` properties, a
+missing `duration_s` -> `0.0`), `_tracks_geojson` (one feature per ride with >= 2 points,
+the `< 2`-point and no-`ll` rides dropped), `_leaflet_document` (a `<!DOCTYPE html>` shell
+with the HTML-escaped `<title>` and every `__TOKEN__` filled -- the tile URL and the
+attribution reaching the page through the app script's JSON-escaped tokens, not bare
+literals), `_load_leaflet(inline=False)` (the offline CDN `(<link>/<script>, "cdn")`
+ref -- the "mock external dependencies" leaf, the library never fetched), and `write_html`
+(cdn mode writes a self-contained file, an empty route / no tracks writes nothing + prints
+the "no ride has a route to plot." note, an unknown `--style` falls back to OSM).  No
+source change: the writers are already correct.  Offline suite: **200 passed, 1
+deselected.**
+
 ## Phase 5: Documentation (Ongoing)
 
 ### 5.1 Module Documentation
@@ -1143,24 +1161,30 @@ naming leaves not yet tested -- `_device_type` / `_sport_type` / `_device_label`
 `_device_groups` / `_match_meta` / `_top_key` / `_safe_filename` / `_short_label` -- and
 exposed a doc drift (`_match_meta`'s docstring said "whitespace-trimmed" but the
 `casefold()` compare is exact; the docstring was corrected to "exact, case-insensitive
-match").  Offline suite: **183 passed, 1 deselected.**
+match").  An `io` leaf (`tests/test_io.py`, 17 tests) then covered the `--html` / Leaflet
+writers (`_html_escape` / `_ride_feature` / `_tracks_geojson` / `_leaflet_document` /
+`_load_leaflet` / `write_html`) over hand-built ride dicts, driven through the `inline=False`
+CDN path so the suite stays offline (the "mock external dependencies" task -- the library
+is never fetched); no source change.  Offline suite: **200 passed, 1 deselected.**
 
 ---
 
 **Last Updated**: 2026-09-30
-**Status**: **Phase 1 complete; Phase 4/4.1 in progress (every pure report builder + the
-helpers leaves now covered).**
+**Status**: **Phase 1 complete; Phase 4/4.1 in progress (every pure leaf now covered: the
+report builders, the helpers, and the `--html` / Leaflet export).**
 The monolith-to-package refactor (item [32]) is closed (bridge deleted, 0-byte init, thin
 CLI).  Phase 4/4.1 has added pure, offline unit tests for every previously-untested pure
 module -- the five report builders `calendar` / `trend` / `summary` / `climbs` / `stats`
 (`tests/test_calendar.py` / `test_trend.py` / `test_summary.py` / `test_climbs.py` /
-`test_stats.py`, 52 tests) and the `helpers` metadata / grouping / naming leaves
-(`tests/test_helpers.py`, 30 tests) -- and fixed two real defects the new tests exposed:
-the off-by-one in `trackview/climbs._ride_climbs` (the run end clamps to
-`e = min(k + 1, n - 1)`) and a doc drift in `trackview/helpers._match_meta` (the filter is
-an exact, case-insensitive `casefold()` match, not "whitespace-trimmed" as its docstring
-claimed).  Offline suite: **183 passed, 1 deselected.**  Remaining modules without a
-dedicated test file: `load` / `mapfig` (the former is the `--ext`-heavy reader exercised
-indirectly; the latter is the `@pytest.mark.slow` figure render), plus the wiring in `cli`
-/ `config`.
+`test_stats.py`, 52 tests), the `helpers` metadata / grouping / naming leaves
+(`tests/test_helpers.py`, 30 tests) and the `--html` / Leaflet writers (`tests/test_io.py`,
+17 tests) -- and fixed two real defects the new tests exposed: the off-by-one in
+`trackview/climbs._ride_climbs` (the run end clamps to `e = min(k + 1, n - 1)`) and a doc
+drift in `trackview/helpers._match_meta` (the filter is an exact, case-insensitive
+`casefold()` match, not "whitespace-trimmed" as its docstring claimed).  The `io` leaf was
+driven through the `inline=False` CDN path so the suite stayed offline (the "mock external
+dependencies" task -- the Leaflet library is never fetched).  Offline suite: **200 passed,
+1 deselected.**  Remaining modules without a dedicated test file: `load` / `mapfig` (the
+former is the `--ext`-heavy reader exercised indirectly; the latter is the
+`@pytest.mark.slow` figure render), plus the wiring in `cli` / `config`.
 
