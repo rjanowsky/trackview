@@ -78,6 +78,21 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
            show_ext: bool = False, split: bool = False, profile: bool = False,
            grade_cap: float | None = None, scale: bool = True,
            heat: bool = False, labels: bool = False) -> None:
+    """Build and save the ride-map figure (plus its `--profile` card / `--heat` overlay).
+
+    The top of the figure pipeline: it fits the tracks' combined bbox to the square
+    figure (`fit_aspect`, so the basemap is never letter-boxed), fetches the basemap
+    (`_load_basemap`, tried in fallback order over `style` then the rest of `SOURCES`),
+    and overlays each route with a colour that follows `color_by` -- 'elev' (viridis),
+    'grade' (a grey-centred diverging ramp, one per ride when the cap is auto),
+    'speed'/'power' (a telemetry ramp that falls back to a flat per-track colour when the
+    point data is absent), or 'flat' (one bold hue per track).  `--profile` swaps the
+    single map for a ride card (the elevation + grade silhouette plus a slim telemetry
+    mini-panel each for the power/speed/hr/cadence the ride carries); `--heat` underlays
+    a 2-D "time on route" density.  It finishes with the colourbar / legend, the
+    distance / gain / duration / calories title (and the `--ext` avg-telemetry subtitle),
+    the scale bar, the attribution, and a save to `out_path`.  Returns without drawing
+    when `tracks` is empty."""
     if not tracks:
         print("No tracks to render.")
         return

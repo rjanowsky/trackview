@@ -288,6 +288,32 @@ the existing `test_dry_run` (`run_main`) and the `io` CDN-path leaf.
 2. Add examples
 3. Create user guide
 
+**Done (2026-10-18) -- documentation pass, no behaviour change.**  Module-level
+documentation was already in place (every `trackview/` submodule carries a module
+docstring stating its role and extraction provenance, "Extracted ... PLAN.md Phase X",
+added during Phases 1--3); this pass completed the two gaps and the API reference:
+
+* **Function-level docstrings** -- the last two of the 70 module functions still missing
+  one now have them, in the house style (role + behaviour prose): `trackview/cli.main`
+  (the CLI orchestrator that parses the flags, runs the filter sequence, and dispatches to
+  the writers) and `trackview/mapfig.render` (the map / ride-card / heat figure pipeline).
+  A quick AST scan now reports **every module and every function carries a docstring**.
+* **Package docstring** -- the 0-byte `trackview/__init__.py` now carries a short package
+  docstring (the tool's one-line purpose, that it is a regular re-export-free package whose
+  submodules are imported by full name, and a pointer to `API.md`); it re-exports nothing,
+  so the package stays a namespace for the extracted leaves, not a second monolith.
+* **API reference** -- a new top-level `API.md` catalogues the module map: for each of the
+  13 modules its role, the constants it holds, and its functions (signature + first docstring
+  line), plus the programmatic entry points (`load_tracks` -> the `write_*` reports /
+  `render` / `write_gallery`), the acyclic dependency direction, and an honest note that the
+  leading-underscore names are the carried-over monolith helpers that *are* the cross-module
+  API (not Python's "private" signal -- there is no `__all__`).  Usage examples stay in
+  `README.md` (the full **Usage** section), which `API.md` points to rather than duplicating.
+
+No code path changed (docstrings only), so the offline suite is unchanged:
+**211 passed, 1 deselected.**  `API.md` is a top-level doc (not shipped -- the build
+declares `packages = ["trackview"]`, so it ships only the `trackview/` package).
+
 ## Phase 6: Build System (Low Priority)
 
 ### 6.1 Package Configuration
@@ -1255,7 +1281,9 @@ suite: **211 passed, 1 deselected.**
 ---
 
 **Last Updated**: 2026-10-18
-**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves; Phase 6 (build
+**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves; Phase 5.1 (docs)
+closed -- every module and function carries a docstring, the 0-byte `__init__.py` gained a
+package docstring, and a top-level `API.md` catalogs the module map; Phase 6 (build
 system) closed -- the build config lives in `pyproject.toml` (PEP 518/621: metadata + deps +
 the `trackview = trackview.cli:main` console entry point), verified by a real PEP 517 build
 (a clean wheel shipping only `trackview/`).  Phase 4/4.1 closed for the pure leaves (every pure module
@@ -1282,4 +1310,12 @@ Offline suite: **211 passed, 1 deselected.**  Every pure module now carries a de
 offline test; the only modules without a dedicated file -- the `cli` wiring (covered by
 `test_dry_run`'s `run_main`) and the heavy `render` orchestrator (the `@pytest.mark.slow`
 figure render in `test_render_smoke`) -- carry no pure leaf worth a standalone file.
+Phase 5.1 (docs) closed the documentation pass (a docstrings-only change, so the offline
+suite is unchanged at 211 passed, 1 deselected): the two last functions without one
+(`cli.main`, `mapfig.render`) now carry one, the 0-byte `trackview/__init__.py` gained a
+short package docstring (still re-exporting nothing), and a new top-level `API.md` catalogs
+the module map -- role, constants and functions per module, the programmatic entry points,
+the acyclic dependency direction, and a note that the leading-underscore helpers are the
+carried-over monolith names that *are* the cross-module API (no `__all__`).  Usage examples
+stay in `README.md` (its full **Usage** section), which `API.md` points to.
 

@@ -825,3 +825,30 @@ Build & packaging
      `trackview = trackview.cli:main`, and `METADATA` carries the four core deps + the two
      extras.  No behaviour changed; offline suite: 211 passed, 1 deselected.
 
+
+Documentation
+[34] [done] Complete the documentation pass (PLAN Phase 5.1): comprehensive module
+     documentation, function-level docstrings, usage examples and an API reference.
+     Module-level docs were already in place (every trackview/ submodule carries a
+     module docstring stating its role + extraction provenance, "Extracted ... PLAN.md
+     Phase X", from Phases 1--3); this pass closed the two remaining gaps and added the
+     API reference -- a docstrings-only change, no code path touched.
+     DONE (2026-10-18): the last two of the 70 module functions without a docstring now
+     carry one, in the house style (role + behaviour prose) -- trackview/cli.main (the
+     CLI orchestrator: parse the flags, run the filter sequence, dispatch to the writers)
+     and trackview/mapfig.render (the map / ride-card / heat figure pipeline); a quick
+     AST scan now reports every module and every function carries a docstring.  The
+     0-byte trackview/__init__.py gained a short package docstring (the tool's one-line
+     purpose, that it is a regular re-export-free package whose submodules are imported by
+     full name, a pointer to API.md); it still re-exports nothing, so the package stays a
+     namespace for the extracted leaves, not a second monolith.  A new top-level API.md
+     catalogs the module map: for each of the 13 modules its role, the constants it holds
+     and its functions (signature + first docstring line), the programmatic entry points
+     (load_tracks -> the write_* reports / render / write_gallery), the acyclic dependency
+     direction, and an honest note that the leading-underscore helpers are the
+     carried-over monolith names that *are* the cross-module API (there is no __all__, so
+     the module boundaries -- not the _ -- are the interface).  Usage examples stay in
+     README.md (its full Usage section), which API.md points to rather than duplicating.
+     API.md is a top-level doc, not shipped (the build declares packages = ["trackview"],
+     so it ships only the trackview/ package).  No behaviour changed; offline suite:
+     211 passed, 1 deselected.

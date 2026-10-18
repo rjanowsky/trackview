@@ -36,6 +36,19 @@ from trackview.load import load_tracks
 
 # --------------------------------- entry point --------------------------------
 def main() -> None:
+    """Parse the CLI and drive the render / stats / report pipeline.
+
+    The single orchestrator that turns the command line into trackview's outputs: it
+    builds the argparse surface (the `--gpx-dir` discovery, the `--since/--until`,
+    `--device/--sport` and `--top --by` filters, the `--list` dry-run, and the map /
+    stats / report flags), applies that filter sequence in order, and dispatches to the
+    leaf writers -- `render` (the map, its `--profile` ride card and `--heat` overlay),
+    the `write_*` reports (stats / climbs / summary / calendar / trend), the `--html`
+    export and the `--list` preview.  `--no-map` skips the basemap fetch and every
+    map-only flag yet still writes the pure-geometry reports; `--today` folds into
+    `--flat --since <today>` before anything reads the selection, so it composes with
+    every downstream filter.  Returns early (having fetched no basemap) when the filters
+    leave no tracks to render."""
     ap = argparse.ArgumentParser(
         description="Render GPX tracks from a folder onto a static map image "
                      "(PNG or PDF).")
