@@ -1,6 +1,50 @@
-# trackview has no packaging of its own; this file only configures the test
-# runner (pytest is already installed in .venv).  See the "Testing" section of
-# README.md and TODO.lst items [24]-[28].
+# Build metadata + test-runner config for trackview.
+#
+# This is the single source of truth for how the package is built, what it
+# depends on, and the `trackview` console entry point (PEP 518/621).  The legacy
+# `requirements.txt` keeps the same runtime deps as a plain `pip install -r`
+# convenience for the local `.venv`, and the two stay in sync.  See the "Setup"
+# and "Testing" sections of README.md and the Phase 6 notes in PLAN.md / TODO.lst.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trackview"
+version = "0.1.0"
+description = "Render every GPX track in a folder onto a static map (PNG/PDF), with a ride-log, climb ranking, a training trend, an activity calendar and a self-contained HTML/Leaflet map."
+readme = "README.md"
+requires-python = ">=3.10"
+# Core runtime: the trackview/ package's imports.  The versions mirror
+# requirements.txt (kept in sync).
+dependencies = [
+    "contextily>=1.7",    # raster basemap fetch (the map + gallery)
+    "gpxpy>=1.6",        # GPX parse (load_tracks)
+    "matplotlib>=3.8",   # the figures (map, profile card, trend, calendar)
+    "numpy>=1.24",       # per-segment grade / telemetry math
+]
+
+# fitparse is used only by the fit_to_gpx.py Garmin .fit converter (a top-level
+# script, not the trackview/ package): the core runtime never imports it, so it
+# is an optional extra rather than a hard dependency.
+[project.optional-dependencies]
+fit = ["fitparse>=1.2"]
+test = ["pytest"]
+
+# `pip install .` (or `pip install -e .`) drops a `trackview` command onto the
+# PATH that runs the CLI, the installed counterpart to `python trackview.py`
+# (the root launcher is a thin shim that re-enters this same main).
+[project.scripts]
+trackview = "trackview.cli:main"
+
+# Ship only the trackview/ package.  Declared explicitly so setuptools'
+# flat-layout auto-discovery does not also sweep in the root trackview.py
+# launcher or the data/script dirs (gpx/, output/, stats/, tiles/, fit/, gc/,
+# lib/, tools/).
+[tool.setuptools]
+packages = ["trackview"]
+
+# ---- test runner -------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

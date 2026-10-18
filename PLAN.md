@@ -304,6 +304,28 @@ the existing `test_dry_run` (`run_main`) and the `io` CDN-path leaf.
 2. Define dependencies
 3. Configure entry points
 
+**Done (2026-10-18) -- as `pyproject.toml`, not `setup.py`.**  The plan named `setup.py`, but
+the repo already held a `requirements.txt` and no build file, so a legacy `setup.py` would have
+sits alongside them as a third, out-of-sync source of truth.  The build config is therefore
+**PEP 518/621 in `pyproject.toml`** (the `[build-system]` + `[project]` blocks, backend
+`setuptools.build_meta`): the package metadata (name `trackview`, version `0.1.0`, a one-line
+`description`, `readme = "README.md"`, `requires-python = ">=3.10"`), the runtime
+`dependencies` (`contextily` / `gpxpy` / `matplotlib` / `numpy` -- the versions mirrored from
+`requirements.txt`, which stays as the `pip install -r` convenience), two optional extras
+(`fit = fitparse`, the `.fit` converter only; `test = pytest`), and the console entry point
+`[project.scripts] trackview = "trackview.cli:main"` -- the installed counterpart to
+`python trackview.py` (the root launcher re-enters this same `main`).  A `[tool.setuptools]
+packages = ["trackview"]` stops flat-layout auto-discovery sweeping the root `trackview.py`
+launcher or the data/script dirs (`gpx/` `output/` `stats/` `tiles/` `fit/` `gc/` `lib/`
+`tools/`) into the build.  Verified by a real PEP 517 build in a throwaway venv (`python -m
+build`): the sdist + wheel ship the `trackview/` submodules only (root `trackview.py` and every
+data dir excluded, confirmed from `top_level.txt` / `RECORD`), with `entry_points.txt` =
+`trackview = trackview.cli:main` and the four core deps + both extras in `METADATA`.  The same
+file also carries the pre-existing `[tool.pytest.ini_options]` (the `network` / `slow` markers
+and `testpaths`), so it is now the single source of truth for build *and* test-runner config.
+No behaviour changed and the main `.venv` was left untouched (the build ran isolated); offline
+suite: **211 passed, 1 deselected.**
+
 ## Implementation Strategy
 
 ### Approach
@@ -1232,8 +1254,11 @@ suite: **211 passed, 1 deselected.**
 
 ---
 
-**Last Updated**: 2026-09-30
-**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves (every pure module
+**Last Updated**: 2026-10-18
+**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves; Phase 6 (build
+system) closed -- the build config lives in `pyproject.toml` (PEP 518/621: metadata + deps +
+the `trackview = trackview.cli:main` console entry point), verified by a real PEP 517 build
+(a clean wheel shipping only `trackview/`).  Phase 4/4.1 closed for the pure leaves (every pure module
 now carries a dedicated offline test: the report builders, the helpers, the `--html` /
 Leaflet export, the map-figure aspect helper, and the config constants -- `cli` stays
 integration-covered via `run_main`, `mapfig.render` is the `slow` figure path).**

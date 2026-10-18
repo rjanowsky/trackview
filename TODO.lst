@@ -799,3 +799,29 @@ Refactoring
       end-to-end.  With the bridge gone there is no path left by which the monolith is pulled into the package, so
       the monolith->package refactor ([32]) closes -- **Phase 1 complete.**
 
+Build & packaging
+[33] [done] Add a build system (PLAN Phase 6.1): package metadata, dependency
+     management and a console entry point.  The plan named `setup.py`, but the repo
+     already held a `requirements.txt` and no build file, so a legacy `setup.py` would
+     sit as a third, out-of-sync source of truth -- the config is therefore PEP 518/621
+     in `pyproject.toml` (`[build-system]` + `[project]`, backend `setuptools.build_meta`):
+     metadata (name `trackview`, version `0.1.0`, a one-line description, `readme =
+     "README.md"`, `requires-python = ">=3.10"`), the runtime `dependencies` (contextily /
+     gpxpy / matplotlib / numpy -- the versions mirrored from `requirements.txt`, which
+     stays as the `pip install -r` convenience), two optional extras (`fit = fitparse`,
+     used only by the top-level `fit_to_gpx.py`, not the package; `test = pytest`), and
+     the console entry point `[project.scripts] trackview = "trackview.cli:main"` -- the
+     installed counterpart to `python trackview.py` (the root launcher re-enters this
+     same `main`).  A `[tool.setuptools] packages = ["trackview"]` stops flat-layout
+     auto-discovery sweeping the root `trackview.py` launcher or the data/script dirs
+     (gpx/ output/ stats/ tiles/ fit/ gc/ lib/ tools/) into the build; the same file also
+     carries the pre-existing `[tool.pytest.ini_options]` (`testpaths`, the `network` /
+     `slow` markers), so it is the single source of truth for build *and* test-runner
+     config.
+     DONE (2026-10-18): a real PEP 517 build (`python -m build`, in a throwaway venv so
+     the main `.venv` stayed untouched) produced a clean sdist + `trackview-0.1.0-
+     py3-none-any.whl`: `top_level.txt` / `RECORD` list only the `trackview/` submodules
+     (the root `trackview.py` and every data dir excluded), `entry_points.txt` =
+     `trackview = trackview.cli:main`, and `METADATA` carries the four core deps + the two
+     extras.  No behaviour changed; offline suite: 211 passed, 1 deselected.
+

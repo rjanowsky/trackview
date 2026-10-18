@@ -8,6 +8,11 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 
+# build artifacts (setuptools writes these into the source tree on `python -m build`)
+*.egg-info/
+build/
+dist/
+
 # personal ride data & regenerable outputs (not part of the tool)
 gpx/
 gc/

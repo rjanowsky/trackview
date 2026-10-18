@@ -22,6 +22,12 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
+The deps are also declared in `pyproject.toml` (PEP 621), kept in sync with
+`requirements.txt` (the `fit` converter's `fitparse` is an optional extra there).  A
+`pip install .` (or `pip install -e .`) additionally drops a `trackview` command onto the
+PATH -- the installed counterpart to `python trackview.py` (the root launcher is a thin shim
+that re-enters the same `main`).
+
 ## Testing
 
 `pytest` (already in `.venv`) runs the pure suite -- no network, no figures, so it
