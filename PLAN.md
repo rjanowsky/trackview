@@ -117,7 +117,7 @@ The current `trackview.py` file contains:
 3. Update imports in trackview.py
 4. Test with existing test suite
 
-## Phase 2: Class Structure (Medium Priority)
+## Phase 2: Class Structure (Not implemented -- decided 2026-10-18; was Medium Priority)
 
 ### 2.1 Track Classes
 
@@ -149,6 +149,43 @@ The current `trackview.py` file contains:
 2. Define class hierarchy
 3. Migrate rendering logic
 4. Update references in other modules
+
+**Not implemented -- decided 2026-10-18 (the functional design is the chosen final form).**
+Phase 2 is a structural refactor, not a feature: it would re-cast the functional design that
+Phase 1 just stabilised -- the ride *dicts* (`{"merc", "ele", "grade", "dist_km", ...}`)
+and the free functions -- into a class hierarchy (`Track` / `Point` / `LineString` /
+`Polygon` / `Feature` / `FeatureCollection`, and a `Visualization` base with
+`Map` / `Chart` / `Calendar` subclasses).  After the package reached a clean, fully-tested
+state, the decision was to *stop* here rather than move the opposite way from the
+extraction that got us there.  The reasons:
+
+1. **It would undo the stabilised form.** Phase 1's whole discipline was incremental,
+   behaviour-preserving extraction into acyclic leaves with no back-edges.  Replacing the
+   dict + free-function shape with a class model is a re-architecture in the reverse
+   direction -- high churn for a shape nothing downstream actually wants.
+2. **No consumer.** The public surface is one CLI (`main`) plus a handful of programmatic
+   entry points (`load_tracks` -> the `write_*` reports / `render` / `write_gallery`), and
+   `API.md` documents that surface.  Nothing -- in the code or in how the tool is used --
+   consumes a `Track` or `Visualization` object; the classes would add an indirection layer
+   with no caller behind it.
+3. **Cost against the test guarantee.** The offline suite (211 passed, 1 deselected) pins
+   the *current* functional contracts; a class migration would churn every module signature
+   and force a rewrite of the per-leaf tests Phase 4/4.1 established, for no new capability
+   -- eroding exactly the "no regressions" property the refactor would be trading for.
+4. **Speculative generality (YAGNI).** The `Visualization` / `MapVisualization` /
+   `ChartVisualization` / `CalendarVisualization` hierarchy anticipates a pluggable
+   visualization framework the tool does not have; the figures are built by focused,
+   clearly-named functions (`render`, `write_trend`, `write_calendar`, `write_climbs`, ...)
+   that already read well.  Introducing the hierarchy now would be adding structure for a
+   need that does not exist.
+5. **The gating condition was a precondition, not a mandate.** The plan's roadmap said
+   "Move to Phase 2 *once core modules are stable*" -- reaching stability (Phase 1 complete)
+   opens the option but does not commit to it, and a Medium-Priority, 1-2-week, Medium-effort
+   refactor is not worth it when the functional form is clean, documented and fully tested.
+
+The functional design is retained as-is; no new file (`track.py`, `visualization.py`) is
+created and no module is migrated.  Should a real consumer for an object model appear later,
+this can be revisited then.
 
 ## Phase 3: Configuration Management (Medium Priority)
 
@@ -273,7 +310,7 @@ standalone leaf.  This closes the "add unit tests for each module" / "improve te
 coverage" task for every pure leaf; the integration + mock-dependency tasks are met by
 the existing `test_dry_run` (`run_main`) and the `io` CDN-path leaf.
 
-## Phase 5: Documentation (Ongoing)
+## Phase 5: Documentation (Closed 2026-10-18)
 
 ### 5.1 Module Documentation
 
@@ -395,7 +432,8 @@ suite: **211 passed, 1 deselected.**
 - **Effort**: Medium
 
 ### Phase 5: Documentation
-- **Duration**: Ongoing
+- **Duration**: Ongoing -> closed 2026-10-18 (5.1 done; every module + function carries a
+  docstring, the package gained a docstring, `API.md` added -- see the 5.1 "Done" entry)
 - **Tasks**: Document modules
 - **Effort**: Low (can be parallelized)
 
@@ -1281,12 +1319,15 @@ suite: **211 passed, 1 deselected.**
 ---
 
 **Last Updated**: 2026-10-18
-**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves; Phase 5.1 (docs)
+**Status**: **Phase 1 complete; Phase 4/4.1 closed for the pure leaves; Phase 5 (docs)
 closed -- every module and function carries a docstring, the 0-byte `__init__.py` gained a
-package docstring, and a top-level `API.md` catalogs the module map; Phase 6 (build
+package docstring, and a top-level `API.md` catalogs the module map (the "(Ongoing)" labels
+on the phase heading and the Timeline Estimate were corrected to "closed"); Phase 6 (build
 system) closed -- the build config lives in `pyproject.toml` (PEP 518/621: metadata + deps +
 the `trackview = trackview.cli:main` console entry point), verified by a real PEP 517 build
-(a clean wheel shipping only `trackview/`).  Phase 4/4.1 closed for the pure leaves (every pure module
+(a clean wheel shipping only `trackview/`).  Phase 2 (class structure) is *not*
+implemented -- decided 2026-10-18: the functional dict + free-function design is the chosen
+final form (reasons in the Phase 2 section).  Phase 4/4.1 closed for the pure leaves (every pure module
 now carries a dedicated offline test: the report builders, the helpers, the `--html` /
 Leaflet export, the map-figure aspect helper, and the config constants -- `cli` stays
 integration-covered via `run_main`, `mapfig.render` is the `slow` figure path).**
@@ -1310,6 +1351,13 @@ Offline suite: **211 passed, 1 deselected.**  Every pure module now carries a de
 offline test; the only modules without a dedicated file -- the `cli` wiring (covered by
 `test_dry_run`'s `run_main`) and the heavy `render` orchestrator (the `@pytest.mark.slow`
 figure render in `test_render_smoke`) -- carry no pure leaf worth a standalone file.
+A closing plan pass (2026-10-18) fixed the two stale "(Ongoing)" status labels -- the
+Phase 5 heading and the matching Timeline Estimate entry, now "closed" -- and recorded the
+decision *not* to implement Phase 2 (class structure): the functional dict + free-function
+design is the chosen final form (no consumer for an object model, it would undo the
+Phase 1 stabilisation, and it would churn the fully-tested surface for no new capability),
+so no `track.py` / `visualization.py` is created.  This is a documentation / record-keeping
+change only -- no code path touched, offline suite unchanged at 211 passed, 1 deselected.
 Phase 5.1 (docs) closed the documentation pass (a docstrings-only change, so the offline
 suite is unchanged at 211 passed, 1 deselected): the two last functions without one
 (`cli.main`, `mapfig.render`) now carry one, the 0-byte `trackview/__init__.py` gained a

@@ -852,3 +852,22 @@ Documentation
      API.md is a top-level doc, not shipped (the build declares packages = ["trackview"],
      so it ships only the trackview/ package).  No behaviour changed; offline suite:
      211 passed, 1 deselected.
+
+Planning & decisions
+[35] [done] Close out the PLAN: fix the stale status labels and record the decision not
+     to implement Phase 2 (Class Structure).  A doc/record-keeping pass -- no code path
+     touched, offline suite unchanged at 211 passed, 1 deselected.
+     DONE (2026-10-18): (1) fixed the two stale "(Ongoing)" labels -- "## Phase 5:
+     Documentation (Ongoing)" -> "(Closed 2026-10-18)" and the matching Timeline Estimate
+     "Duration: Ongoing" -> "Ongoing -> closed 2026-10-18 (5.1 done ...)" -- since Phase
+     5's only sub-phase (5.1) is closed; (2) recorded the decision *not* to implement
+     Phase 2 (a structural refactor: ride dicts + free functions -> a Track/Point/
+     LineString/Polygon/Feature hierarchy and a Visualization base with Map/Chart/Calendar
+     subclasses), with the reasons in the PLAN Phase 2 section -- the functional design is
+     the chosen final form: it would undo the Phase 1 stabilisation (the extraction moved
+     the other way), no code or usage consumes a Track/Visualization object, a class
+     migration would churn every module signature + the per-leaf tests for no new
+     capability, the class hierarchy is speculative generality (YAGNI), and the plan's
+     "once core modules are stable" gate was a precondition not a mandate; so no track.py /
+     visualization.py is created and no module is migrated.  The footer/status now state
+     "Phase 5 closed" and "Phase 2 not implemented (decided 2026-10-18)".
