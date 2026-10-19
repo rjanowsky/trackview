@@ -205,6 +205,31 @@ this can be revisited then.
 3. Migrate configuration logic
 4. Update references in other modules
 
+**Done (2026-10-18) -- versioning folded into the config module + a `--version` switch.**
+The `trackview/config.py` home (created earlier in this phase as the run-time
+directories + the `DECIMATE_M` threshold, tested in `tests/test_config.py`) gained
+a second configuration constant: `__version__ = "0.1.0"`, the package version as the
+single source of truth.  To keep that the *only* copy, `pyproject.toml`'s
+`version = "0.1.0"` was replaced by a dynamic read: `[project].dynamic =
+["version"]` + `[tool.setuptools.dynamic] version = {attr =
+"trackview.config.__version__"}`, so setuptools imports just `trackview.config`
+(which touches only the stdlib `pathlib`, its `__init__.py` re-exporting nothing, so
+the build needs none of the heavy runtime deps) to stamp the wheel/sdist `Version:`
+-- the build-stamped version and the running program can no longer drift apart.  The
+CLI gained a `--version` switch (`action="version"` on the argparse surface in
+`trackview.cli:main`, reading the re-exported `__version__` from `trackview.config`,
+printing a fully-formed `trackview 0.1.0` line and exiting: a pure, side-effect-free
+glance that fetches no basemap and writes nothing, consistent with `--no-map`'s
+spirit); it is listed first in the `trackview.py` launcher's usage block and the
+README's.  A new `TestVersion` in `tests/test_config.py` locks the constant to a
+PEP-440 numeric release tag and asserts the CLI reports the same object `config`
+holds (so the two can't drift).  `--version` was verified to print `trackview
+0.1.0` both as `python trackview.py --version` and under the console entry-point
+name, and a real PEP 517 `python -m build` in a throwaway venv stamped `Version:
+0.1.0` into the wheel `METADATA` -- confirming the dynamic read.  Behaviour-preserving
+aside from the new flag: the offline suite is now **217 passed, 1 deselected** (the
+prior 215 plus the two `TestVersion` cases); `ruff check` stays clean.
+
 ## Phase 4: Testing Infrastructure (High Priority)
 
 ### 4.1 Test Suite Enhancement

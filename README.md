@@ -46,6 +46,7 @@ default run stays quick; run it with
 ## Usage
 
 ```bash
+python trackview.py --version          # print the trackview version and exit
 python trackview.py                    # ./gpx -> ./output/tracks_overview.png
 python trackview.py --format pdf           # vector PDF instead of PNG
 python trackview.py --split                # one map file per track (default: all in one)

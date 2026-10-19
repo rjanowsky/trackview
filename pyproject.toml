@@ -11,7 +11,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trackview"
-version = "0.1.0"
+# The version is dynamic: it is read from `trackview.config.__version__` (see the
+# `[tool.setuptools.dynamic]` block below) rather than hard-coded here, so there
+# is one source of truth -- the build-stamped version and `trackview --version`
+# (both fed by that constant) can never drift from each other.
+dynamic = ["version"]
 description = "Render every GPX track in a folder onto a static map (PNG/PDF), with a ride-log, climb ranking, a training trend, an activity calendar and a self-contained HTML/Leaflet map."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,6 +57,14 @@ packages = ["trackview"]
 # the two top-level converter scripts are also shipped so their [project.scripts]
 # entry points (fit-to-gpx, wahoo-to-gpx) resolve after `pip install`.
 py-modules = ["fit_to_gpx", "wahoo_to_gpx"]
+
+# The dynamic `version` ([project].dynamic above) is resolved from this constant
+# at build time, so the wheel/sdist metadata version and `trackview --version`
+# share one source.  setuptools imports just `trackview.config` to read it, and
+# that module touches only the stdlib `pathlib` (its package `__init__.py`
+# re-exports nothing), so the build needs none of the heavy runtime deps.
+[tool.setuptools.dynamic]
+version = {attr = "trackview.config.__version__"}
 
 # ---- test runner -------------------------------------------------------------
 [tool.pytest.ini_options]

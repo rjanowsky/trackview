@@ -19,7 +19,7 @@ import matplotlib
 matplotlib.use("Agg")                        # headless, no GUI needed
 
 from trackview.config import (GPX_DIR, OUTPUT_DIR, STATS_DIR,
-                              TILE_CACHE_DIR, DECIMATE_M)
+                              TILE_CACHE_DIR, DECIMATE_M, __version__)
 from trackview.helpers import (_title_name, _ride_date,
                                _filter_by_meta, _select_top, _list_rides,
                                _parse_argdate, _safe_filename, _TOP_BY)
@@ -52,6 +52,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Render GPX tracks from a folder onto a static map image "
                      "(PNG or PDF).")
+    # --version prints the package version (read from the config single-source
+    # `__version__`, the same value pyproject.toml stamps into the build) and
+    # exits -- a pure, side-effect-free glance that fetches no basemap and writes
+    # nothing, so it honours --no-map's spirit even though --no-map never sees it.
+    # The value is a fully-formed "trackview <version>" line (this Python's
+    # argparse prints the version string verbatim, with no program name of its
+    # own), read from __version__ so it can't drift from the build.
+    ap.add_argument("--version", action="version",
+                    version=f"trackview {__version__}",
+                    help="print the trackview version and exit")
     ap.add_argument("--gpx-dir", default=str(GPX_DIR))
     ap.add_argument("--flat", action="store_true",
                     help="look for *.gpx only in --gpx-dir itself, not its subfolders "
