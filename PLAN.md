@@ -1475,3 +1475,29 @@ the two new console entry points (`fit-to-gpx`, `wahoo-to-gpx`) and
 **215 passed, 1 deselected**; `ruff check` stays clean; and the entry points
 resolve after `pip install -e .` (verified in a throwaway venv, including
 `fit-to-gpx` running without the `fit` extra, confirming the guard).
+
+The same pass **folded versioning into the config module and added a `--version`
+switch** (a Phase-3 closeout).  `trackview/config.py` -- the run-time config home
+(the four directories + `DECIMATE_M`) -- gained `__version__ = "0.1.0"` as the
+package version's *single source of truth*.  To keep it the only copy,
+`pyproject.toml`'s static `version = "0.1.0"` was replaced by a dynamic read:
+`[project].dynamic = ["version"]` + `[tool.setuptools.dynamic] version = {attr =
+"trackview.config.__version__"}`, so setuptools imports just `trackview.config`
+(which touches only the stdlib `pathlib` -- its `__init__.py` re-exports nothing,
+so the build needs none of the heavy runtime deps) to stamp the wheel/sdist
+`Version:` -- the build-stamped version and the running program can no longer drift
+apart (and neither can `importlib.metadata.version("trackview")` after an install).
+The CLI gained a `--version` switch (`action="version"` on the argparse surface in
+`trackview.cli:main`, reading the re-exported `__version__` from
+`trackview.config`), printing a fully-formed `trackview 0.1.0` line and exiting --
+a pure, side-effect-free glance that fetches no basemap and writes nothing,
+consistent with `--no-map`'s spirit -- and it is listed first in the `trackview.py`
+launcher's usage block and the README's.  A new `TestVersion` class in
+`tests/test_config.py` locks the constant to a PEP-440 numeric release tag
+(`^\d+(?:\.\d+){0,2}$`) and asserts the CLI reports the same value `config` holds
+(so the two can't drift).  Verified: `--version` prints `trackview 0.1.0` both as
+`python trackview.py --version` and under the console entry-point name, and a real
+PEP 517 `python -m build` in a throwaway venv stamped `Version: 0.1.0` into the
+wheel `METADATA` (confirming the dynamic read).  `ruff check` stays clean; the
+offline suite is now **217 passed, 1 deselected** (the prior 215 plus the two
+`TestVersion` cases).
