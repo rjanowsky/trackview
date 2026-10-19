@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from trackview.helpers import _select_top
+from trackview.geometry import PI_R, latlon_to_merc
 from trackview.metrics import GRADE_CAP_CEIL, GRADE_CAP_FLOOR, GRADE_CAP_PCT, _grade_cap
 from trackview.rendering import _moving_avg
 
@@ -38,6 +39,22 @@ class TestGradeCap:
 
     def test_empty_grades_returns_the_floor(self):
         assert _grade_cap([], None) == GRADE_CAP_FLOOR
+
+
+class TestConstants:
+    def test_pi_r_is_the_web_mercator_scaling(self):
+         # pi * R (the Earth's radius in metres): the Web-Mercator x/y scale -- the
+         # single source, kept here (not in trackview.config)
+        assert abs(PI_R - 20037508.342789244) < 1e-6
+
+    def test_latlon_to_merc_uses_pi_r(self):
+         # the x half of the projection is lon * PI_R / 180 -- a constant, so it pins
+         # the value of PI_R through the function that actually consumes it
+        x, y = latlon_to_merc(0.0, 0.0)
+        assert x == 0.0 and y == pytest.approx(0.0, abs=1e-8)
+        x, y = latlon_to_merc(0.0, 180.0)
+        assert x == pytest.approx(PI_R)
+        assert y == pytest.approx(0.0, abs=1e-8)   # equator maps to y ~ 0 (fp noise)
 
 
 class TestMovingAvg:

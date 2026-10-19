@@ -1,12 +1,12 @@
 """The centralized configuration for trackview, extracted in PLAN.md Phase 3.1.
 
 The monolith defined these module-level constants next to `main`; they now live
-here, the single home for the run-time configuration (the directory layout the
-CLI reads/writes, the decimation threshold and the Web-Mercator scaling
-constant).  `trackview.py` re-imports the live ones (`GPX_DIR` / `OUTPUT_DIR` /
-`STATS_DIR` / `TILE_CACHE_DIR` / `DECIMATE_M`, all read by `main`); `PI_R` is
-kept as the documented home for the magic number though the monolith no longer
-touches it.
+here, the single home for the run-time configuration the CLI reads/writes: the
+directory layout it touches, plus the decimation threshold.  `trackview.py`
+re-imports the live ones (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` /
+`TILE_CACHE_DIR` / `DECIMATE_M`, all read by `main`).  The Web-Mercator scaling
+constant `PI_R` is *not* here -- it is a geometry detail, so it lives in
+`trackview.geometry` (its single source), where `latlon_to_merc` uses it.
 
 A one-level shift from the monolith is the only value-affecting edit: the
 monolith's `trackview.py` sat *in* the repo root, so its
@@ -33,5 +33,3 @@ TILE_CACHE_DIR = Path(__file__).resolve().parent.parent / "tiles"
 
 DECIMATE_M   = 5.0        # drop track points closer than this (m): keeps the shape,
                          # cuts ~68k points to a few thousand for crisp, fast drawing
-
-PI_R       = 20037508.342789244      # pi*R: scales the Web-Mercator x/y projection

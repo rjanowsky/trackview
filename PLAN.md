@@ -1384,3 +1384,17 @@ loads; a missing file skipped; an all-corrupt folder returns `[]`), and the modu
 docstring's "skipped with a note" behaviour is now backed by a test.  Offline
 suite: **214 passed, 1 deselected** (was 211; +3 new skip-path tests).
 
+The same pass next **reconciled the orphaned `PI_R` constant** (shortlist A2).  It
+had been duplicated -- `config.PI_R` and `geometry.PI_R`, the same literal
+`20037508.342789244` -- but only `geometry` ever used it (`latlon_to_merc`'s
+`x = lon * PI_R / 180`); `config.PI_R` was imported nowhere (asserted only by a
+test).  `geometry` is the live consumer, so it is the single source of truth:
+`config.PI_R` was deleted and `config`'s docstring now *points at*
+`trackview.geometry` for the Web-Mercator scaling constant (a geometry detail, not
+run-time configuration).  The test moved with the value -- the `PI_R` assertion
+left `tests/test_config.py` (and that file's docstring dropped "Web-Mercator
+scaling constant" from its list) and a new `TestConstants` class in
+`tests/test_geometry.py` asserts both the value and that `latlon_to_merc`
+consumes it.  Value-identical, so no behaviour changed.  Offline suite:
+**215 passed, 1 deselected** (+1 net: +2 geometry, -1 config).
+

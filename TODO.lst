@@ -883,3 +883,15 @@ Planning & decisions
      missing file skipped; an all-corrupt folder returns []).  No --strict flag was added:
      the skip-and-report behaviour is the correct default and matches the converters.
      Offline suite: 214 passed, 1 deselected (was 211; +3 new skip-path tests).
+
+[37] [done] Reconcile the orphaned / duplicated PI_R constant (re-analysis shortlist
+     A2).  PI_R (the Web-Mercator scaling, 20037508.342789244) was defined twice --
+     config.py and geometry.py -- but only geometry actually used it (latlon_to_merc);
+     config.PI_R was imported nowhere.  geometry is the live consumer, so it is now the
+     single source of truth: config.PI_R was deleted and config's docstring points at
+     trackview.geometry for the constant (a geometry detail, not run-time config).  The
+     test moved with the value -- the PI_R assertion left test_config.py (whose docstring
+     dropped "Web-Mercator scaling constant") and a new TestConstants in
+     test_geometry.py asserts both the value and that latlon_to_merc consumes it.  Value
+     identical, so no behaviour changed.  Offline suite: 215 passed, 1 deselected
+     (+1 net: +2 geometry, -1 config).

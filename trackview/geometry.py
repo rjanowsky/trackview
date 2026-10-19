@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 
 # Constants
+# PI_R (pi * the Earth's radius in metres) is the single source for the Web-Mercator
+# scaling; trackview.config points here for it rather than keeping a second copy.
 PI_R      = 20037508.342789244     # pi*R: scales the Web-Mercator x/y projection
 
 

@@ -1,12 +1,14 @@
 """[Phase 4 / 4.1] The config constants -- a pure, offline leaf.
 
         trackview/config.py is the single home for the run-time configuration the
-    CLI reads/writes: the four run-time directories (gpx/ output/ stats/ tiles/),
-    the point-decimation threshold and the Web-Mercator scaling constant.  The one
-    value-affecting edit when the constants moved from the repo-root monolith was the
-    one-level `.parent.parent` shift (the module sits a level deeper), so the resolved
-    paths must stay the repo-root gpx/ output/ stats/ tiles/ -- these tests lock that
-    and the two magic numbers, guarding the shift against regression.
+    CLI reads/writes: the four run-time directories (gpx/ output/ stats/ tiles/)
+    and the point-decimation threshold.  (The Web-Mercator scaling constant `PI_R`
+    is a geometry detail, so it lives -- and is tested -- in trackview.geometry,
+    not here.)  The one value-affecting edit when the constants moved from the
+    repo-root monolith was the one-level `.parent.parent` shift (the module sits a
+    level deeper), so the resolved paths must stay the repo-root gpx/ output/
+    stats/ tiles/ -- these tests lock that and the decimation threshold, guarding
+    the shift against regression.
 """
 from trackview import config
 
@@ -36,7 +38,3 @@ class TestRuntimeDirectories:
 class TestMagicNumbers:
     def test_decimate_threshold_is_five_metres(self):
         assert config.DECIMATE_M == 5.0
-
-    def test_pi_r_is_the_web_mercator_scaling(self):
-        # pi * R (the Earth's radius in metres): the Web-Mercator x/y scale
-        assert abs(config.PI_R - 20037508.342789244) < 1e-6
