@@ -14,6 +14,8 @@ already imported, transitively, by `io`).
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")                           # headless, no GUI needed

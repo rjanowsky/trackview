@@ -471,7 +471,6 @@ def write_gallery(tracks, out_path, style="osm", n=9, detail=None):
         loaded_keys.append(_gallery_cell(ax, t, k, style, detail))
 
     total_km = sum(t["dist_km"] for t in cells)
-    total_gain = sum(t["gain_m"] for t in cells)
     if len(cells) > 1:
         span = (f"{_title_name(cells[-1]['name'])} .. "
                 f"{_title_name(cells[0]['name'])}")

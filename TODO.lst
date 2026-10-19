@@ -895,3 +895,21 @@ Planning & decisions
      test_geometry.py asserts both the value and that latlon_to_merc consumes it.  Value
      identical, so no behaviour changed.  Offline suite: 215 passed, 1 deselected
      (+1 net: +2 geometry, -1 config).
+
+[38] [done] Add a linter + a CI gate (re-analysis shortlist B1).  ruff now lints the
+     project sources and a new .github/workflows/ci.yml runs two fast, offline jobs: a
+     "lint" job (ruff check over trackview/, the two converter scripts, the root launcher
+     and tests/) and a "test" job (pytest -m "not network and not slow" across Python
+     3.10-3.13).  Only F (pyflakes) + E9 (syntax) are gated -- the codebase keeps a
+     deliberate loose comment-indent style, so the pycodestyle (E/W) formatting rules are
+     intentionally NOT selected ([tool.ruff] select = ["F", "E9"] in pyproject.toml);
+     ruff is a "lint" extra (never a runtime dep; CI installs it standalone).  Scanning
+     first surfaced six genuine findings, all fixed: two vestigial imports in the root
+     launcher (csv, re -- it is now a one-line shim to trackview.cli.main), a real F821
+     bug (trackview.mapfig annotated out_path: Path but never imported Path), two dead
+     locals (total_gain in write_gallery, an unused mode in test_io), and an unused Path
+     import in test_fit_to_gpx.  CI was validated in a throwaway venv (ruff is not in the
+     main .venv): the bare ruff check reads the [tool.ruff] config, a long-line probe
+     confirms E501 is not enforced, and ci.yml parses as YAML.  Offline suite: 215 passed,
+     1 deselected (the code fixes are import-cleanup / dead-var removal, so the count is
+     unchanged).

@@ -11,7 +11,6 @@ minimal .fit file (fitparse is a reader, so we synthesise the bytes here).
 import struct
 import datetime
 from datetime import date, timezone
-from pathlib import Path
 
 import fit_to_gpx as f2g
 from fitparse.records import Crc

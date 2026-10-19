@@ -80,7 +80,7 @@ class TestTracksGeojson:
 
 class TestLeafletDocument:
     def _doc(self):
-        css, js, mode = "<link x/>", '<script src="cdn"></script>', "cdn"
+        css, js = "<link x/>", '<script src="cdn"></script>'
         return _leaflet_document(_tracks_geojson([ride()]), SOURCES["osm"],
                                  ATTRIBUTION["osm"], "My Ride", css, js)
 

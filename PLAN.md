@@ -1398,3 +1398,23 @@ scaling constant" from its list) and a new `TestConstants` class in
 consumes it.  Value-identical, so no behaviour changed.  Offline suite:
 **215 passed, 1 deselected** (+1 net: +2 geometry, -1 config).
 
+The same pass then **added a linter and a CI gate** (shortlist B1).  ruff now
+lints the project sources and a new `.github/workflows/ci.yml` runs two fast,
+offline jobs: a `lint` job (`ruff check` over `trackview/`, the two converter
+scripts, the root launcher and `tests/`) and a `test` job that runs the pure
+suite (`pytest -m "not network and not slow"`) across Python 3.10--3.13.  Only
+the pyflakes + syntax rules are gated (`[tool.ruff] select = ["F", "E9"]`); the
+codebase keeps a deliberate loose comment-indent style, so the pycodestyle (E/W)
+formatting rules are intentionally *not* selected.  `ruff` is a `lint` extra in
+`pyproject.toml` (never a runtime dep; CI installs it standalone).  Scanning the
+tree first surfaced six genuine findings, all fixed: two vestigial imports in the
+root launcher (`csv`, `re` -- it is now a one-line shim to `trackview.cli.main`),
+a real `F821` bug (`trackview.mapfig` annotated `out_path: Path` but never
+imported `Path`), two dead locals (`total_gain` in `write_gallery`, an unused
+`mode` in `test_io`), and an unused `Path` import in `test_fit_to_gpx`.  CI was
+validated in a throwaway venv (ruff is not in the main `.venv`, per the
+"don't disturb the main .venv" discipline): the bare `ruff check` reads the
+`[tool.ruff]` config, the long-line probe confirms E501 is *not* enforced, and
+`ci.yml` parses as YAML.  Offline suite: **215 passed, 1 deselected** (the code
+fixes are import-cleanup / dead-var removal, so the count is unchanged).
+

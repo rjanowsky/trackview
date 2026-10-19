@@ -48,9 +48,6 @@ Usage:
 """
 from __future__ import annotations
 
-import csv
-import re
-
 from trackview.cli import main
 
 

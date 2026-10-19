@@ -1,0 +1,44 @@
+name: CI
+
+# Two fast, offline jobs: a linter gate (ruff) and the pure test suite.  Neither
+# touches the network (the `network` marker fetches basemap tiles / the Leaflet
+# CDN, and `slow` renders a matplotlib figure -- both are deselected), so CI runs
+# on the minimal runtime deps + the test/lint extras, in a few seconds.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install the linter
+        run: pip install "ruff>=0.11"
+      # ruff reads the [tool.ruff] config in pyproject.toml (F + E9 only: the
+      # codebase keeps a deliberate loose comment-indent style, so the pycodestyle
+      # E/W rules are intentionally not selected).
+      - name: Lint with ruff
+        run: ruff check trackview/ fit_to_gpx.py wahoo_to_gpx.py trackview.py tests/
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (runtime + the fit/test extras)
+        # The converters' tests import fitparse, so the `fit` extra is needed for
+        # the suite even though the core runtime never imports it.
+        run: pip install -e ".[fit,test]"
+      - name: Run the pure (offline, non-slow) suite
+        run: pytest -m "not network and not slow"

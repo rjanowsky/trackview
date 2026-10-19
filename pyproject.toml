@@ -30,6 +30,11 @@ dependencies = [
 [project.optional-dependencies]
 fit = ["fitparse>=1.2"]
 test = ["pytest"]
+# A linter for CI: ruff's pyflakes pass (unused imports / undefined names /
+# unused locals + syntax errors) is the safe, style-agnostic gate -- the codebase
+# has a deliberate loose comment-indent style, so we do NOT enable the pycodestyle
+# (E/W) formatting rules, only F (correctness) + E9 (syntax).
+lint = ["ruff>=0.11"]
 
 # `pip install .` (or `pip install -e .`) drops a `trackview` command onto the
 # PATH that runs the CLI, the installed counterpart to `python trackview.py`
@@ -56,3 +61,16 @@ markers = [
      "network: fetches basemap tiles or the Leaflet CDN (skipped in the fast suite)",
      "slow: renders a matplotlib figure (skipped in the fast pure suite)",
 ]
+
+# ---- linter ------------------------------------------------------------------
+# ruff is the CI linter (a separate "lint" job).  We gate on F (pyflakes: unused
+# imports / undefined names / unused locals) + E9 (syntax errors) only -- the
+# codebase uses a deliberate loose comment-indent style, so the pycodestyle (E/W)
+# formatting rules are intentionally NOT selected.  CI runs a bare `ruff check`
+# (default = all selected rules), so the selection lives here.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["F", "E9"]
