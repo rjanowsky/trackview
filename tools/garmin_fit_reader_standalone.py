@@ -14,7 +14,6 @@ more explicit paths to inspect those instead.  The .fit inputs are personal data
 and git-ignored (see .gitignore).
 """
 
-import struct
 import sys
 from pathlib import Path
 
@@ -75,7 +74,7 @@ class SimpleFITAnalyzer:
 
             # Suche nach String-Daten
             strings = self._extract_strings(data)
-            print(f"\nGefundene Textfragmente:")
+            print("\nGefundene Textfragmente:")
             for s in strings[:20]:
                 if len(s) > 3:
                     print(f"    - {s}")
