@@ -27,7 +27,7 @@ from trackview.rendering import (SUPPRESSED_RENDER_DEVICES, _has_metric_pts)
 from trackview.stats import (write_stats, write_csv)
 from trackview.climbs import (write_climbs)
 from trackview.summary import (write_summary)
-from trackview.calendar import (write_calendar, _CALENDAR_METRICS)
+from trackview.activitygrid import (write_calendar, _CALENDAR_METRICS)
 from trackview.trend import (write_trend)
 from trackview.io import (SOURCES, write_html,
                           DETAIL_MIN, DETAIL_MAX, write_gallery)

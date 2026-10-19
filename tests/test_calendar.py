@@ -11,7 +11,7 @@ stays pure and offline.
 """
 from pathlib import Path
 
-from trackview.calendar import _calendar_days, _month_ticks, _CALENDAR_METRICS
+from trackview.activitygrid import _calendar_days, _month_ticks, _CALENDAR_METRICS
 
 
 def track(stem, *, dist_km=1.0, gain_m=10.0):

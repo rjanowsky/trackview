@@ -23,8 +23,11 @@ jobs:
       # ruff reads the [tool.ruff] config in pyproject.toml (F + E9 only: the
       # codebase keeps a deliberate loose comment-indent style, so the pycodestyle
       # E/W rules are intentionally not selected).
+      # tools/ holds the standalone helpers (the .fit reader / dump scripts) that
+      # the core build never imports; linting them keeps a stray unused-import or
+      # empty f-string from creeping in there too.
       - name: Lint with ruff
-        run: ruff check trackview/ fit_to_gpx.py wahoo_to_gpx.py trackview.py tests/
+        run: ruff check trackview/ fit_to_gpx.py wahoo_to_gpx.py trackview.py tests/ tools/
 
   test:
     runs-on: ubuntu-latest

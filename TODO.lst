@@ -980,13 +980,26 @@ Planning & decisions
      consistent with trackview.convert; all 42 TODO entries are [done]; no live
      "(Ongoing)" status remains.  Smoke: all 15 package modules import cleanly as
      trackview.* and the three entry points (trackview / fit-to-gpx /
-     wahoo-to-gpx) run --help.  Noted non-action: trackview/calendar.py shadows
-     the stdlib `calendar` module *only* when the package's own dir is on
-     sys.path[0] (i.e. a script run from inside trackview/), which no entry point
-     does -- a theoretical footgun, not worth the churn of a rename.  Hygiene:
-     .gitignore gained .coverage / htmlcov/ (a pytest-cov artifact).  With nothing
-     left to do, the single source of truth trackview/config.py __version__ was
-     bumped 0.1.0 -> 1.0.0 (the dynamic read stamps it; --version now prints
-     "trackview 1.0.0" and a real `python -m build` in a throwaway venv produced
-     trackview-1.0.0-py3-none-any.whl + .tar.gz, confirming the stamp).  ruff
-     clean; offline suite unchanged at 217 passed, 1 deselected.
+     wahoo-to-gpx) run --help.  Noted (then reversed in [42]) footgun:
+     trackview/calendar.py shadowed the stdlib `calendar` module *only* when the
+     package's own dir was on sys.path[0] (i.e. a script run from inside
+     trackview/), which no entry point does -- so it was logged as a non-action
+     here, then fixed by the [42] rename.  Hygiene: .gitignore gained .coverage /
+     htmlcov/ (a pytest-cov artifact).  With nothing else left to do, the single
+     source of truth trackview/config.py __version__ was bumped 0.1.0 -> 1.0.0 (the
+     dynamic read stamps it; --version now prints "trackview 1.0.0" and a real
+     `python -m build` in a throwaway venv produced trackview-1.0.0-py3-none-any.whl
+     + .tar.gz, confirming the stamp).  ruff clean; offline suite unchanged at 217
+     passed, 1 deselected.
+[42] [done] Adopt the two flagged judgment calls (2026-10-18).  (a) tools/ in CI:
+     the lint job now lints `tools/` too (`ruff check ... tools/`), so a stray
+     unused-import / empty f-string can't creep into the standalone helpers;
+     `ruff check tools/` was already clean, so the gate passes.  (b) rename
+     trackview/calendar.py -> trackview/activitygrid.py (the figure's own name),
+     which also stops it shadowing the stdlib `calendar` for any sys.path[0]-style
+     import -- the theoretical footgun [41] had logged as a non-action.  `git mv`
+     (history preserved); the module docstring records the rename + rationale; the
+     two importers (trackview/cli.py, tests/test_calendar.py) and the monolith's
+     --calendar dispatch point updated.  stdlib `calendar` now resolves to the real
+     module; ruff clean (app + tools/); offline suite unchanged at 217 passed, 1
+     deselected.  (No version bump: both are polish on the just-cut 1.0.0.)

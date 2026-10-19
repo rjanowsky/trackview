@@ -1524,3 +1524,21 @@ prints `trackview 1.0.0`, and a real `python -m build` in a throwaway venv
 produced `trackview-1.0.0-py3-none-any.whl` + `.tar.gz`, confirming the stamp).
 `ruff check` (app **and** `tools/`) stays clean; the offline suite is unchanged at
 **217 passed, 1 deselected**.
+
+The same pass **adopted the two judgment calls the re-analysis had left open**
+(the user's "add `tools/` to CI and rename `trackview/calendar.py`").  (a) **`tools/`
+in CI**: the lint job's target gained `tools/` -- `ruff check trackview/ fit_to_gpx.py
+wahoo_to_gpx.py trackview.py tests/ tools/` -- so the standalone helpers (the `.fit`
+reader / dump scripts the core build never imports) get the same F + E9 gate, and a
+stray unused-import or empty f-string can't creep in there unnoticed; `ruff check
+tools/` was already clean, so the gate passes as written.  (b) **rename
+`trackview/calendar.py` -> `trackview/activitygrid.py`** -- the figure's own name --
+which also stops the module shadowing the stdlib `calendar` for any `sys.path[0]`-style
+import (the theoretical footgun the prior pass had *logged as a non-action*; nothing in
+the package ever imports the stdlib `calendar`, so the shadow was dormant, but the
+rename removes it for free).  Done with `git mv` (history preserved); the module
+docstring records the rename + rationale, and the two importers (`trackview/cli.py`,
+`tests/test_calendar.py`) plus the monolith's `--calendar` dispatch point were updated.
+An import smoke confirms `import calendar` now resolves to the real stdlib module.
+No version bump -- both are polish on the just-cut 1.0.0; `ruff check` (app **and**
+`tools/`) stays clean and the offline suite is unchanged at **217 passed, 1 deselected**.

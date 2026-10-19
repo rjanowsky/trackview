@@ -8,6 +8,11 @@ over the parsed ride dicts (each track's filename date and its dist_km / gain_m
 or a ride count); its only external names are _ride_date / _MONTH_ABBR
 (`trackview/helpers`) and the DPI figure-resolution constant (`trackview/rendering`),
 so it has no back-edge to the monolith.
+
+The module was named `calendar`, but that shadows the stdlib `calendar` module for
+any `sys.path[0]`-style import (a theoretical footgun no entry point triggers, since
+nothing in the package imports the stdlib calendar).  It is now `activitygrid` --
+the figure's own name -- so the stdlib module can never be shadowed.
 """
 from __future__ import annotations
 
