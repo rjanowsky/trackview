@@ -1003,3 +1003,21 @@ Planning & decisions
      --calendar dispatch point updated.  stdlib `calendar` now resolves to the real
      module; ruff clean (app + tools/); offline suite unchanged at 217 passed, 1
      deselected.  (No version bump: both are polish on the just-cut 1.0.0.)
+[43] [done] Close the sdist/wheel completeness gap (2026-10-18).  `python -m build`
+     produced an sdist missing the root trackview.py launcher (README's primary usage)
+     and the tools/ .fit helpers -- pyproject.toml listed only fit_to_gpx /
+     wahoo_to_gpx in py-modules and never declared the launcher or tools/.  Fixed:
+     (1) py-modules = ["trackview", "fit_to_gpx", "wahoo_to_gpx"] now ships the launcher
+     (a top-level script shares its basename with the module its [project.scripts] entry
+     point runs, so flat-layout auto-discovery never picks it up); (2) a new MANIFEST.in
+     `grafts` the whole tools/ dir into the sdist (pruning tools/.DS_Store / __pycache__),
+     so a --sdist checkout stays self-contained.  The first attempt used
+     [tool.setuptools.data-files], but that is the wrong lever for a non-importable
+     directory -- it installs into sys.prefix in a wheel AND resolves its paths against
+     the sdist tree, not the project root, which broke the wheel build; MANIFEST.in graft
+     is the sdist-side mechanism and leaves the wheel carrying only the importable package
+     + launcher (tools/ is an out-of-tree helper, not part of the installed distribution).
+     Verified in a throwaway venv: sdist now holds trackview.py + both tools/ helpers +
+     package + meta (no .DS_Store / __pycache__ junk); wheel holds launcher + package (no
+     tools/).  No version bump (polish on the just-cut 1.0.0); ruff clean, offline suite
+     unchanged at 217 passed, 1 deselected.

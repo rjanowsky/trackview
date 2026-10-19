@@ -1,0 +1,11 @@
+# The standalone .fit helpers (pure-stdlib, no `import trackview`) ship in the
+# sdist so a `python -m build --sdist` checkout stays self-contained; they are
+# not part of the installed wheel -- they live under tools/, never imported by
+# the trackview/ package.  Graft the whole directory so a new helper is picked
+# up without touching this file.
+graft tools
+# Grafting a directory pulls in whatever lives on disk; prune the build/OS noise
+# out of tools/ so the sdist carries only the source helpers (the package's own
+# bytecode/OS files are pruned by setuptools' sdist machinery on its own).
+exclude tools/.DS_Store
+prune tools/__pycache__

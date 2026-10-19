@@ -1542,3 +1542,25 @@ docstring records the rename + rationale, and the two importers (`trackview/cli.
 An import smoke confirms `import calendar` now resolves to the real stdlib module.
 No version bump -- both are polish on the just-cut 1.0.0; `ruff check` (app **and**
 `tools/`) stays clean and the offline suite is unchanged at **217 passed, 1 deselected**.
+
+The same pass **closed a build-completeness gap the 1.0.0 build surfaced** (the user's
+"the sdist is missing `trackview.py` and `tools/*.py`").  A `python -m build` produced
+an sdist that shipped **only** the `trackview/` package + the two converters, dropping
+the root `trackview.py` launcher (README's primary `python trackview.py` usage) and the
+`tools/` `.fit` helpers -- because `pyproject.toml` listed only `fit_to_gpx` /
+`wahoo_to_gpx` in `py-modules` and never declared the launcher or `tools/`.  Fixed on
+two fronts: (1) **`py-modules = ["trackview", "fit_to_gpx", "wahoo_to_gpx"]`** now
+carries the launcher (a top-level script that shares its basename with the module its
+`[project.scripts]` entry point runs, so flat-layout auto-discovery never picks it up);
+(2) a new **`MANIFEST.in`** `grafts` the whole `tools/` directory into the sdist (pruning
+`tools/.DS_Store` / `tools/__pycache__`), so a `--sdist` checkout stays self-contained.
+The first attempt used `[tool.setuptools.data-files]`, but that lever is wrong for a
+non-importable directory -- it installs into `sys.prefix` (out of tree) in a wheel *and*
+resolves its paths against the sdist tree rather than the project root, which **broke the
+wheel build** (`can't copy 'garmin_fit_reader.py'`); `MANIFEST.in graft` is the sdist-side
+mechanism and leaves the wheel carrying only the importable package + launcher (correct --
+`tools/` is an out-of-tree helper, not part of the installed distribution).  Verified in a
+throwaway venv: the sdist now holds `trackview.py` + both `tools/` helpers (+ the package
++ meta) with no `.DS_Store` / `__pycache__` junk, and the wheel holds the launcher +
+package (no `tools/`).  No version bump (polish on the just-cut 1.0.0); `ruff check`
+clean, offline suite unchanged at **217 passed, 1 deselected**.

@@ -48,15 +48,23 @@ trackview = "trackview.cli:main"
 fit-to-gpx = "fit_to_gpx:main"
 wahoo-to-gpx = "wahoo_to_gpx:main"
 
-# Ship only the trackview/ package.  Declared explicitly so setuptools'
-# flat-layout auto-discovery does not also sweep in the root trackview.py
-# launcher or the data/script dirs (gpx/, output/, stats/, tiles/, fit/, gc/,
-# lib/, tools/).
+# Ship the trackview/ package *and* its root-level scripts + standalone helpers
+# so they reach the sdist.  A top-level script has the same basename as the
+# module its [project.scripts] entry point runs (`fit_to_gpx.py` -> the
+# `fit_to_gpx` module behind `fit-to-gpx`), so it ships only via an explicit
+# `py-modules` entry, never by flat-layout auto-discovery.
 [tool.setuptools]
 packages = ["trackview"]
-# the two top-level converter scripts are also shipped so their [project.scripts]
-# entry points (fit-to-gpx, wahoo-to-gpx) resolve after `pip install`.
-py-modules = ["fit_to_gpx", "wahoo_to_gpx"]
+py-modules = ["trackview", "fit_to_gpx", "wahoo_to_gpx"]
+# The `tools/` helpers (the .fit reader + its standalone variant) are pure-stdlib
+# -- no `import trackview` -- and are not importable modules at all, so nothing in
+# the core build reaches them.  They are not declared here: `data-files` would
+# install them under sys.prefix in a wheel *and* resolves its paths against the
+# sdist tree, not the project root (so it breaks the wheel build).  Instead MANIFEST.in
+# `grafts` the whole `tools/` directory into the sdist, so a source checkout of
+# `python -m build --sdist` keeps them alongside the package with nothing missing;
+# the wheel carries only the importable package + launcher (tools/ is an
+# out-of-tree helper, not part of the installed distribution).
 
 # The dynamic `version` ([project].dynamic above) is resolved from this constant
 # at build time, so the wheel/sdist metadata version and `trackview --version`
