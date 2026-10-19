@@ -1501,3 +1501,26 @@ PEP 517 `python -m build` in a throwaway venv stamped `Version: 0.1.0` into the
 wheel `METADATA` (confirming the dynamic read).  `ruff check` stays clean; the
 offline suite is now **217 passed, 1 deselected** (the prior 215 plus the two
 `TestVersion` cases).
+
+The same pass **ran ruff over the `tools/` helpers and closed the release with a
+1.0.0 bump** (the user's "final re-analysis, then bump to 1.0.0").  Ruff (F + E9,
+the CI lint set) came clean on the app but flagged two real issues in
+`tools/garmin_fit_reader_standalone.py` -- an unused `import struct` (F401) and an
+f-string with no placeholders, `print(f"\nGefundene Textfragmente:")` (F541) --
+both fixed in place (the tool still decodes a `.fit` identically).  The
+re-analysis of the whole app + helpers found no *behaviour* gaps -- only a handful
+of stale doc narrations left behind by earlier extractions, now corrected: the
+`_metric_norm` home (now `trackview/rendering.py`, not "the monolith"), the
+render/write_* cluster (moved to `trackview/mapfig.py` in Phase 1.4b-ii, not
+"still has a back-edge and stays put"), the `DPI` comment (now a shared base
+imported by `mapfig`/`io`, not "the monolith re-imports it"), and the `--gallery`
+writer (its back-edges are all in-module, so it carries none), plus the run-time
+config home (`GPX_DIR` etc. now in `trackview/config.py`, not "the monolith") and
+the `calendar` import-smoke note.  A one-off `.gitignore` hygiene fix added the
+test/coverage artifacts (`.coverage`, `htmlcov/`).  With nothing else left to do,
+the package version's single source of truth `trackview/config.py.__version__` was
+bumped `0.1.0 -> 1.0.0`; the dynamic read stamps it (`trackview --version` now
+prints `trackview 1.0.0`, and a real `python -m build` in a throwaway venv
+produced `trackview-1.0.0-py3-none-any.whl` + `.tar.gz`, confirming the stamp).
+`ruff check` (app **and** `tools/`) stays clean; the offline suite is unchanged at
+**217 passed, 1 deselected**.

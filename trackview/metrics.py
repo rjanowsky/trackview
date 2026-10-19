@@ -7,8 +7,8 @@ steepest grades a ride (or a group of rides) carries, the calorie estimate from
 average power and ride time, and the small "value or a dash" formatters the tables
 share.  They are pure over the already-parsed ride dicts (numpy for the percentile
 capping), depend on no I/O and no rendering -- the one rendering-coupled colour norm
-(``_metric_norm``, which returns a matplotlib ``Normalize``) was left in the monolith
-for the rendering phase -- and are unit-tested directly.
+(``_metric_norm``, which returns a matplotlib ``Normalize``) lives in
+``trackview/rendering.py`` -- and are unit-tested directly.
 """
 from __future__ import annotations
 

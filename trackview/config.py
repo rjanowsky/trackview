@@ -3,9 +3,10 @@
 The monolith defined these module-level constants next to `main`; they now live
 here, the single home for the run-time configuration the CLI reads/writes: the
 directory layout it touches, plus the decimation threshold -- and the package
-version (`__version__`).  `trackview.py` re-imports the live ones
+version (`__version__`).  `trackview.cli` reads the live ones
 (`GPX_DIR` / `OUTPUT_DIR` / `STATS_DIR` / `TILE_CACHE_DIR` / `DECIMATE_M`, all
-read by `main`); the CLI reads `__version__` for its `--version` switch.  The
+read by `main`, which lives there) and `__version__` for its `--version` switch;
+the root `trackview.py` is only a thin launcher (`from trackview.cli import main`).  The
 Web-Mercator scaling constant `PI_R` is *not* here -- it is a geometry detail, so
 it lives in `trackview.geometry` (its single source), where `latlon_to_merc` uses
 it.
@@ -33,7 +34,7 @@ from pathlib import Path
 # `pyproject.toml` reads it dynamically rather than hard-coding a second copy, so
 # the build-stamped version and `trackview --version` always agree.  A PEP 440
 # release tag (a numeric X.Y.Z), bumped by hand when a release is cut.
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 # One level up from this package dir is the repo root (trackview/ -> repo root),
 # where the run-time directories live; the constants resolve identically to the

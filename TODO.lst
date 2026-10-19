@@ -958,3 +958,35 @@ Planning & decisions
      "Version: 0.1.0" into the wheel METADATA (confirming the dynamic read).  ruff
      clean; offline suite now 217 passed, 1 deselected (the prior 215 + the two
      TestVersion cases).
+
+[41] [done] Final re-analysis pass + release 1.0.0 (2026-10-18).  A whole-repo
+     re-analysis of the app and its helpers turned up only polish, no behaviour
+     gaps: (a) ruff on tools/ caught two real errors -- an unused `struct`
+     import and an f-string with no placeholders -- in
+     tools/garmin_fit_reader_standalone.py (both fixed; the file still decodes a
+     .fit fine); (b) six stale module-docstring narrations that still described the
+     Phase-1 module split as *in progress* ("still has a back-edge to the monolith
+     and stays put", "the monolith re-imports it", "GPX_DIR still live in the
+     monolith", ... ) though the split is complete and the monolith is gone --
+     reworded in config.py / metrics.py / rendering.py (x2) / io.py (x2) to the
+     final architecture (_metric_norm -> rendering.py; the render cluster ->
+     mapfig.py; GPX_DIR/TILE_CACHE_DIR -> config.py; write_gallery now in io.py);
+     the "no back-edge to the monolith" leaf claims were left as-is (they assert
+     the good final state).  Consistency confirmed: all 38 CLI flags line up with
+     the docs (the launcher docstring curates a subset, README carries all 38);
+     requirements.txt vs pyproject.toml is the intentional split (requirements =
+     the full local env incl. fitparse, pyproject core = minimal runtime with
+     fitparse an extra, version numbers in sync); the two shim scripts are
+     consistent with trackview.convert; all 42 TODO entries are [done]; no live
+     "(Ongoing)" status remains.  Smoke: all 15 package modules import cleanly as
+     trackview.* and the three entry points (trackview / fit-to-gpx /
+     wahoo-to-gpx) run --help.  Noted non-action: trackview/calendar.py shadows
+     the stdlib `calendar` module *only* when the package's own dir is on
+     sys.path[0] (i.e. a script run from inside trackview/), which no entry point
+     does -- a theoretical footgun, not worth the churn of a rename.  Hygiene:
+     .gitignore gained .coverage / htmlcov/ (a pytest-cov artifact).  With nothing
+     left to do, the single source of truth trackview/config.py __version__ was
+     bumped 0.1.0 -> 1.0.0 (the dynamic read stamps it; --version now prints
+     "trackview 1.0.0" and a real `python -m build` in a throwaway venv produced
+     trackview-1.0.0-py3-none-any.whl + .tar.gz, confirming the stamp).  ruff
+     clean; offline suite unchanged at 217 passed, 1 deselected.

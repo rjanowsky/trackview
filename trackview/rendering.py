@@ -9,9 +9,10 @@ profile / heat / scale-bar drawing helpers (``_draw_profile``,
 ``_draw_profile_metric``, ``_stack_grade_colorbars``, ``_draw_scale_bar``,
 ``_draw_heat`` and their small ``_nice_m`` / ``_fmt_len`` / ``_dwell_times`` /
 ``_fmt_heat_time`` / ``_has_metric_pts`` helpers).  The big ``render`` /
-``render_*`` / ``write_*`` figure cluster that *orchestrates* them still has a
-back-edge to the monolith (``_load_basemap``, ``decimate``, ...) and stays put
-for the next sub-step; these leaves have no such edge, so they move first.
+``render_*`` / ``write_*`` figure cluster that *orchestrates* them moved on to
+``trackview/mapfig.py`` (Phase 1.4b-ii) -- that module, the top of the tree, is
+the one that carries the back-edges (``_load_basemap`` from ``io``, ``decimate``
+from ``geometry``); these leaves have none, which is why they moved first.
 """
 from __future__ import annotations
 
@@ -50,9 +51,9 @@ HEAT_CAP_PCT      = 98.0           # colour cap: % of non-empty cells inside the
 HEAT_ALPHA        = 0.55           # overlay opacity (the route lines stay readable on top)
 
 # The figure save-resolution (a fixed 150 DPI for every rendered figure -- the
-# map, the ride-profile, and the trend / calendar charts).  Shared by the not-yet-
-# migrated render / write_html / write_gallery clusters too, so it lives here and the
-# monolith re-imports it.
+# map, the ride-profile, and the trend / calendar charts).  It lives here, the
+# shared rendering base, and is imported by the figure clusters that build on it:
+# `mapfig` for the map + profile figures, `io` for write_html / write_gallery.
 DPI          = 150
 
 

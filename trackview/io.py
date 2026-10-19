@@ -11,14 +11,16 @@ tiles) -- and the self-contained HTML / Leaflet export (--html): the LEAFLET_*
 config plus the _fetch_text / _load_leaflet / _geojson / _leaflet_document /
 write_html helpers that build a single-file interactive map (inline GeoJSON on a
 tile layer, with start/stop markers, popups and a clickable ride list).  The
---gallery writer still has a back-edge to the monolith (Phase 1.4b-ii); until it
-moves, the monolith re-imports the three tables, _load_basemap and write_html,
-since `render` reads the tables and calls the fetch and `main` writes the HTML.
+--gallery mosaic writer (write_gallery) also lives here now: its back-edges -- the
+tile tables and _load_basemap above, and the _ride_date/_title_name helpers
+re-imported below -- are all in-module, so it carries none.  `render` (in mapfig)
+reads the tables and calls the fetch; `main` (in cli) writes the HTML and the
+gallery.
 
 LEAFLET_DIR is __file__-relative: it resolves to the repo's lib/ via
 .parent.parent (io.py sits one level down in the package), caching the inlined
-Leaflet CSS/JS there -- the tile *cache* dir (tiles/) and GPX_DIR still live in
-the monolith.
+Leaflet CSS/JS there -- the tile *cache* dir (tiles/) and GPX_DIR live in
+trackview/config.py, the run-time configuration's single home.
 """
 from __future__ import annotations
 
@@ -31,7 +33,7 @@ from pathlib import Path
 import contextily as cx
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")                  # headless, no GUI needed (shared with the monolith)
+matplotlib.use("Agg")                  # headless, no GUI needed
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 

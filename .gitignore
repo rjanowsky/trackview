@@ -13,6 +13,10 @@ __pycache__/
 build/
 dist/
 
+# test / coverage artifacts
+.coverage
+htmlcov/
+
 # personal ride data & regenerable outputs (not part of the tool)
 gpx/
 gc/
