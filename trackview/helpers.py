@@ -13,6 +13,11 @@ import re
 from datetime import date
 from pathlib import Path
 
+# _parse_argdate's single source lives in trackview.convert (shared by both ride
+# converters); re-export it so `helpers._parse_argdate` stays the one cli.py and
+# the tests import.
+from trackview.convert import _parse_argdate  # noqa: F401  (re-exported)
+
 
 # --------------------------------- constants ----------------------------------
 # A Wahoo export stem is 'YYYY_MM_DD_HH_MM_SS'; the date filter and the --split
@@ -217,14 +222,6 @@ def _list_rides(tracks) -> None:
         print("     " + fmt(r))
     print("     " + "      ".join("-" * w for w in widths))
     print("     " + fmt(total))
-
-
-def _parse_argdate(s: str, flag: str) -> date:
-    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
-    try:
-        return date.fromisoformat(s)
-    except ValueError:
-        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
 
 
 def _safe_filename(name: str) -> str:

@@ -19,6 +19,15 @@ per-second telemetry.  This gathers the `record` stream into a standard GPX 1.1
 <trk> with <ele> + <time> per point - the same shape wahoo_to_gpx.py emits for
 the Wahoo rides, so trackview.py renders the Garmin rides alongside them.
 
+This is a thin shim over the shared internals in `trackview.convert`: the
+reading helpers (`_iter_messages`, `_extract_meta`, `_start_time_of`,
+`_record_altitude`, `_to_utc`, `_device_name`, `_sport_name`), the shared
+distance / altitude / extension helpers, the `--since`/`--until` CLI date filter
+and the `FitParseError` guard all live there (shared with `wahoo_to_gpx`); this
+module carries only its own `ride_to_gpx` / `main` (the FIT-specific record loop
++ CLI glue) and its `_ride_date` (Garmin's filename scheme).  See that module
+for the algorithm.
+
 Garmin/fitparse quirks handled:
     * position is stored in "semicircles" (a Garmin unit) -> the
       StandardUnitsDataProcessor converts it to decimal degrees, and speed
@@ -49,43 +58,30 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import math
 import re
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
-
-import xml.etree.ElementTree as ET
-
-from fitparse import FitFile, StandardUnitsDataProcessor, FitParseError
 
 import gpxpy           # noqa: F401    (shared, schema-valid GPX writer)
 from gpxpy import gpx as gpx_struct
+
+# The shared internals -- imported into this module's namespace so the
+# `import fit_to_gpx as f2g` tests (and `python fit_to_gpx.py`) keep working,
+# unchanged, against the single source in trackview.convert.  `FitParseError`
+# comes through convert's optional-import guard, so the module imports even when
+# the `fit` extra is absent (only the .fit path is then unavailable).
+from trackview.convert import (
+    _parse_argdate, _distance_and_gain, _fill_altitude, _add_extensions,
+    _iter_messages, _extract_meta, _start_time_of, _to_utc, _record_altitude,
+    _missing_alt, _device_name, _sport_name,
+    FitParseError,
+)
 
 # ------------------------------- configuration -------------------------------
 IN_DIR    = Path(__file__).resolve().parent / "fit"
 OUT_DIR   = Path(__file__).resolve().parent / "gpx"
 CREATOR   = "fit_to_gpx/1.0 (trackview)"
 
-# A "no altitude" reading: the FIT altitude field carries a +500 m offset, so a
-# raw 0 decodes to exactly -500 m - that (or an absent field) is the sentinel,
-# the FIT analogue of Wahoo's 0 m.  Real altitudes here run well above it.
-ALT_SENTINEL = -500.0
-
-# Non-standard per-point telemetry embedded under <trkpt><extensions> when --ext
-# is passed.  Deliberately un-namespaced and identical to wahoo_to_gpx.py: the
-# tags are exactly the keys trackview._TELE_TAGS reads, so a Garmin ride renders
-# its power/cadence/heart-rate/speed/grade/temperature alongside a Wahoo one.
-
-# fitparse renders the FIT enum tables to lower-case *machine* words (a
-# manufacturer like 'wahoo_fitness', a sport like 'cycling'); wahoo_to_gpx.py stamps
-# the *human* words its JSON carries (a device type like 'Wahoo ELEMNT BOLT', a sport
-# like 'Bike').  Reword the two that disagree so a Garmin ride reads in the same voice
-# as a Wahoo one and `trackview --device` / `--sport` match across both converters; any
-# word not in the map passes through untouched.
-_DEVICE_WORDS = {"wahoo_fitness": "Wahoo ELEMNT BOLT"}
-_SPORT_WORDS = {"cycling": "Bike"}
-
-# --------------------------------- helpers -----------------------------------
 # Garmin names an export after its ride start, but the pattern varies by source:
 # "2026_09_01_080705_12345" (Connect, underscores), "2026-09-01_080705"
 # (hyphenated), or "20260901-080705" (compact, date at the stem start).  A bare
@@ -96,9 +92,11 @@ _NAME_SEPARATED = re.compile(r"(\d{4})[_-](\d{2})[_-](\d{2})")
 _NAME_COMPACT    = re.compile(r"^(\d{4})(\d{2})(\d{2})(?=[_-])")
 
 
-def _fit_date_from_filename(path: Path) -> date | None:
-    """Calendar date of the ride from the filename, no parse needed.  None when
-    the name (e.g. a bare device serial) carries no date."""
+# --------------------------------- helpers -----------------------------------
+def _ride_date(path: Path) -> date | None:
+    """Calendar date of the ride: read from the filename first (no parse), and
+    when the name is undated (a bare serial) fall back to the file's start time.
+    None when neither yields a date, so a filter can skip it rather than guess."""
     for rx in (_NAME_SEPARATED, _NAME_COMPACT):
         m = rx.search(path.stem)
         if m:
@@ -107,141 +105,6 @@ def _fit_date_from_filename(path: Path) -> date | None:
                 return date(y, mo, d)
             except ValueError:
                 return None
-    return None
-
-
-def _to_utc(t: datetime | None) -> datetime | None:
-    """fitparse renders a `timestamp` as a *naive* UTC datetime; stamp it with
-    timezone.utc so gpxpy writes the trailing "Z" the existing tracks use."""
-    if t is None:
-        return None
-    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
-
-
-def _missing_alt(alt) -> bool:
-    """Whether an altitude reading is the "no altitude" sentinel / absent."""
-    return alt is None or math.isclose(alt, ALT_SENTINEL, abs_tol=1.0)
-
-
-def _parse_argdate(s: str, flag: str) -> date:
-    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
-    try:
-        return date.fromisoformat(s)
-    except ValueError:
-        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
-
-
-def _distance_and_gain(points) -> tuple[float, float]:
-    """Total distance (km) and positive elevation gain (m) over a list of
-    (lat, lon, ele).  Equirectangular approximation (local lat/lon -> metres
-    with a mid-latitude cosine) - kept identical to wahoo_to_gpx.py on purpose."""
-    dist = gain = 0.0
-    for (la0, lo0, e0), (la1, lo1, e1) in zip(points, points[1:]):
-        lat_mid = math.radians((la0 + la1) / 2.0)
-        dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
-        dy = (la1 - la0) * 110540.0
-        dist += math.hypot(dx, dy)
-        if e0 is not None and e1 is not None:
-            gain += max(0.0, e1 - e0)
-    return dist / 1000.0, gain
-
-
-def _fill_altitude(points) -> bool:
-    """Forward/back-fill the -500 m 'no altitude' sentinel so the <ele> series
-    is continuous.  Returns whether any real altitude was seen at all."""
-    have = False
-    last = 0.0
-    for p in points:
-        if not _missing_alt(p["alt"]):
-            last = p["alt"]
-            have = True
-        elif have:
-            p["alt"] = last
-    if not have:
-        return False
-    first = next(p["alt"] for p in points if not _missing_alt(p["alt"]))
-    for p in points:                    # back-fill the leading run before the 1st fix
-        if not _missing_alt(p["alt"]):
-            break
-        p["alt"] = first
-    return True
-
-
-def _record_altitude(rec) -> float | None:
-    """This record's altitude: prefer the barometric `enhanced_altitude` when
-    present (usually steadier), else the GPS `altitude`; None when both are the
-    no-altitude sentinel."""
-    for name in ("enhanced_altitude", "altitude"):
-        a = rec.get_value(name)
-        if not _missing_alt(a):
-            return a
-    return None
-
-
-def _add_extensions(point, p: dict) -> None:
-    """Embed this sample's ride telemetry as <trkpt><extensions> children - the
-    same un-namespaced tags wahoo_to_gpx.py writes."""
-    ext = point.extensions
-    if p["kph"] > 0:
-        e = ET.Element("speed_kmh"); e.text = f"{p['kph']:.1f}"; ext.append(e)
-    if p["watts"] > 0:
-        e = ET.Element("power"); e.text = str(int(p["watts"])); ext.append(e)
-    if p["cad"] > 0:
-        e = ET.Element("cadence"); e.text = str(int(p["cad"])); ext.append(e)
-    if p["hr"] > 0:
-        e = ET.Element("heartrate"); e.text = str(int(p["hr"])); ext.append(e)
-    if p["slope"]:
-        e = ET.Element("grade"); e.text = f"{p['slope']:.1f}"; ext.append(e)
-    if p.get("temp"):
-        e = ET.Element("temperature"); e.text = str(int(p["temp"])); ext.append(e)
-
-
-# --------------------------------- fit reading --------------------------------
-def _iter_messages(path: Path):
-    """Parse one .fit file into its list of data messages, with the standard
-    Garmin unit conversions applied (semicircles -> degrees, m/s -> km/h, ...)."""
-    with FitFile(str(path), data_processor=StandardUnitsDataProcessor()) as ff:
-        return list(ff.get_messages())
-
-
-def _extract_meta(messages):
-    """Pull the first `session` and `file_id` plus *every* `device_info`/`device`
-     message out of a stream.  A ride has one session/file_id, but the device_info
-     list is long (a per-sensor entry, the first often with no product), so we keep
-     them all for _device_name to scan."""
-    session = file_id = None
-    devices = []
-    for m in messages:
-        n = m.name
-        if n == "session" and session is None:
-            session = m
-        elif n == "file_id" and file_id is None:
-            file_id = m
-        elif n in ("device_info", "device"):
-            devices.append(m)
-    return session, file_id, devices
-
-
-def _start_time_of(session, file_id, first_record_time) -> datetime | None:
-    """The ride start, in priority order: session start_time, then the file_id
-    time, then the first record's timestamp.  None when the file has none."""
-    t = None
-    if session is not None:
-        t = _to_utc(session.get_value("start_time"))
-    if t is None and file_id is not None:
-        t = _to_utc(file_id.get_value("time"))
-    if t is None:
-        t = first_record_time
-    return t
-
-
-def _ride_date(path: Path) -> date | None:
-    """Calendar date of the ride: read from the filename first (no parse), and
-    when the name is undated (a bare serial) fall back to the file's start time.
-    None when neither yields a date, so a filter can skip it rather than guess."""
-    d = _fit_date_from_filename(path)
-    if d is not None:
-        return d
     try:
         messages = _iter_messages(path)
     except (FitParseError, OSError):
@@ -254,39 +117,6 @@ def _ride_date(path: Path) -> date | None:
             break
     t = _start_time_of(session, file_id, first)
     return t.date() if t else None
-
-
-def _device_name(devices, file_id) -> str | None:
-    """A human device label: prefer the `manufacturer` name (fitparse renders the
-     FIT manufacturer enum to a string, e.g. 'wahoo_fitness'), else a 'product #N'
-     from the product code.  Scans every device message then the file_id, so a sensor
-     entry with no name can't win over the real computer's."""
-    for src in (*devices, file_id):
-        if src is None:
-            continue
-        man = src.get_value("manufacturer")
-        if man:
-            return _reword(man, _DEVICE_WORDS)
-        prod = src.get_value("product")
-        if prod:
-            return f"product #{prod}"
-    return None
-
-
-def _reword(value, words) -> str:
-    """Reword a fitparse machine word to its human equivalent when the table
-    knows it (e.g. 'wahoo_fitness' -> 'Wahoo ELEMNT BOLT'), else pass it through."""
-    s = str(value).strip()
-    return words.get(s, s)
-
-
-def _sport_name(session) -> str | None:
-    """This ride's sport in the Wahoo voice (the FIT enum reworded, e.g.
-    'cycling' -> 'Bike'); None when the session carries no sport."""
-    if session is None:
-        return None
-    sport = session.get_value("sport")
-    return _reword(sport, _SPORT_WORDS) if sport else None
 
 
 # --------------------------------- conversion ---------------------------------
@@ -323,7 +153,7 @@ def ride_to_gpx(path: Path, *, with_ext: bool = False):
     if not pts:
         return None, {}
 
-    have_alt = _fill_altitude(pts)
+    have_alt = _fill_altitude(pts, _missing_alt)
     raw = [(p["lat"], p["lon"], p["alt"] if have_alt else None) for p in pts]
     dist_km, gain_m = _distance_and_gain(raw)
 

@@ -13,7 +13,14 @@ turns that stream into a standard GPX 1.1 <trk> with <ele> + <time> per point -
 the same shape the komoot tracks in gpx/ use, so trackview.py renders the Wahoo
 rides alongside them.
 
-Wahoo quirks handled:
+This is a thin shim over the shared internals in `trackview.convert` (the
+distance / altitude-fill / extension helpers live there, shared with
+`fit_to_gpx`); it re-exports what its tests and `python wahoo_to_gpx.py` need,
+and carries only its own `ride_to_gpx` / `main` / `_parse_start` / `_ride_date`
+(the JSON reading + CLI glue that differs from the FIT converter).  See that
+module for the algorithm.
+
+Wahoo/JSON quirks handled:
    * the JSON is UTF-8 *with a BOM* -> opened as utf-8-sig;
    * a ride starts and ends with a few "no fix" rows (LAT/LON == 0) -> dropped;
    * ALT is 0 for the first minute or so (altitude lags the position lock) and 0
@@ -34,15 +41,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import xml.etree.ElementTree as ET
-
-import gpxpy          # noqa: F401   (shared, schema-valid GPX writer)
 from gpxpy import gpx as gpx_struct
+
+# The shared internals -- imported into this module's namespace so the
+# `import wahoo_to_gpx as wg` tests (and `python wahoo_to_gpx.py`) keep working,
+# unchanged, against the single source in trackview.convert.
+from trackview.convert import (
+    _parse_argdate, _distance_and_gain, _fill_altitude, _add_extensions,
+)
 
 # ------------------------------- configuration -------------------------------
 IN_DIR   = Path(__file__).resolve().parent / "gc"
@@ -85,67 +95,6 @@ def _ride_date(path: Path) -> date | None:
     return date(y, mo, d)
 
 
-def _parse_argdate(s: str, flag: str) -> date:
-    """Parse a 'YYYY-MM-DD' CLI date, aborting with a clear error if malformed."""
-    try:
-        return date.fromisoformat(s)
-    except ValueError:
-        raise SystemExit(f"error: {flag} {s!r} is not a YYYY-MM-DD date")
-
-
-def _distance_and_gain(points) -> tuple[float, float]:
-    """Total distance (km) and positive elevation gain (m) over a list of
-    (lat, lon, ele).  Equirectangular approximation (local lat/lon -> metres
-    with a mid-latitude cosine) - kept identical to trackview.py on purpose."""
-    dist = gain = 0.0
-    for (la0, lo0, e0), (la1, lo1, e1) in zip(points, points[1:]):
-        lat_mid = math.radians((la0 + la1) / 2.0)
-        dx = (lo1 - lo0) * 111320.0 * math.cos(lat_mid)
-        dy = (la1 - la0) * 110540.0
-        dist += math.hypot(dx, dy)
-        if e0 is not None and e1 is not None:
-            gain += max(0.0, e1 - e0)
-    return dist / 1000.0, gain
-
-
-def _fill_altitude(points) -> bool:
-    """Forward/back-fill the ALT==0 'no altitude' sentinel so the <ele> series
-    is continuous.  Returns whether any real altitude was seen at all."""
-    have = False
-    last = 0.0
-    for p in points:
-        if p["alt"]:
-            last = p["alt"]
-            have = True
-        elif have:
-            p["alt"] = last
-    if not have:
-        return False
-    first = next(p["alt"] for p in points if p["alt"])
-    for p in points:                    # back-fill the leading run before the 1st fix
-        if p["alt"]:
-            break
-        p["alt"] = first
-    return True
-
-
-def _add_extensions(point, p: dict) -> None:
-    """Embed this sample's ride telemetry as <trkpt><extensions> children."""
-    ext = point.extensions
-    if p["kph"] > 0:
-        e = ET.Element("speed_kmh"); e.text = f"{p['kph']:.1f}"; ext.append(e)
-    if p["watts"] > 0:
-        e = ET.Element("power"); e.text = str(int(p["watts"])); ext.append(e)
-    if p["cad"] > 0:
-        e = ET.Element("cadence"); e.text = str(int(p["cad"])); ext.append(e)
-    if p["hr"] > 0:
-        e = ET.Element("heartrate"); e.text = str(int(p["hr"])); ext.append(e)
-    if p["slope"]:
-        e = ET.Element("grade"); e.text = f"{p['slope']:.1f}"; ext.append(e)
-    if p.get("temp"):
-        e = ET.Element("temperature"); e.text = str(int(p["temp"])); ext.append(e)
-
-
 # --------------------------------- conversion ---------------------------------
 def ride_to_gpx(path: Path, *, with_ext: bool = False):
     """Parse one Wahoo ride JSON into a gpxpy.GPX (single track, one segment).
@@ -174,7 +123,7 @@ def ride_to_gpx(path: Path, *, with_ext: bool = False):
     if not pts:
         return None, {}
 
-    have_alt = _fill_altitude(pts)
+    have_alt = _fill_altitude(pts, lambda a: not a)
     raw = [(p["lat"], p["lon"], p["alt"] if have_alt else None) for p in pts]
     dist_km, gain_m = _distance_and_gain(raw)
 

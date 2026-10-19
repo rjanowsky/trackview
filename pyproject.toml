@@ -41,6 +41,8 @@ lint = ["ruff>=0.11"]
 # (the root launcher is a thin shim that re-enters this same main).
 [project.scripts]
 trackview = "trackview.cli:main"
+fit-to-gpx = "fit_to_gpx:main"
+wahoo-to-gpx = "wahoo_to_gpx:main"
 
 # Ship only the trackview/ package.  Declared explicitly so setuptools'
 # flat-layout auto-discovery does not also sweep in the root trackview.py
@@ -48,6 +50,9 @@ trackview = "trackview.cli:main"
 # lib/, tools/).
 [tool.setuptools]
 packages = ["trackview"]
+# the two top-level converter scripts are also shipped so their [project.scripts]
+# entry points (fit-to-gpx, wahoo-to-gpx) resolve after `pip install`.
+py-modules = ["fit_to_gpx", "wahoo_to_gpx"]
 
 # ---- test runner -------------------------------------------------------------
 [tool.pytest.ini_options]

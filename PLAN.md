@@ -1418,3 +1418,35 @@ validated in a throwaway venv (ruff is not in the main `.venv`, per the
 `ci.yml` parses as YAML.  Offline suite: **215 passed, 1 deselected** (the code
 fixes are import-cleanup / dead-var removal, so the count is unchanged).
 
+
+The same pass closed the shortlist with the **converter de-duplication** (A1 /
+C6).  `fit_to_gpx.py` and `wahoo_to_gpx.py` each carried a byte-for-byte copy of
+the distance / altitude-fill / telemetry-extension / CLI-date helpers *and* the
+FIT-side reading helpers -- copied from one into the other over the months, so a
+fix to one silently drifted from the other.  A new `trackview/convert.py` now
+holds that shared surface once: the four genuinely identical helpers
+(`_parse_argdate`, `_distance_and_gain`, `_fill_altitude`, `_add_extensions`),
+the FIT-only reading cluster (`_iter_messages`, `_extract_meta`,
+`_start_time_of`, `_to_utc`, `_record_altitude`, `_missing_alt`, the
+`_device_name` / `_sport_name` reworders and their `_DEVICE_WORDS` /
+`_SPORT_WORDS` maps, `ALT_SENTINEL`), and the optional `fitparse` import, guarded
+so the module (and `fit_to_gpx`) import even when the `fit` extra is absent.  The
+`_fill_altitude` sentinel became caller-supplied (`is_missing`) so one fill
+serves both vendors (Wahoo's `0`-m, FIT's `-500`-m).  The two top-level scripts
+are now thin: they import the shared helpers, keep only their own
+vendor-specific `ride_to_gpx` / `main` and their own `_ride_date` (the Wahoo and
+Garmin filename schemes differ), and re-export the shared names so
+`import *_to_gpx` and `python *_to_gpx.py` are unchanged.  `helpers._parse_argdate`
+(the third copy, imported by `cli` / `conftest` / `test_parse_helpers`) is now a
+re-export of `convert._parse_argdate`.  Two things were deliberately kept
+separate: the converters' *raw* per-segment `_distance_and_gain` (sums every
+rising segment; it feeds the GPX `<desc>` / metadata the converter prints) was
+left distinct from `geometry._distance_and_gain` (climb-aware, what the map /
+ride-log / climb ranking read) -- a Python check confirmed the two are *not*
+equivalent, so unifying them would have changed output.  `pyproject.toml` gained
+the two new console entry points (`fit-to-gpx`, `wahoo-to-gpx`) and
+`py-modules = ["fit_to_gpx", "wahoo_to_gpx"]` so they ship alongside the
+`trackview` package.  Behaviour-preserving, so the offline suite is unchanged at
+**215 passed, 1 deselected**; `ruff check` stays clean; and the entry points
+resolve after `pip install -e .` (verified in a throwaway venv, including
+`fit-to-gpx` running without the `fit` extra, confirming the guard).

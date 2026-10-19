@@ -913,3 +913,25 @@ Planning & decisions
      confirms E501 is not enforced, and ci.yml parses as YAML.  Offline suite: 215 passed,
      1 deselected (the code fixes are import-cleanup / dead-var removal, so the count is
      unchanged).
+
+[39] [done] De-duplicate the two ride converters into one module (re-analysis
+     shortlist A1/C6).  A new trackview/convert.py holds the surface both fit_to_gpx
+     and wahoo_to_gpx had copied byte-for-byte -- the four identical helpers
+     (_parse_argdate, _distance_and_gain, _fill_altitude, _add_extensions; the fill
+     sentinel is now caller-supplied so one fill serves Wahoo's 0 m and FIT's -500 m),
+     the FIT-only reading cluster (_iter_messages, _extract_meta, _start_time_of,
+     _to_utc, _record_altitude, _missing_alt, _device_name / _sport_name + their
+     _DEVICE_WORDS / _SPORT_WORDS maps, ALT_SENTINEL) and the optional fitparse import,
+     guarded so the module imports even without the 'fit' extra.  The two top-level
+     scripts are now thin shims: they import the shared helpers, keep only their own
+     vendor-specific ride_to_gpx / main and their own _ride_date (the Wahoo and Garmin
+     filename schemes differ), and re-export the shared names so `import *_to_gpx` and
+     `python *_to_gpx.py` are unchanged.  helpers._parse_argdate (the third copy, used
+     by cli / conftest / test_parse_helpers) is now a re-export of convert._parse_argdate.
+     Deliberately NOT merged: the converters' raw per-segment _distance_and_gain was
+     left distinct from geometry's climb-aware one (a check proved the two are not
+     equivalent, so unifying them would change the GPX <desc> numbers).  pyproject.toml
+     gained the two console entry points (fit-to-gpx, wahoo-to-gpx) + py-modules so they
+     ship with the package.  Behaviour-preserving: offline suite 215 passed, 1 deselected
+     (unchanged), ruff clean, and the entry points resolve after `pip install -e .`
+     (verified in a throwaway venv, incl. fit-to-gpx without the 'fit' extra).
