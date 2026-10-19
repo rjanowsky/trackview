@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 
 import gpxpy
+from gpxpy.gpx import GPXXMLSyntaxException
 
 from trackview.geometry import latlon_to_merc, decimate, _distance_and_gain, _grade_and_cumkm
 from trackview.helpers import _device_type, _sport_type
@@ -32,11 +33,25 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
     Wahoo telemetry embedded by `wahoo_to_gpx --ext` (power/speed/cadence/hr) per
     point, accumulated over every sample (pre-decimation) so the caller can show an
     accurate average.  With noise_m > 0 each ride's gain ignores GPS vertical jitter
-    below noise_m (see _distance_and_gain); 0 (the default) sums every rising segment."""
+    below noise_m (see _distance_and_gain); 0 (the default) sums every rising segment.
+    A path that is missing or holds a file gpxpy can't parse (a truncated / foreign /
+    zero-byte .gpx) is skipped with a note -- mirroring the fit/wahoo converters, so one
+    bad file in a mixed-vendor gpx/ never aborts the whole run."""
     tracks = []
     for path in sorted(paths):
-        with open(path, "rb") as fh:
-            gpx = gpxpy.parse(fh)
+        try:
+            with open(path, "rb") as fh:
+                gpx = gpxpy.parse(fh)
+        except OSError as err:
+             # a missing / unreadable path (the file isn't there, or can't be opened)
+            print(f"  skip (could not open): {os.path.basename(path)}   ({err})")
+            continue
+        except GPXXMLSyntaxException as err:
+             # a file that is not valid GPX XML -- a truncated, foreign or zero-byte
+             # .gpx (gpxpy raises its GPXXMLSyntaxException, not a builtin).  Skipped,
+             # not fatal: one bad file in a mixed-vendor gpx/ must not abort the run.
+            print(f"  skip (not a valid .gpx): {os.path.basename(path)}   ({err})")
+            continue
         raw = []                            # (lat, lon, ele) for every point
         tele = {k: [0.0, 0] for k in ("power", "speed", "cadence", "hr", "temp")} if with_ext else None
         records = [] if with_ext else None     # per-point {time, speed, power}, carried through decimation

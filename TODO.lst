@@ -871,3 +871,15 @@ Planning & decisions
      "once core modules are stable" gate was a precondition not a mandate; so no track.py /
      visualization.py is created and no module is migrated.  The footer/status now state
      "Phase 5 closed" and "Phase 2 not implemented (decided 2026-10-18)".
+
+[36] [done] Per-file error isolation in the GPX reader (re-analysis shortlist A3/C3):
+     one corrupt / missing .gpx in a mixed-vendor gpx/ is skipped with a note, not fatal.
+     load_tracks() now wraps open() + gpxpy.parse() in a try/except that catches OSError
+     (a missing / unreadable path) and gpxpy.gpx.GPXXMLSyntaxException (a truncated /
+     foreign / zero-byte .gpx -- gpxpy raises its own exception type, not a builtin),
+     printing a "skip (could not open)" / "skip (not a valid .gpx)" line and continuing,
+     mirroring the fit/wahoo converters' skip loop.  Three regression tests were added to
+     tests/test_load_tracks.py (a malformed file skipped while a good one still loads; a
+     missing file skipped; an all-corrupt folder returns []).  No --strict flag was added:
+     the skip-and-report behaviour is the correct default and matches the converters.
+     Offline suite: 214 passed, 1 deselected (was 211; +3 new skip-path tests).

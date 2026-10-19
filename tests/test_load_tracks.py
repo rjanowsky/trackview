@@ -5,6 +5,8 @@ a ride built *with* <extensions> telemetry carries per-point power/speed arrays
 plain komoot-style track -- carries no telemetry values.  The climb/descent/flat
 profile is readable straight off the raw points via the pure geometry helpers.
 """
+from pathlib import Path
+
 from conftest import build_ride, gpx_points, write_ride
 from trackview.geometry import _distance_and_gain, _grade_and_cumkm
 from trackview.load import load_tracks
@@ -71,3 +73,43 @@ def test_grade_and_cumkm_shape():
     assert len(cum_km) == len(raw)
     assert cum_km[0] == 0.0
     assert cum_km[-1] > 0.0
+
+
+# --------------------------------------------------------------------------- #
+#  Per-file error isolation: one corrupt / missing .gpx in a mixed-vendor
+#  gpx/ is skipped with a note, not fatal -- the good rides still load.
+# --------------------------------------------------------------------------- #
+def test_malformed_gpx_is_skipped_not_fatal(tmp_path, capsys):
+    good = write_ride(build_ride("2026_01_01_08_00_00", telemetry=False),
+                      tmp_path / "2026_01_01_08_00_00.gpx")
+    bad = tmp_path / "broken.gpx"
+    bad.write_bytes(b"not gpx at all")          # not valid GPX XML
+
+    tracks = load_tracks([good, bad], 1.0, with_ext=True)
+
+    assert [Path(t["path"]).name for t in tracks] == ["2026_01_01_08_00_00.gpx"]
+    out = capsys.readouterr().out
+    assert "skip (not a valid .gpx)" in out and "broken.gpx" in out
+
+
+def test_missing_file_is_skipped_not_fatal(tmp_path, capsys):
+    good = write_ride(build_ride("2026_01_01_08_00_00", telemetry=False),
+                      tmp_path / "2026_01_01_08_00_00.gpx")
+    missing = tmp_path / "does_not_exist.gpx"     # no such file
+
+    tracks = load_tracks([good, missing], 1.0, with_ext=True)
+
+    assert [Path(t["path"]).name for t in tracks] == ["2026_01_01_08_00_00.gpx"]
+    out = capsys.readouterr().out
+    assert "skip (could not open)" in out and "does_not_exist.gpx" in out
+
+
+def test_all_bad_gpx_returns_empty(tmp_path, capsys):
+     # every file corrupt -> no tracks, still no exception
+    (tmp_path / "a.gpx").write_bytes(b"garbage")
+    (tmp_path / "b.gpx").write_bytes(b"<gpx><oops></gpx>")
+
+    tracks = load_tracks([tmp_path / "a.gpx", tmp_path / "b.gpx"], 1.0)
+
+    assert tracks == []
+    assert capsys.readouterr().out.count("skip") == 2

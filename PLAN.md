@@ -1367,3 +1367,20 @@ the acyclic dependency direction, and a note that the leading-underscore helpers
 carried-over monolith names that *are* the cross-module API (no `__all__`).  Usage examples
 stay in `README.md` (its full **Usage** section), which `API.md` points to.
 
+A post-closure re-analysis pass (2026-10-18) reopened the code for a weaknesses /
+best-practice / enhancement review; its shortlist began with **per-file error
+isolation in the GPX reader** (a mixed-vendor `gpx/` where one file is corrupt or
+missing must not abort the whole run).  `trackview/load.load_tracks` now wraps
+`open()` + `gpxpy.parse()` in a `try/except` that catches `OSError` (a missing /
+unreadable path) and `gpxpy.gpx.GPXXMLSyntaxException` (a truncated / foreign /
+zero-byte .gpx -- gpxpy raises its own exception type, not a builtin, so the old
+`ValueError`-style guard would have missed it), printing a
+`skip (could not open)` / `skip (not a valid .gpx)` line and `continue`-ing --
+mirroring the fit/wahoo converters' skip loop, so one bad file in a mixed-vendor
+`gpx/` no longer aborts the run.  No `--strict` flag was added: skip-and-report is
+the correct default and matches the converters.  Three regression tests were added
+to `tests/test_load_tracks.py` (a malformed file skipped while a good one still
+loads; a missing file skipped; an all-corrupt folder returns `[]`), and the module
+docstring's "skipped with a note" behaviour is now backed by a test.  Offline
+suite: **214 passed, 1 deselected** (was 211; +3 new skip-path tests).
+
