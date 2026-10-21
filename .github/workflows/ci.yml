@@ -27,7 +27,7 @@ jobs:
       # the core build never imports; linting them keeps a stray unused-import or
       # empty f-string from creeping in there too.
       - name: Lint with ruff
-        run: ruff check trackview/ fit_to_gpx.py wahoo_to_gpx.py trackview.py tests/ tools/
+        run: ruff check trackview/ fit_to_gpx.py goldencheetah_to_gpx.py trackview.py tests/ tools/
 
   test:
     runs-on: ubuntu-latest

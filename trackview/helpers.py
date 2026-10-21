@@ -2,7 +2,7 @@
 
 Extracted from the trackview monolith (see PLAN.md, Phase 1.2).  These read the
 metadata a ride carries -- its calendar date (off a Wahoo-style filename stem)
-and its device / sport (off the GPX <desc> line `wahoo_to_gpx` stamps) -- and
+and its device / sport (off the GPX <desc> line `goldencheetah_to_gpx` stamps) -- and
 apply the --since/--until, --device/--sport and --top filters, plus a couple of
 string helpers.  They are pure (no I/O, no rendering) and depend only on `re`,
 `datetime.date` and `pathlib.Path`, so they stand on their own and are unit-tested
@@ -24,7 +24,7 @@ from trackview.convert import _parse_argdate  # noqa: F401  (re-exported)
 # title read just the date head, and a name that isn't Wahoo-shaped (a foreign
 # komoot title) is undated.
 _NAME_DATE_RE = re.compile(r"^(\d{4})_(\d{2})_(\d{2})(?=_|$)")
-# `wahoo_to_gpx` stamps a "Device: <name>" and a "Sport: <name>" line into the
+# `goldencheetah_to_gpx` stamps a "Device: <name>" and a "Sport: <name>" line into the
 # GPX <desc> (e.g. "Wahoo ELEMNT BOLT", "Bike"); a plain komoot track has
 # neither, and an undated/foreign file may carry one but not the other.
 _DEVICE_RE = re.compile(r"(?im)^\s*Device:\s*(.+)$")
@@ -75,7 +75,7 @@ def _ride_date(path: Path) -> date | None:
 
 
 def _device_type(desc: str | None) -> str | None:
-    """Device type embedded by `wahoo_to_gpx` as a 'Device: <name>' line in the
+    """Device type embedded by `goldencheetah_to_gpx` as a 'Device: <name>' line in the
     GPX <desc> (e.g. 'Wahoo ELEMNT BOLT', 'Kickr Snap'); None when the track
     carries no such line (e.g. a plain komoot track)."""
     m = _DEVICE_RE.search(desc) if desc else None
@@ -83,7 +83,7 @@ def _device_type(desc: str | None) -> str | None:
 
 
 def _sport_type(desc: str | None) -> str | None:
-    """Sport embedded by `wahoo_to_gpx` as a 'Sport: <name>' line in the GPX <desc>
+    """Sport embedded by `goldencheetah_to_gpx` as a 'Sport: <name>' line in the GPX <desc>
     (e.g. 'Bike'); None when the track carries no such line (e.g. a plain komoot
     track), so a --sport filter can skip it rather than guess."""
     m = _SPORT_RE.search(desc) if desc else None

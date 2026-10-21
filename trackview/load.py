@@ -30,7 +30,7 @@ def load_tracks(paths, decimate_m: float, with_ext: bool = False,
     merge its segments into one polyline each.
     Always record each ride's first->last timestamp span: its duration, shown on the
     title and feeding the calories-burned estimate.  With with_ext, also collect the
-    Wahoo telemetry embedded by `wahoo_to_gpx --ext` (power/speed/cadence/hr) per
+    Wahoo telemetry embedded by `goldencheetah_to_gpx --ext` (power/speed/cadence/hr) per
     point, accumulated over every sample (pre-decimation) so the caller can show an
     accurate average.  With noise_m > 0 each ride's gain ignores GPS vertical jitter
     below noise_m (see _distance_and_gain); 0 (the default) sums every rising segment.

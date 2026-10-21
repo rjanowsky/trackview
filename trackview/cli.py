@@ -122,7 +122,7 @@ def main() -> None:
                     help="what shades the route line: 'elev' (default, the elevation "
                                "ramp), 'grade' (a diverging ramp, steep climbs hot and "
                                "descents cold), 'speed'/'power' (a telemetry ramp, fast/high = hot; needs "
-                               "wahoo_to_gpx --ext, else flat), or 'flat' (one distinct colour per track); "
+                               "goldencheetah_to_gpx --ext, else flat), or 'flat' (one distinct colour per track); "
                                "--no-elev is shorthand for 'flat'")
     ap.add_argument("--grade-cap", type=float, default=None, metavar="N",
                     help="pin the grade colour range to +/-N%% (overrides the auto "
@@ -148,7 +148,7 @@ def main() -> None:
                                "is ignored when --gallery is set (it is the mosaic instead)")
     ap.add_argument("--ext", action="store_true",
                     help="add the calories-burned total (kcal) to the title and an avg "
-                           "power/speed/cadence/hr line below it, from wahoo_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
+                           "power/speed/cadence/hr line below it, from goldencheetah_to_gpx --ext telemetry (calories = avg power x ride duration / efficiency; ignored when absent)")
     ap.add_argument("--no-map", action="store_true",
                     help="skip map/image generation (no basemap fetch or output "
                             "image); just compute the stats and write the ride-log to "
@@ -259,7 +259,7 @@ def main() -> None:
     paths = sorted(gpx_dir.rglob("*.gpx") if recurse else gpx_dir.glob("*.gpx"))
 
      # date filter: Wahoo-style .gpx names carry the ride start date (local) in the
-     # stem, so --since/--until select by that (mirrors wahoo_to_gpx.py).  A name with
+     # stem, so --since/--until select by that (mirrors goldencheetah_to_gpx.py).  A name with
      # no date is skipped (never guessed) when a bound is active.
     lo = _parse_argdate(args.since, "--since") if args.since else None
     hi = _parse_argdate(args.until, "--until") if args.until else None
@@ -383,7 +383,7 @@ def main() -> None:
                   # mini-panels plot; with none (e.g. a plain komoot track, no --ext)
                   # the card falls back to elevation + grade only
             print("          --profile: no ride carries per-point telemetry "
-                              "(need wahoo_to_gpx --ext); each card shows elevation + grade only")
+                              "(need goldencheetah_to_gpx --ext); each card shows elevation + grade only")
 
         if not render_tracks:
             print("      no tracks left to render after suppression.")

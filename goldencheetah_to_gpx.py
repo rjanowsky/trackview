@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-wahoo_to_gpx - convert Wahoo ELEMNT ride exports (./gc/*.json) into GPX tracks.
+goldencheetah_to_gpx - convert GoldenCheetah ride exports (./gc/*.json) into
+GPX tracks.
+
+The ./gc/*.json rides are exported by GoldenCheetah (the "gc" in the folder
+name): the Wahoo ELEMNT BOLT itself writes Garmin .fit files, which are opened
+in GoldenCheetah and re-saved in this JSON form.  So the *source* of these
+files is GoldenCheetah -- the reason for the goldencheetah_to_gpx name -- even
+though the ride data originated on a Wahoo device.
 
 Each ride is a single JSON file, e.g.
 
@@ -10,32 +17,32 @@ A file is {"RIDE": {...}} holding one SAMPLES array - one row per RECINTSECS
 (usually 1 s) - with LAT/LON (already WGS-84 *decimal degrees*), ALT (metres; 0
 while the GPS altitude has not locked), plus WATTS/CAD/KPH/SLOPE/TEMP.  This
 turns that stream into a standard GPX 1.1 <trk> with <ele> + <time> per point -
-the same shape the komoot tracks in gpx/ use, so trackview.py renders the Wahoo
+the same shape the komoot tracks in gpx/ use, so trackview.py renders these
 rides alongside them.
 
 This is a thin shim over the shared internals in `trackview.convert` (the
 distance / altitude-fill / extension helpers live there, shared with
-`fit_to_gpx`); it re-exports what its tests and `python wahoo_to_gpx.py` need,
+`fit_to_gpx`); it re-exports what its tests and `python goldencheetah_to_gpx.py` need,
 and carries only its own `ride_to_gpx` / `main` / `_parse_start` / `_ride_date`
 (the JSON reading + CLI glue that differs from the FIT converter).  See that
 module for the algorithm.
 
-Wahoo/JSON quirks handled:
+GoldenCheetah / JSON quirks handled:
    * the JSON is UTF-8 *with a BOM* -> opened as utf-8-sig;
    * a ride starts and ends with a few "no fix" rows (LAT/LON == 0) -> dropped;
    * ALT is 0 for the first minute or so (altitude lags the position lock) and 0
-     is Wahoo's "no altitude" sentinel (real altitudes here run 12-120 m), so the
+     is the "no altitude" sentinel (real altitudes here run 12-120 m), so the
      0 readings are filled from the neighbouring valid altitude;
    * absolute time = STARTTIME ("... UTC") + SECS, emitted with a "Z" suffix to
      match the existing tracks.
 
 Usage:
-    .venv/bin/python wahoo_to_gpx.py                      # ./gc -> ./gpx
-    .venv/bin/python wahoo_to_gpx.py --gc-dir gc --out-dir gpx
-    .venv/bin/python wahoo_to_gpx.py --ext                  # also embed power/cad/hr/speed(km/h)/grade/temp
-    .venv/bin/python wahoo_to_gpx.py --since 2026-09-05             # only rides on/after a date
-    .venv/bin/python wahoo_to_gpx.py --until 2026-09-08 --ext        # only rides on/before a date
-    .venv/bin/python wahoo_to_gpx.py gc/2026_09_01_08_07_05.json    # one explicit file
+    .venv/bin/python goldencheetah_to_gpx.py                      # ./gc -> ./gpx
+    .venv/bin/python goldencheetah_to_gpx.py --gc-dir gc --out-dir gpx
+    .venv/bin/python goldencheetah_to_gpx.py --ext                  # also embed power/cad/hr/speed(km/h)/grade/temp
+    .venv/bin/python goldencheetah_to_gpx.py --since 2026-09-05             # only rides on/after a date
+    .venv/bin/python goldencheetah_to_gpx.py --until 2026-09-08 --ext        # only rides on/before a date
+    .venv/bin/python goldencheetah_to_gpx.py gc/2026_09_01_08_07_05.json    # one explicit file
 """
 from __future__ import annotations
 
@@ -48,8 +55,8 @@ from pathlib import Path
 from gpxpy import gpx as gpx_struct
 
 # The shared internals -- imported into this module's namespace so the
-# `import wahoo_to_gpx as wg` tests (and `python wahoo_to_gpx.py`) keep working,
-# unchanged, against the single source in trackview.convert.
+# `import goldencheetah_to_gpx as gcx` tests (and `python goldencheetah_to_gpx.py`)
+# keep working, unchanged, against the single source in trackview.convert.
 from trackview.convert import (
     _parse_argdate, _distance_and_gain, _fill_altitude, _add_extensions,
 )
@@ -57,7 +64,7 @@ from trackview.convert import (
 # ------------------------------- configuration -------------------------------
 IN_DIR   = Path(__file__).resolve().parent / "gc"
 OUT_DIR  = Path(__file__).resolve().parent / "gpx"
-CREATOR  = "wahoo_to_gpx/1.0 (trackview)"
+CREATOR  = "goldencheetah_to_gpx/1.0 (trackview)"
 
 # Non-standard per-point telemetry embedded under <trkpt><extensions> when --ext
 # is passed.  Deliberately un-namespaced: they are self-describing by tag name
@@ -69,8 +76,8 @@ CREATOR  = "wahoo_to_gpx/1.0 (trackview)"
 
 # --------------------------------- helpers -----------------------------------
 _START_RE = re.compile(r"(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})")
-# Wahoo names each export after its ride start time (local), so the stem alone
-# tells us *when* the ride was: "2026_09_01_08_07_05".  Used by the date filter.
+# GoldenCheetah names each export after the ride start time (local), so the stem
+# alone tells us *when* the ride was: "2026_09_01_08_07_05".  Used by the date filter.
 _STEM_RE = re.compile(r"(\d{4})_(\d{2})_(\d{2})_\d{2}_\d{2}_\d{2}")
 
 
@@ -87,7 +94,7 @@ def _parse_start(starttime: str) -> datetime:
 def _ride_date(path: Path) -> date | None:
     """Calendar date of the ride, read from the filename stem
     (YYYY_MM_DD_HH_MM_SS, local time) - no JSON parse needed.  None when the
-    name isn't Wahoo-shaped, so a filter can skip it rather than guess."""
+    name isn't Wahoo-style, so a filter can skip it rather than guess."""
     m = _STEM_RE.match(path.stem)
     if not m:
         return None
@@ -97,8 +104,8 @@ def _ride_date(path: Path) -> date | None:
 
 # --------------------------------- conversion ---------------------------------
 def ride_to_gpx(path: Path, *, with_ext: bool = False):
-    """Parse one Wahoo ride JSON into a gpxpy.GPX (single track, one segment).
-    Returns (gpx, info); gpx is None when the ride has no GPS fixes."""
+    """Parse one GoldenCheetah ride JSON into a gpxpy.GPX (single track, one
+    segment).  Returns (gpx, info); gpx is None when the ride has no GPS fixes."""
     with open(path, encoding="utf-8-sig") as fh:        # BOM-safe
         ride = json.load(fh)["RIDE"]
     start = _parse_start(ride.get("STARTTIME", ""))
@@ -165,11 +172,11 @@ def ride_to_gpx(path: Path, *, with_ext: bool = False):
 # --------------------------------- entry point --------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Convert Wahoo ELEMNT ride JSON (gc/) into GPX tracks (gpx/).")
+        description="Convert GoldenCheetah ride JSON (gc/) into GPX tracks (gpx/).")
     ap.add_argument("files", nargs="*",
                     help="explicit *.json files (default: every *.json in --gc-dir)")
     ap.add_argument("--gc-dir", "--in-dir", default=str(IN_DIR),
-                    help="folder of Wahoo JSON rides to read (default: ./gc); "
+                    help="folder of GoldenCheetah JSON rides to read (default: ./gc); "
                              "--in-dir is kept as an alias")
     ap.add_argument("--out-dir", default=str(OUT_DIR),
                     help="folder for the .gpx output (default: ./gpx)")
@@ -187,7 +194,7 @@ def main() -> None:
     gc_dir, out_dir = Path(args.gc_dir), Path(args.out_dir)
     paths = [Path(f) for f in args.files] if args.files else sorted(gc_dir.glob("*.json"))
     if not paths:
-        print(f"No Wahoo JSON files found in {gc_dir} - nothing to convert.")
+        print(f"No GoldenCheetah JSON files found in {gc_dir} - nothing to convert.")
         return
 
     lo = _parse_argdate(args.since, "--since") if args.since else None
@@ -215,7 +222,7 @@ def main() -> None:
             print(f"No rides within {lo_s}..{hi_s} - nothing to convert.")
             return
 
-    print(f"wahoo_to_gpx - converting {len(paths)} ride(s) from {gc_dir} -> {out_dir}"
+    print(f"goldencheetah_to_gpx - converting {len(paths)} ride(s) from {gc_dir} -> {out_dir}"
           + ("    (+telemetry extensions)" if args.ext else ""))
     out_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,4 +1,4 @@
-"""The shared internals of the two ride converters (`fit_to_gpx`, `wahoo_to_gpx`).
+"""The shared internals of the two ride converters (`fit_to_gpx`, `goldencheetah_to_gpx`).
 
 Both scripts read a ride in a vendor's own format and emit a standard GPX 1.1
 `<trk>` that `trackview` then renders.  Everything they had in common -- copied
@@ -148,7 +148,7 @@ def _add_extensions(point, p: dict) -> None:
 ALT_SENTINEL = -500.0
 
 # fitparse renders the FIT enum tables to lower-case *machine* words (a
-# manufacturer like 'wahoo_fitness', a sport like 'cycling'); wahoo_to_gpx.py stamps
+# manufacturer like 'wahoo_fitness', a sport like 'cycling'); goldencheetah_to_gpx.py stamps
 # the *human* words its JSON carries (a device type like 'Wahoo ELEMNT BOLT', a sport
 # like 'Bike').  Reword the two that disagree so a Garmin ride reads in the same voice
 # as a Wahoo one and `trackview --device` / `--sport` match across both converters; any

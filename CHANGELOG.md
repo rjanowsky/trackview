@@ -59,8 +59,8 @@ re-analysis found only polish (no behaviour gaps).
 - **De-duplicated the two ride converters** — the shared surface
   (`_parse_argdate`, `_distance_and_gain`, `_fill_altitude`, `_add_extensions`,
   and the FIT-only reading cluster) now lives in one `trackview/convert.py`, with
-  `fit_to_gpx.py` / `wahoo_to_gpx.py` as thin shims; `pyproject.toml` gained the
-  `fit-to-gpx` / `wahoo-to-gpx` console entry points + `py-modules` so they ship.
+  `fit_to_gpx.py` / `goldencheetah_to_gpx.py` as thin shims; `pyproject.toml` gained the
+  `fit-to-gpx` / `goldencheetah-to-gpx` console entry points + `py-modules` so they ship.
 - **Per-file error isolation in the GPX reader** — a corrupt or missing `*.gpx` in a
   mixed-vendor `gpx/` is skipped with a `skip (could not open)` /
   `skip (not a valid .gpx)` note and the run continues (mirroring the fit/wahoo
@@ -100,8 +100,8 @@ added).  The feature history below was delivered over 2026-09-17 → 2026-09-30;
 this is the first *tagged* release, cut when the build system landed.
 
 *Added*
-- **A Wahoo ELEMNT JSON → GPX converter (`wahoo_to_gpx.py`)** — turns the Wahoo
-  `gc/` `*.json` ride exports (the `{"RIDE": {...}}` shape, UTF-8 *with a BOM*, so
+- **A GoldenCheetah JSON → GPX converter (`goldencheetah_to_gpx.py`)** — turns the
+  GoldenCheetah `gc/` `*.json` ride exports (the `{"RIDE": {...}}` shape, UTF-8 *with a BOM*, so
   read as `utf-8-sig`) into GPX 1.1 rides in `gpx/`: no-fix rows (`LAT/LON == 0`) at
   the start and end are dropped, the `ALT == 0` "no altitude" sentinel is
   forward/back-filled, absolute time is `STARTTIME` + `SECS` (UTC "Z"), and
@@ -115,7 +115,7 @@ this is the first *tagged* release, cut when the build system landed.
   core runtime deps (`contextily` / `gpxpy` / `matplotlib` / `numpy`, mirrored from
   `requirements.txt`), two optional extras (`fit = fitparse`, used only by the
   top-level `fit_to_gpx.py`; `test = pytest`), and the console entry point
-  `trackview = "trackview.cli:main"` (the `fit-to-gpx` / `wahoo-to-gpx` entry
+  `trackview = "trackview.cli:main"` (the `fit-to-gpx` / `goldencheetah-to-gpx` entry
   points joined it with the converter de-duplication below).  A
   `[tool.setuptools] packages = ["trackview"]`
   keeps flat-layout auto-discovery from sweeping the root `trackview.py` launcher or
@@ -136,8 +136,8 @@ this is the first *tagged* release, cut when the build system landed.
   no-fix records, a `session`/`file_id` start-time fallback) and rewords
   device/sport to the Wahoo voice (`wahoo_fitness` → `Wahoo ELEMNT BOLT`,
   `cycling` → `Bike`).
-- **A Wahoo JSON → GPX converter test** — `tests/test_wahoo_to_gpx.py` exercises
-  `wahoo_to_gpx.py` the same way the FIT converter is: a hand-built BOM-prefixed
+- **A GoldenCheetah JSON → GPX converter test** — `tests/test_goldencheetah_to_gpx.py` exercises
+  `goldencheetah_to_gpx.py` the same way the FIT converter is: a hand-built BOM-prefixed
   ride JSON driven through `ride_to_gpx` / `main` (no-fix lead-in + trailing rows
   dropped, the `0 m` altitude sentinel back-filled, `LAT`/`LON`/`KPH` passed
   through, `--ext` embedding the six telemetry tags, `main` naming output after the

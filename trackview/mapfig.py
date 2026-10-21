@@ -205,7 +205,7 @@ def render(tracks, *, style: str, out_path: Path, detail: int | None,
         have_metric = False
     if color_by in ("speed", "power") and not have_metric:
         print(f"      --color-by {color_by}: no per-point {color_by} telemetry "
-                "(need wahoo_to_gpx --ext); drawing a flat per-track colour instead")
+                "(need goldencheetah_to_gpx --ext); drawing a flat per-track colour instead")
     for i, t in enumerate(tracks):
         seg = np.array([[t["merc"][j], t["merc"][j + 1]]
                         for j in range(len(t["merc"]) - 1)])

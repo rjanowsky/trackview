@@ -162,7 +162,7 @@ thinning, metres) and `PI_R` (degrees->radians).  No functions.
 * `_ride_date(path)` -- the calendar date of a ride, read from the `.gpx` filename stem;
   `None` when the name carries no date.
 * `_device_type(desc)` / `_sport_type(desc)` -- the device / sport embedded by
-  `wahoo_to_gpx` as a `Device:` / `Sport:` line in the GPX `<desc>` (`None` when absent).
+  `goldencheetah_to_gpx` as a `Device:` / `Sport:` line in the GPX `<desc>` (`None` when absent).
 * `_device_label(device)` -- the ride-log "Device" cell text; `unknown` when the track
   carries no device.
 * `_device_groups(tracks)` -- split the rides into `(device label, [rides])` groups in
@@ -252,6 +252,6 @@ lifted out without a cycle.
 ## Where the user guide lives
 
 Flag-by-flag behaviour, the `--style` base-map providers, the `tools/` helpers
-(`wahoo_to_gpx`, `garmin_fit_reader`, `fit_to_gpx`) and the output formats are documented
+(`goldencheetah_to_gpx`, `garmin_fit_reader`, `fit_to_gpx`) and the output formats are documented
 in `README.md` (**Usage**, **Output**, **Base-map providers**, **Helper tools**).  This
 `API.md` is the catalog; `README.md` is the how-to.

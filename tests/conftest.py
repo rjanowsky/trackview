@@ -39,7 +39,7 @@ from trackview.cli import main as cli_main     # noqa: E402
 # of points reads as a real climb and descent.
 CLIMB_DES_FLAT_ELE = (100, 100, 100, 200, 300, 300, 200, 100, 100)
 
-# Per-point telemetry, as wahoo_to_gpx --ext stamps it: un-namespaced
+# Per-point telemetry, as goldencheetah_to_gpx --ext stamps it: un-namespaced
 # <extensions> children, keyed by the tags trackview._TELE_TAGS reads.
 _TELE = {"power": "250", "speed_kmh": "30.0", "cadence": "90",
          "heartrate": "150", "temperature": "15"}
@@ -49,7 +49,7 @@ def build_ride(stem, *, device=None, sport=None, telemetry=False,
                ele=CLIMB_DES_FLAT_ELE, start_time=None):
     """An in-memory gpxpy.GPX for one ride: a single track/segment of
     climb/descent/flat samples.  `device`/`sport` add a 'Device:'/'Sport:' line
-    to <desc> (the lines wahoo_to_gpx stamps); `telemetry` embeds a per-point
+    to <desc> (the lines goldencheetah_to_gpx stamps); `telemetry` embeds a per-point
     <extensions> block.  Nothing is written -- materialize to disk via write_ride().
     """
     g = GPX()

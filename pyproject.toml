@@ -55,7 +55,7 @@ lint = ["ruff>=0.11"]
 [project.scripts]
 trackview = "trackview.cli:main"
 fit-to-gpx = "fit_to_gpx:main"
-wahoo-to-gpx = "wahoo_to_gpx:main"
+goldencheetah-to-gpx = "goldencheetah_to_gpx:main"
 
 # Ship the trackview/ package *and* its root-level scripts + standalone helpers
 # so they reach the sdist.  A top-level script has the same basename as the
@@ -64,7 +64,7 @@ wahoo-to-gpx = "wahoo_to_gpx:main"
 # `py-modules` entry, never by flat-layout auto-discovery.
 [tool.setuptools]
 packages = ["trackview"]
-py-modules = ["trackview", "fit_to_gpx", "wahoo_to_gpx"]
+py-modules = ["trackview", "fit_to_gpx", "goldencheetah_to_gpx"]
 # The `tools/` helpers (the .fit reader + its standalone variant) are pure-stdlib
 # -- no `import trackview` -- and are not importable modules at all, so nothing in
 # the core build reaches them.  They are not declared here: `data-files` would

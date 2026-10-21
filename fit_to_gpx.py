@@ -16,14 +16,14 @@ A .fit file is a stream of typed messages (parsed via `fitparse`): a `file_id`
 (who/when), zero or more `device_info` (the sensor), `session`/`lap` (totals,
 sport) and one `record` per second of the ride carrying the GPS point plus
 per-second telemetry.  This gathers the `record` stream into a standard GPX 1.1
-<trk> with <ele> + <time> per point - the same shape wahoo_to_gpx.py emits for
+<trk> with <ele> + <time> per point - the same shape goldencheetah_to_gpx.py emits for
 the Wahoo rides, so trackview.py renders the Garmin rides alongside them.
 
 This is a thin shim over the shared internals in `trackview.convert`: the
 reading helpers (`_iter_messages`, `_extract_meta`, `_start_time_of`,
 `_record_altitude`, `_to_utc`, `_device_name`, `_sport_name`), the shared
 distance / altitude / extension helpers, the `--since`/`--until` CLI date filter
-and the `FitParseError` guard all live there (shared with `wahoo_to_gpx`); this
+and the `FitParseError` guard all live there (shared with `goldencheetah_to_gpx`); this
 module carries only its own `ride_to_gpx` / `main` (the FIT-specific record loop
 + CLI glue) and its `_ride_date` (Garmin's filename scheme).  See that module
 for the algorithm.
@@ -34,7 +34,7 @@ Garmin/fitparse quirks handled:
       m/s -> km/h, just like the Wahoo export already uses;
     * a "no altitude" reading is the sentinel -500 m (a raw 0 against the FIT
       altitude offset of 500) or an absent field -> filled from the neighbouring
-      valid altitude, exactly as wahoo_to_gpx fills its 0 m sentinel;
+      valid altitude, exactly as goldencheetah_to_gpx fills its 0 m sentinel;
     * some records carry no fix (lat/lon 0 or None) -> dropped;
     * a record's absolute time is its own UTC `timestamp`, emitted with a "Z"
       suffix to match the existing tracks;
@@ -42,7 +42,7 @@ Garmin/fitparse quirks handled:
       is then read from the file's session/file_id start time.
      * the device / sport are reworded to the Wahoo voice: fitparse renders
       the FIT enum to machine words (manufacturer "wahoo_fitness", sport
-      "cycling") that the converter maps to the human words wahoo_to_gpx stamps
+      "cycling") that the converter maps to the human words goldencheetah_to_gpx stamps
       ("Wahoo ELEMNT BOLT", "Bike"), so a Garmin ride reads the same as a Wahoo
       one and trackview's --device / --sport match across both; an unknown word
       passes through untouched.

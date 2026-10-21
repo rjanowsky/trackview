@@ -28,9 +28,9 @@ JOULES_PER_KCAL = 4184.0        # 1 dietary "kcal" (as on food labels) = 4184 J
 METABOLIC_EFFICIENCY = 0.25     # only ~25% of food energy -> pedal work; rest is heat
 
 
-# Wahoo telemetry embedded under <trkpt><extensions> by `wahoo_to_gpx --ext`,
+# Wahoo telemetry embedded under <trkpt><extensions> by `goldencheetah_to_gpx --ext`,
 # mapped to the short key trackview averages.  Un-namespaced on purpose (see
-# wahoo_to_gpx.py); gpxpy flattens the <extensions> children straight onto a
+# goldencheetah_to_gpx.py); gpxpy flattens the <extensions> children straight onto a
 # trackpoint's .extensions list, so each element's bare .tag is the metric.
 _TELE_TAGS = {"power": "power", "speed_kmh": "speed", "cadence": "cadence",
               "heartrate": "hr", "temperature": "temp"}
