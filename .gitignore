@@ -27,3 +27,6 @@ fit/
 #   *_records.json   -> dumped by tools/garmin_fit_reader.py (like output/)
 tools/*.fit
 tools/*_records.json
+CLAUDE.md
+PLAN.md
+TODO.lst
