@@ -12,32 +12,29 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [Unreleased]
+## [1.0.1] — 2026-10-21
 
-*Added*
-- **Apache-2.0 license** — the repo now carries a `LICENSE` (Apache-2.0) and
-  `pyproject.toml` declares it as a PEP 639 SPDX expression
-  (`license = "Apache-2.0"`; `authors = [{name = "rjanowsky"}]`), the PEP 639 floor
-  being `setuptools>=77` in the build backend.
+Cuts `1.0.0` → `1.0.1` on the JSON-converter rename below (a user-facing change to
+a public command and module name, so the patch level is warranted) together with the
+two doc/ignoring items that landed after the `1.0.0` tag.
 
 *Changed*
-- **README** — a new **Directory Structure** section (before *Output*) maps the
-  repo: the shipped source (the `trackview/` package, the `trackview.py` launcher,
-  the two converter scripts, `tests/`, `tools/`, `pyproject.toml`,
-  `requirements.txt`) vs. the git-ignored local/personal data (`gpx/`, `gc/`, `fit/`)
-  and generated output/caches (`output/`, `stats/`, `tiles/`, `lib/`).
-- **Renamed `trackview/calendar.py` → `trackview/activitygrid.py`** — the figure's
-  own name, which also stops it shadowing the stdlib `calendar` module for a
-  `sys.path[0]`-style import.  `git mv` preserves history; the `--calendar` flag is
-  unchanged.
-- **Sdist / wheel completeness** — the sdist now carries the root `trackview.py`
-  launcher (a top-level script shares its basename with its `py-modules` module, so
-  flat-layout auto-discovery never picks it up) and, via a `MANIFEST.in` `graft`,
-  the whole `tools/` dir (pruned of `.DS_Store` / `__pycache__`); the wheel keeps
-  only the importable package + launcher.
-- **Tracking** — `CLAUDE.md` and `PLAN.md` (private working docs: the AI-assistant
-  notes and the completed refactoring plan) are now git-ignored; `TODO.lst` stays
-  tracked as the project's changelog source.
+- **Renamed the JSON → GPX converter `wahoo_to_gpx.py` → `goldencheetah_to_gpx.py`**
+  (a breaking rename) — the `./gc/*.json` rides are re-saved by **GoldenCheetah**
+  from a Wahoo ELEMNT BOLT `.fit` export, so the *source* of the JSON is
+  GoldenCheetah even though the ride data originated on a Wahoo device.  The module,
+  the `goldencheetah-to-gpx` console entry point, the test module, and every doc
+  reference follow; the device stamped into the GPX `<desc>` stays `Wahoo ELEMNT
+  BOLT`, as do the "Wahoo-style" filename and "Wahoo voice" references.
+- **README gained a Directory Structure section** — maps the repo: the shipped
+  source (`trackview/`, the `trackview.py` launcher, the two converter scripts,
+  `tests/`, `tools/`, `pyproject.toml`, `requirements.txt`) vs. the git-ignored
+  local/personal data (`gpx/`, `gc/`, `fit/`) and generated output/caches
+  (`output/`, `stats/`, `tiles/`, `lib/`).
+- **Git-ignored `CLAUDE.md` / `PLAN.md` / `TODO.lst`** — the two private working
+  docs (the AI-assistant notes and the completed refactoring plan) are now
+  git-ignored; `TODO.lst` (the project's changelog source) is ignored too, the
+  record it stands in for living on in `CHANGELOG.md`.
 
 ---
 
@@ -270,7 +267,7 @@ this is the first *tagged* release, cut when the build system landed.
 
 ## Legend / notes
 
-The dated history above (2026-09-17 → 2026-10-19) was authored in the project's
+The dated history above (2026-09-17 → 2026-10-21) was authored in the project's
 `TODO.lst` — every entry `[done]`, dated, verified by the render / test suite.  This
 changelog is that record, condensed into user-facing terms and collapsed by release;
 `TODO.lst` remains the granular source of truth.  The "offline suite" counts the
