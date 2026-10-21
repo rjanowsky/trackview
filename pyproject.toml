@@ -6,7 +6,12 @@
 # convenience for the local `.venv`, and the two stay in sync.  See the "Setup"
 # and "Testing" sections of README.md and the Phase 6 notes in PLAN.md / TODO.lst.
 [build-system]
-requires = ["setuptools>=61"]
+# setuptools>=77 is the floor for PEP 639 license expressions: `license = "Apache-2.0"`
+# below is an SPDX expression, not the legacy {text=,file=} table, and older
+# setuptools rejects a bare string.  This is a build-only dependency, so an
+# isolated build (pip / python -m build / CI) fetches it automatically -- nothing
+# extra lands in the runtime .venv.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -16,6 +21,10 @@ name = "trackview"
 # is one source of truth -- the build-stamped version and `trackview --version`
 # (both fed by that constant) can never drift from each other.
 dynamic = ["version"]
+# License is an SPDX expression (PEP 639), matched by the LICENSE file at the repo
+# root; setuptools auto-discovers LICENSE* for the sdist.
+license = "Apache-2.0"
+authors = [{name = "rjanowsky"}]
 description = "Render every GPX track in a folder onto a static map (PNG/PDF), with a ride-log, climb ranking, a training trend, an activity calendar and a self-contained HTML/Leaflet map."
 readme = "README.md"
 requires-python = ">=3.10"
