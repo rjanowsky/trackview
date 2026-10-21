@@ -90,6 +90,72 @@ python trackview.py --gallery 6                  # tile the N most recent rides 
 python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
+## Directory Structure
+
+```
+trackview/            the importable package (the tool's internals, split into modules)
+fit_to_gpx.py         Garmin .fit  -> GPX converter (top-level entry point, the `fit-to-gpx` command)
+wahoo_to_gpx.py       Wahoo JSON   -> GPX converter (top-level entry point, the `wahoo-to-gpx` command)
+trackview.py          the root launcher: a thin shim that re-enters trackview.cli:main
+pyproject.toml        build metadata, deps, the console entry points, ruff + pytest config
+requirements.txt      the same runtime deps as a plain `pip install -r` list
+tests/                the pytest suite (one module per feature; offline markers in pyproject.toml)
+tools/                ad-hoc Garmin .fit inspection helpers (see Helper tools below)
+--
+gpx/                  GPX rides the tool renders (recurse into year/ subfolders)   [git-ignored: personal data]
+gc/                   Wahoo ELEMNT ride exports (*.json) that wahoo_to_gpx converts [git-ignored]
+fit/                  Garmin FIT ride exports (*.fit) that fit_to_gpx converts       [git-ignored]
+output/               generated images (the map, ride cards, trend, calendar, HTML)  [git-ignored]
+stats/                generated ride-log / CSV / climbs / summary reports            [git-ignored]
+tiles/                on-disk basemap-tile cache (keyed z/x/y, reused across runs)   [git-ignored]
+lib/                  cached Leaflet CSS + JS the --html inlines for an offline map [git-ignored]
+```
+
+The first block is the **source** that ships in the repo; the second block is the
+**local / personal working data** the tool reads from and writes to — all of it
+git-ignored (see `.gitignore`), since it is either private ride data
+(`gpx/`, `gc/`, `fit/`) or regenerable output and cache (`output/`, `stats/`,
+`tiles/`, `lib/`).  A fresh clone has only the source; the data dirs are created
+on first use.
+
+- **`trackview/`** the package itself — the pipeline's internals split into
+  focused modules: `config` (constants + `__version__`), `load` (GPX parse +
+  decimation), `geometry` / `metrics` (grade, distance, telemetry math),
+  `rendering` / `mapfig` (the matplotlib figures), the standalone outputs
+  (`trend`, `summary`, `climbs`, `activitygrid`), `convert` (the helpers shared
+  by the two converters), `io` / `helpers`, and `cli` (`main`, the entry point).
+- **`trackview.py`** the launcher you run: `python trackview.py …`.  It is a thin
+  shim over `trackview.cli:main`; the `pip install .` counterpart is the
+  `trackview` console command, which re-enters that same `main`.
+- **`wahoo_to_gpx.py`** / **`fit_to_gpx.py`** the two ingest converters:
+  `gc/*.json` (Wahoo) and `fit/*.fit` (Garmin) → `gpx/*.gpx`, so a ride from
+  either source renders like any other.  Their console forms are the
+  `wahoo-to-gpx` / `fit-to-gpx` commands.  The distance / altitude-fill /
+  extension helpers they share live in `trackview.convert`.
+- **`tests/`** the `pytest` suite — one module per feature
+  (`test_geometry`, `test_filters`, `test_stats`, `test_trend`, …) plus a
+  `conftest.py`.  The `network` / `slow` markers (in `pyproject.toml`) let the
+  fast, offline subset run in CI.
+- **`tools/`** two dependency-light diagnostics for *inspecting* a Garmin `.fit`
+  ride (the file/session/record layout and a stats summary) — *not* the
+  converter, that is `fit_to_gpx.py`.  See **Helper tools** below.
+- **`gpx/`** the input the tool renders: one `*.gpx` per ride, organised one
+  subfolder per year (`2019`…`2026`); discovery recurses into them by default.
+- **`gc/`** the Wahoo ingest input for `wahoo_to_gpx.py`: one `*.json` ride
+  export per day (`{"RIDE": {…SAMPLES…}}`), one subfolder per year.
+- **`fit/`** the Garmin ingest input for `fit_to_gpx.py`: one `*.fit` binary
+  ride per day, named `YYYY-MM-DD-…-ELEMNT BOLT …`.
+- **`output/`** the rendered images — `tracks_overview.<png|pdf>` and the
+  `--trend` / `--calendar` / `--gallery` / `--html` figures.
+- **`stats/`** the text/CSV reports — the `trackview-<first>_<last>` ride-log
+  (and `--csv`), plus the `--climbs`, `--summary` and other report variants.
+- **`tiles/`** the basemap-tile cache: downloaded tiles stored `z/x/y` per
+  provider so a re-render or an offline run reuses them instead of refetching
+  (`--no-cache` bypasses it).
+- **`lib/`** the cached Leaflet CSS + JS that `--html` inlines so the interactive
+  map is a genuinely offline single file (`--html-cdn` skips the cache for a
+  smaller, internet-dependent file).
+
 ## Output
 
 - **Format** `--format {png,pdf}` (default `png`): PNG is a raster image; PDF is a
