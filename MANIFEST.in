@@ -15,3 +15,9 @@ prune tools/__pycache__
 # the sdist only, so this never lands in the wheel -- the wheel carries its deps
 # in METADATA instead.
 global-include requirements.txt
+# Also ship the two top-level docs setuptools otherwise leaves out of the sdist
+# (the changelog and the API/module map).  These are named explicitly -- NOT a
+# `global-include *.md` glob -- because the top level also holds git-ignored private
+# notes (CLAUDE.md, PLAN.md) that a wildcard would drag into the distribution.
+global-include CHANGELOG.md
+global-include API.md

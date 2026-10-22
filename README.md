@@ -101,6 +101,8 @@ pyproject.toml        build metadata, deps, the console entry points, ruff + pyt
 requirements.txt      the same runtime deps as a plain `pip install -r` list
 tests/                the pytest suite (one module per feature; offline markers in pyproject.toml)
 tools/                ad-hoc Garmin .fit inspection helpers (see Helper tools below)
+CHANGELOG.md          notable changes per release, in Keep a Changelog format (supersedes the git-ignored TODO.lst)
+API.md                module-by-module reference -- the "module map"; per-flag usage lives in README.md
 --
 gpx/                  GPX rides the tool renders (recurse into year/ subfolders)   [git-ignored: personal data]
 gc/                   GoldenCheetah ride exports (*.json, from a Wahoo ELEMNT BOLT) that goldencheetah_to_gpx converts [git-ignored]
