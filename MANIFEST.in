@@ -9,3 +9,9 @@ graft tools
 # bytecode/OS files are pruned by setuptools' sdist machinery on its own).
 exclude tools/.DS_Store
 prune tools/__pycache__
+# Ship requirements.txt in the sdist so the README's primary `pip install -r
+# requirements.txt` path works from a fresh source extraction.  It is a mirror of
+# [project].dependencies (the authoritative list pip reads); MANIFEST.in governs
+# the sdist only, so this never lands in the wheel -- the wheel carries its deps
+# in METADATA instead.
+global-include requirements.txt
