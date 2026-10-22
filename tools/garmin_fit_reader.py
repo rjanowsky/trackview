@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Garmin FIT Datei Reader (diagnose-Werkzeug / diagnostic)
-Liest Trainingsdaten aus Garmin FIT-Dateien aus.
+Garmin FIT file reader (diagnostic tool)
+Reads training data out of Garmin FIT files.
 
 A fitparse-based *diagnostic* for a Garmin .fit ride: it prints the
 file/session/lap/record layout plus a short stats summary, and dumps the *full*
 record stream to a sibling "<name>_records.json".  It is NOT the converter that
 feeds trackview.py -- that is fit_to_gpx.py (fit/ -> gpx/, a schema-valid GPX
-1.1 track).  With no argument it inspects the most recent *.fit in the repo's
-fit/ dir; pass one or more explicit paths to inspect those instead.  The .fit
+1.1 track).  With no argument it inspects the most recent *.fit in the data
+dir's fit/ folder ($TRACKVIEW_HOME or ~/.trackview, the same root the converter
+reads from); pass one or more explicit paths to inspect those instead.  The .fit
 inputs and the dumped _records.json are personal data / regenerable output and
 are git-ignored (see .gitignore).
 """
@@ -21,25 +22,25 @@ from pathlib import Path
 try:
     import fitparse
 except ImportError:
-    print("Fehler: fitparse ist nicht installiert.")
-    print("Installation: pip install fitparse")
+    print("Error: fitparse is not installed.")
+    print("Install it with: pip install fitparse")
     sys.exit(1)
 
 
 def read_fit_file(filepath: str):
-    """Liest eine FIT-Datei und gibt die Daten aus."""
+    """Read a FIT file and print its data."""
 
-    print(f"Lese Datei: {filepath}\n")
+    print(f"Reading file: {filepath}\n")
 
     try:
         fit = fitparse.FitFile(filepath)
     except Exception as e:
-        print(f"Fehler beim Öffnen der Datei: {e}")
+        print(f"Error opening the file: {e}")
         return
 
-    # Grundlegende Datei-Informationen
+    # Basic file information
     print("=" * 60)
-    print("DATEI-INFORMATIONEN")
+    print("FILE INFORMATION")
     print("=" * 60)
 
     for record in fit.messages:
@@ -49,25 +50,25 @@ def read_fit_file(filepath: str):
             print()
             break
 
-    # Session-Informationen (Zusammenfassung der Aktivität)
+    # Session information (a summary of the activity)
     print("=" * 60)
-    print("SESSION-INFORMATIONEN")
+    print("SESSION INFORMATION")
     print("=" * 60)
 
     for record in fit.messages:
         if record.name == 'session':
             for data_field in record.fields:
                 value = data_field.value
-                # Formatiere Timestamps besser
+                # Format timestamps more readably
                 if isinstance(value, datetime):
                     value = value.strftime("%Y-%m-%d %H:%M:%S")
                 print(f"{data_field.name}: {value}")
             print()
             break
 
-    # Lap-Informationen (falls vorhanden)
+    # Lap information (if present)
     print("=" * 60)
-    print("LAP-INFORMATIONEN")
+    print("LAP INFORMATION")
     print("=" * 60)
 
     lap_count = 0
@@ -83,9 +84,9 @@ def read_fit_file(filepath: str):
 
     print("\n")
 
-    # Record-Daten (detaillierte Messpunkte)
+    # Record data (the detailed measurement points)
     print("=" * 60)
-    print("DETAILLIERTE RECORD-DATEN (erste 20 Einträge)")
+    print("DETAILED RECORD DATA (first 20 entries)")
     print("=" * 60)
     print()
 
@@ -106,19 +107,20 @@ def read_fit_file(filepath: str):
 
         if record_count <= 20:
             if record_count == 1:
-                # Header drucken
+                # Print the header row
                 print(" | ".join(f"{k:20}" for k in data_dict.keys()))
                 print("-" * (len(data_dict) * 22))
 
-            # Werte drucken (nur die ersten 20 als Vorschau; der JSON-Export bringt alle)
+            # Print the values (only the first 20 as a preview; the JSON export
+            # carries all of them)
             print(" | ".join(f"{str(v):20}" for v in data_dict.values()))
 
-    print(f"\n... insgesamt {record_count} Record-Einträge in dieser Datei "
-          f"(Vorschau: erste 20, JSON-Export: alle)\n")
+    print(f"\n... {record_count} record entries in this file in total "
+          f"(preview: first 20, JSON export: all)\n")
 
-    # Statistik-Zusammenfassung
+    # Statistics summary
     print("=" * 60)
-    print("STATISTIK-ZUSAMMENFASSUNG")
+    print("STATISTICS SUMMARY")
     print("=" * 60)
 
     total_distance = 0
@@ -147,35 +149,44 @@ def read_fit_file(filepath: str):
                 if data_field.name == 'total_elapsed_time' and data_field.value:
                     total_duration = data_field.value
 
-    print(f"Gesamtstrecke: {total_distance:.2f} m ({total_distance/1000:.2f} km)")
-    print(f"Gesamtdauer: {total_duration:.0f} Sekunden ({total_duration/3600:.2f} Stunden)")
-    print(f"Max. Geschwindigkeit: {max_speed:.2f} m/s ({max_speed*3.6:.2f} km/h)")
-    print(f"Max. Herzfrequenz: {max_heart_rate:.0f} bpm")
-    print(f"Max. Trittfrequenz: {max_cadence:.0f} rpm")
-    print(f"Max. Leistung: {max_power:.0f} W")
+    print(f"Total distance: {total_distance:.2f} m ({total_distance/1000:.2f} km)")
+    print(f"Total duration: {total_duration:.0f} seconds ({total_duration/3600:.2f} hours)")
+    print(f"Max. speed: {max_speed:.2f} m/s ({max_speed*3.6:.2f} km/h)")
+    print(f"Max. heart rate: {max_heart_rate:.0f} bpm")
+    print(f"Max. cadence: {max_cadence:.0f} rpm")
+    print(f"Max. power: {max_power:.0f} W")
     print()
 
-    # Exportiere Rohdaten als JSON
+    # Export the raw data as JSON
     export_json(filepath, records_data)
 
 
 def export_json(filepath: str, records_data):
-    """Exportiert alle Record-Daten als JSON (sibling "<name>_records.json")."""
+    """Export all record data as JSON (a sibling "<name>_records.json")."""
 
     json_path = str(filepath).replace('.fit', '_records.json')
 
     try:
         with open(json_path, 'w') as f:
             json.dump(records_data, f, indent=2, default=str)
-        print(f"✓ {len(records_data)} Record-Einträge exportiert nach: {json_path}")
+        print(f"✓ {len(records_data)} record entries exported to: {json_path}")
     except Exception as e:
-        print(f"Fehler beim JSON-Export: {e}")
+        print(f"Error on the JSON export: {e}")
 
 
 def _default_fit_files():
-    """The most recent *.fit in the repo's fit/ dir as strings (no-arg default).
-    None when the dir holds no ride - the caller then prints usage."""
-    fit_dir = Path(__file__).resolve().parent.parent / "fit"
+    """The most recent *.fit in the data dir's fit/ folder as strings
+    ($TRACKVIEW_HOME or ~/.trackview, the same root the converter reads from --
+    see trackview.config's DATA_DIR; imported here so the diagnostic and the
+    converter never disagree on where the rides live).  None when the dir holds
+    no ride - the caller then prints usage."""
+    import sys
+    # run as `python tools/..py`, sys.path[0] is tools/, not the repo root -- so
+    # make the package importable whether it is pip-installed or a source checkout.
+    if str(Path(__file__).resolve().parent.parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from trackview.config import DATA_DIR
+    fit_dir = DATA_DIR / "fit"
     return [str(p) for p in sorted(fit_dir.glob("*.fit"))]
 
 
@@ -185,9 +196,9 @@ if __name__ == "__main__":
     else:
         fit_files = _default_fit_files()
         if not fit_files:
-            print("Verwendung: python garmin_fit_reader.py <pfad-zur-fit-datei> [..]")
-            print("Ohne Argument wird die neueste *.fit in fit/ gelesen.")
-            print("\nBeispiel: python garmin_fit_reader.py activity.fit")
+            print("Usage: python garmin_fit_reader.py <path-to-fit-file> [..]")
+            print("With no argument the most recent *.fit in fit/ is read.")
+            print("\nExample: python garmin_fit_reader.py activity.fit")
             sys.exit(1)
 
     for fit_file in fit_files:

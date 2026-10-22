@@ -52,9 +52,10 @@ definition order, with the first line of each function's docstring.
 
 ### `trackview.config` -- the centralised configuration
 
-The shared paths and tunables every other module reads: `GPX_DIR`, `OUTPUT_DIR`,
-`STATS_DIR`, `TILE_CACHE_DIR` (the on-disk dirs), `DECIMATE_M` (the default point
-thinning, metres) and `PI_R` (degrees->radians).  No functions.
+The shared paths and tunables every other module reads: `DATA_DIR` (the per-user
+data dir: `$TRACKVIEW_HOME`, else `~/.trackview`), `GPX_DIR`, `OUTPUT_DIR`,
+`STATS_DIR`, `TILE_CACHE_DIR` (the on-disk dirs, all under `DATA_DIR`), `DECIMATE_M`
+(the default point thinning, metres) and `PI_R` (degrees->radians).  No functions.
 
 ### `trackview.geometry` -- geometry utilities
 
@@ -121,8 +122,9 @@ thinning, metres) and `PI_R` (degrees->radians).  No functions.
 ### `trackview.io` -- the basemap fetch and the HTML/Leaflet export
 
 `USER_AGENT`, `SOURCES` (the tile providers, tried in order), `ATTRIBUTION`,
-`LEAFLET_VER`, `LEAFLET_JS_CDN`, `LEAFLET_CSS_CDN`, `LEAFLET_DIR`, `LEAFLET_TIMEOUT`,
-`_APP_JS`, `EQUATOR`, `DETAIL_MIN`, `DETAIL_MAX`.
+`LEAFLET_VER`, `LEAFLET_JS_CDN`, `LEAFLET_CSS_CDN`, `LEAFLET_DIR` (under
+`config.DATA_DIR`), `LEAFLET_TIMEOUT`, `_APP_JS`, `EQUATOR`, `DETAIL_MIN`,
+`DETAIL_MAX`.
 * `_load_basemap(ax, bbox, order, detail, min_var, retries, backoff_s)` -- fall back
   through tile providers until one shows real tiles.
 * `_html_escape(s)` -- escape the HTML-significant characters in a user-derived string.

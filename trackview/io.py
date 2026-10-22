@@ -17,10 +17,10 @@ re-imported below -- are all in-module, so it carries none.  `render` (in mapfig
 reads the tables and calls the fetch; `main` (in cli) writes the HTML and the
 gallery.
 
-LEAFLET_DIR is __file__-relative: it resolves to the repo's lib/ via
-.parent.parent (io.py sits one level down in the package), caching the inlined
-Leaflet CSS/JS there -- the tile *cache* dir (tiles/) and GPX_DIR live in
-trackview/config.py, the run-time configuration's single home.
+LEAFLET_DIR is the data dir's lib/ (under trackview.config's DATA_DIR, the run-time
+configuration's single home, as are the tile *cache* dir tiles/ and GPX_DIR): it
+caches the inlined Leaflet CSS/JS there, next to the ride log -- so an installed
+run still finds or fetches the ~150 KB library where the rest of its data lives.
 """
 from __future__ import annotations
 
@@ -28,7 +28,6 @@ import json
 import math
 import time
 import urllib.request
-from pathlib import Path
 
 import contextily as cx
 import numpy as np
@@ -37,6 +36,7 @@ matplotlib.use("Agg")                  # headless, no GUI needed
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
+from trackview.config import DATA_DIR
 from trackview.helpers import _title_name, _ride_date
 from trackview.rendering import STRONG_COLORS, PAD_FRAC, DPI
 
@@ -126,7 +126,7 @@ def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
 LEAFLET_VER      = "1.9.4"
 LEAFLET_JS_CDN   = f"https://unpkg.com/leaflet@{LEAFLET_VER}/dist/leaflet.js"
 LEAFLET_CSS_CDN  = f"https://unpkg.com/leaflet@{LEAFLET_VER}/dist/leaflet.css"
-LEAFLET_DIR      = Path(__file__).resolve().parent.parent / "lib"          # cached library (git-ignored)
+LEAFLET_DIR      = DATA_DIR / "lib"                                        # cached library, next to the ride log
 LEAFLET_TIMEOUT  = 15.0
 
 

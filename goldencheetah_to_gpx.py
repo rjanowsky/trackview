@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-goldencheetah_to_gpx - convert GoldenCheetah ride exports (./gc/*.json) into
+goldencheetah_to_gpx - convert GoldenCheetah ride exports (the data dir's gc/) into
 GPX tracks.
 
 The ./gc/*.json rides are exported by GoldenCheetah (the "gc" in the folder
@@ -37,7 +37,7 @@ GoldenCheetah / JSON quirks handled:
      match the existing tracks.
 
 Usage:
-    .venv/bin/python goldencheetah_to_gpx.py                      # ./gc -> ./gpx
+    .venv/bin/python goldencheetah_to_gpx.py                      # gc/ -> gpx/ (under the data dir)
     .venv/bin/python goldencheetah_to_gpx.py --gc-dir gc --out-dir gpx
     .venv/bin/python goldencheetah_to_gpx.py --ext                  # also embed power/cad/hr/speed(km/h)/grade/temp
     .venv/bin/python goldencheetah_to_gpx.py --since 2026-09-05             # only rides on/after a date
@@ -60,10 +60,16 @@ from gpxpy import gpx as gpx_struct
 from trackview.convert import (
     _parse_argdate, _distance_and_gain, _fill_altitude, _add_extensions,
 )
+from trackview.config import DATA_DIR, GPX_DIR
 
 # ------------------------------- configuration -------------------------------
-IN_DIR   = Path(__file__).resolve().parent / "gc"
-OUT_DIR  = Path(__file__).resolve().parent / "gpx"
+# The ride log and its input live under the per-user data dir (trackview.config's
+# DATA_DIR, $TRACKVIEW_HOME else ~/.trackview), not this script's own folder: a
+# converter run after a `pip install` would otherwise look for ./gc next to the
+# installed script.  OUT_DIR is the same GPX_DIR trackview plots from, so the
+# convert -> render pipeline stays wired without a flag.
+IN_DIR   = DATA_DIR / "gc"       # the GoldenCheetah JSON exports to read (input)
+OUT_DIR  = GPX_DIR               # the shared gpx/ ride log trackview reads
 CREATOR  = "goldencheetah_to_gpx/1.0 (trackview)"
 
 # Non-standard per-point telemetry embedded under <trkpt><extensions> when --ext
@@ -176,10 +182,13 @@ def main() -> None:
     ap.add_argument("files", nargs="*",
                     help="explicit *.json files (default: every *.json in --gc-dir)")
     ap.add_argument("--gc-dir", "--in-dir", default=str(IN_DIR),
-                    help="folder of GoldenCheetah JSON rides to read (default: ./gc); "
-                             "--in-dir is kept as an alias")
+                    help="folder of GoldenCheetah JSON rides to read "
+                         "(default: $TRACKVIEW_HOME or ~/.trackview, under its gc/); "
+                         "--in-dir is kept as an alias")
     ap.add_argument("--out-dir", default=str(OUT_DIR),
-                    help="folder for the .gpx output (default: ./gpx)")
+                    help="folder for the .gpx output "
+                         "(default: the shared gpx/ ride log, $TRACKVIEW_HOME or "
+                         "~/.trackview)")
     ap.add_argument("--ext", action="store_true",
                     help="also embed power/cadence/heart rate/speed/grade/temperature as "
                          "<trkpt> extensions (off by default: plain lat/lon/ele/time)")
@@ -192,7 +201,19 @@ def main() -> None:
     args = ap.parse_args()
 
     gc_dir, out_dir = Path(args.gc_dir), Path(args.out_dir)
-    paths = [Path(f) for f in args.files] if args.files else sorted(gc_dir.glob("*.json"))
+    if args.files:
+        # explicit files: read them, don't touch any folder.
+        paths = [Path(f) for f in args.files]
+    else:
+        # glob gc_dir for the rides.  On a *default* run (neither positional
+        # files nor an explicit --in-dir) gc_dir is the data dir's gc/ -- create
+        # it (with its parents, so a not-yet-existing ~/.trackview exists too) so
+        # a first run yields a clean, ready-to-fill home dir rather than a "nothing
+        # found in ~/.trackview/gc" over a missing private dir.  An explicit
+        # --in-dir is read as-is, without creating it.
+        if not args.gc_dir or args.gc_dir == str(IN_DIR):
+            gc_dir.mkdir(parents=True, exist_ok=True)
+        paths = sorted(gc_dir.glob("*.json"))
     if not paths:
         print(f"No GoldenCheetah JSON files found in {gc_dir} - nothing to convert.")
         return

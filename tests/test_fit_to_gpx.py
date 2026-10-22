@@ -236,3 +236,36 @@ class TestMain:
         _run_main(tmp_path / "empty", out)
         assert "nothing to convert" in capsys.readouterr().out
         assert not out.exists()
+
+    def test_default_run_creates_the_data_dir_fit_folder(self, tmp_path, capsys):
+        # a default (no --fit-dir, no explicit files) run now creates the input dir
+        # -- and its parents -- so a first run yields a clean ~/.trackview/fit to fill,
+        # not a "nothing found in ~/.trackview/fit" over a missing private dir.  The
+        # --fit-dir default is read from config at *import* time, so both are
+        # reloaded after $TRACKVIEW_HOME is set (the same pattern as test_config.py).
+        import os
+        import importlib
+        old = os.environ.get("TRACKVIEW_HOME")
+        os.environ["TRACKVIEW_HOME"] = str(tmp_path / "home")
+        import sys
+        sys.argv = ["fit_to_gpx.py", "--out-dir", str(tmp_path / "out")]
+        try:
+            # the --fit-dir default is baked from config at import time, so reload
+            # the *config* module (the source of DATA_DIR/IN_DIR) as well as f2g,
+            # the way test_config.py does -- a bare f2g reload keeps the stale
+            # config binding.
+            import trackview.config as config
+            importlib.reload(config)
+            importlib.reload(f2g)
+            f2g.main()
+            fit = tmp_path / "home" / "fit"
+            assert fit.is_dir() and not any(fit.iterdir())   # made, but empty
+            assert "nothing to convert" in capsys.readouterr().out
+        finally:
+            sys.argv = ["fit_to_gpx.py"]
+            if old is not None:
+                os.environ["TRACKVIEW_HOME"] = old
+            else:
+                os.environ.pop("TRACKVIEW_HOME", None)
+            importlib.reload(f2g)
+            importlib.reload(config)

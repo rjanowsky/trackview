@@ -12,6 +12,59 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
+## [Unreleased]
+
+No changes yet.
+
+---
+
+## [1.0.2] — 2026-10-22
+
+Cuts `1.0.1` → `1.0.2` on the per-user data-dir move below: the run-time data
+no longer hangs off the script's own location (a `pip install` would otherwise
+find a `fit/`/`gpx/` beside `site-packages`, a read-only place to write a ride
+log), and the `tools/` FIT diagnostics follow the same data dir.  The move is
+data-preserving (a same-volume rename), and the `--fit-dir`/`--gc-dir`
+`--in-dir`/`--out-dir` flags stay unchanged, so it is a non-breaking patch.
+
+### Changed
+
+- **Ride data now lives under a per-user data dir, not the script's own
+  location.**  All input and output now hangs off a single **data dir**
+  (`trackview.config.DATA_DIR`): `~/.trackview` by default, or `$TRACKVIEW_HOME`
+  when set.  The four run-time dirs — `gpx/` (the ride log), `output/` (rendered
+  maps), `stats/` (the reports) and `tiles/` (the basemap cache) — plus the
+  converters' `fit/` / `gc/` inputs and the `--html` `lib/` Leaflet cache, now sit
+  *under* it.
+  - **Why:** the tool plots *one athlete's* rides, so their data belongs in the
+    user's home.  The dirs were previously anchored to the script's own
+    location (`__file__`), which resolves to `site-packages/` once trackview is
+    `pip install`ed — a read-only, wrong place to write a ride log.
+  - `trackview.config` now imports `os` (still stdlib-only, so the build-time
+    dynamic-version import stays dependency-free) to read `$TRACKVIEW_HOME`.
+  - Both converters (`fit_to_gpx`, `goldencheetah_to_gpx`) keep `OUT_DIR ==
+    GPX_DIR`, so the convert → render pipeline stays wired with no flag.
+  - A converter's **default run now creates its input dir** (`fit/`, `gc/`) with
+    its parents, so a first run leaves a clean, ready-to-fill `~/.trackview` to
+    drop rides into, instead of a "nothing found in `~/.trackview/fit`" over a
+    missing private dir.  Explicit files / `--in-dir` are unaffected.
+  - **One-time migration** for an existing source checkout: move the old top-level
+    `gpx/` / `gc/` / `fit/` / `output/` / `stats/` / `tiles/` / `lib/` into the
+    data dir (a same-volume rename — no data is copied); or run from that checkout
+    with `TRACKVIEW_HOME=$PWD` until they are moved.  A converter or trackview run
+    then reads the moved dirs and the converter writes *into* them, so no
+    top-level folder ever reappears.
+- **The two `tools/` FIT diagnostics now read the data dir's `fit/`** —
+  `tools/garmin_fit_reader.py` and `tools/garmin_fit_reader_standalone.py`, run
+  with no argument, inspect the most recent `*.fit` in `DATA_DIR / "fit"`
+  (`$TRACKVIEW_HOME` else `~/.trackview`, imported from `trackview.config`)
+  instead of a `fit/` next to the script — so the diagnostic and `fit_to_gpx.py`
+  can never disagree on where the rides live, and a `pip install`ed run no longer
+  points at a `fit/` beside `site-packages`.  A `sys.path` bootstrap makes the
+  import resolve whether the package is pip-installed or a source checkout.
+
+---
+
 ## [1.0.1] — 2026-10-21
 
 Cuts `1.0.0` → `1.0.1` on the JSON-converter rename below (a user-facing change to

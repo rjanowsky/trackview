@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fit_to_gpx - convert Garmin FIT ride exports (./fit/*.fit) into GPX tracks.
+fit_to_gpx - convert Garmin FIT ride exports (the data dir's fit/) into GPX tracks.
 
 Each ride is a single binary .fit file, e.g.
 
@@ -48,7 +48,7 @@ Garmin/fitparse quirks handled:
       passes through untouched.
 
 Usage:
-    .venv/bin/python fit_to_gpx.py                        # ./fit -> ./gpx
+    .venv/bin/python fit_to_gpx.py                        # fit/ -> gpx/ (under the data dir)
     .venv/bin/python fit_to_gpx.py --fit-dir fit --out-dir gpx
     .venv/bin/python fit_to_gpx.py --ext                  # also embed power/cad/hr/speed(km/h)/grade/temp
     .venv/bin/python fit_to_gpx.py --since 2026-09-05               # only rides on/after a date
@@ -76,10 +76,16 @@ from trackview.convert import (
     _missing_alt, _device_name, _sport_name,
     FitParseError,
 )
+from trackview.config import DATA_DIR, GPX_DIR
 
 # ------------------------------- configuration -------------------------------
-IN_DIR    = Path(__file__).resolve().parent / "fit"
-OUT_DIR   = Path(__file__).resolve().parent / "gpx"
+# The ride log and its input live under the per-user data dir (trackview.config's
+# DATA_DIR, $TRACKVIEW_HOME else ~/.trackview), not this script's own folder: a
+# converter run after a `pip install` would otherwise look for ./fit next to the
+# installed script.  OUT_DIR is the same GPX_DIR trackview plots from, so the
+# convert -> render pipeline stays wired without a flag.
+IN_DIR    = DATA_DIR / "fit"      # the Garmin .fit exports to read (input)
+OUT_DIR   = GPX_DIR               # the shared gpx/ ride log trackview reads
 CREATOR   = "fit_to_gpx/1.0 (trackview)"
 
 # Garmin names an export after its ride start, but the pattern varies by source:
@@ -208,10 +214,13 @@ def main() -> None:
     ap.add_argument("files", nargs="*",
                     help="explicit *.fit files (default: every *.fit in --fit-dir)")
     ap.add_argument("--fit-dir", "--in-dir", default=str(IN_DIR),
-                    help="folder of Garmin .fit rides to read (default: ./fit); "
+                    help="folder of Garmin .fit rides to read "
+                         "(default: $TRACKVIEW_HOME or ~/.trackview, under its fit/); "
                          "--in-dir is kept as an alias")
     ap.add_argument("--out-dir", default=str(OUT_DIR),
-                    help="folder for the .gpx output (default: ./gpx)")
+                    help="folder for the .gpx output "
+                         "(default: the shared gpx/ ride log, $TRACKVIEW_HOME or "
+                         "~/.trackview)")
     ap.add_argument("--ext", action="store_true",
                     help="also embed power/cadence/heart rate/speed/grade/temperature as "
                          "<trkpt> extensions (off by default: plain lat/lon/ele/time)")
@@ -224,8 +233,17 @@ def main() -> None:
 
     fit_dir, out_dir = Path(args.fit_dir), Path(args.out_dir)
     if args.files:
+        # explicit files: read them, don't touch any folder.
         paths = [Path(f) for f in args.files]
     else:
+        # glob fit_dir for the rides.  On a *default* run (neither positional
+        # files nor an explicit --in-dir) fit_dir is the data dir's fit/ -- create
+        # it (with its parents, so a not-yet-existing ~/.trackview exists too) so
+        # a first run yields a clean, ready-to-fill home dir rather than a "nothing
+        # found in ~/.trackview/fit" over a missing private dir.  An explicit
+        # --in-dir is read as-is, without creating it.
+        if not args.fit_dir or args.fit_dir == str(IN_DIR):
+            fit_dir.mkdir(parents=True, exist_ok=True)
         # a .FIT and a .fit can coexist on a case-sensitive FS; dedupe by name.
         seen: set[str] = set()
         paths = []

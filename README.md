@@ -1,10 +1,12 @@
 # trackview
 
-Plot every GPX track in `./gpx` onto a static map image (PNG or PDF).
+Plot every GPX track in your ride log (default: `~/.trackview/gpx`; relocate the
+whole data dir with `$TRACKVIEW_HOME`) onto a static map image (PNG or PDF).
 
 ## What it does
 
-1. Reads all `*.gpx` from the `gpx/` folder **and its subfolders** (`gpxpy`), so rides
+1. Reads all `*.gpx` from the ride log's `gpx/` folder (default `~/.trackview/gpx`,
+   see **Data location**) **and its subfolders** (`gpxpy`), so rides
    organised under a `year/` or `device/` layout are found too (`--flat` for a single level).
 2. Decimates the points (default 5 m spacing) — keeps the route shape, cuts the
    point count for crisp, fast drawing.
@@ -12,7 +14,38 @@ Plot every GPX track in `./gpx` onto a static map image (PNG or PDF).
    OpenStreetMap by default — great for MTB/cycling).
 4. Overlays each route, shaded by elevation, with a white halo, start/stop
    markers, an elevation colourbar, a legend and a title.
-5. Writes `output/tracks_overview.png` by default (see **Output** for PDF and one-file-per-track).
+5. Writes `output/tracks_overview.png` by default (the data dir's `output/`, default
+   `~/.trackview/output`; see **Output** for PDF and one-file-per-track).
+
+## Data location
+
+All input and output data lives under one **per-user data dir**, independent of where
+the code is installed:
+
+- **Default:** `~/.trackview` — a dot-prefixed home dir, so it stays out of the way
+  and never collides with a `~/trackview` source checkout.
+- **Override:** set `TRACKVIEW_HOME` to relocate it (an existing install, or a test
+  pointing at a temp dir).
+
+Under it sit the folders the tool reads from and writes to: `gpx/` (the ride log it
+plots), `gc/` and `fit/` (the two converters' inputs), and `output/`, `stats/`,
+`tiles/`, `lib/` (the generated images, reports, the on-disk tile cache and the
+cached Leaflet library).  Every one is created on demand: the outputs (`output/`,
+`stats/`, `tiles/`, `lib/`) when first written, and the two converters' inputs
+(`gc/`, `fit/`) on their first default run — so a fresh checkout needs no setup.
+The paths named throughout this README (`gpx/`, `output/`, `stats/`, …) are
+**relative to this data dir**, not the repo.
+
+> **Why home, not the package?**  The tool plots *one athlete's* rides, so their data
+> belongs in the user's home, not next to the code.  An older build anchored these dirs
+> to the script's own location — which, once trackview is `pip install`ed, resolves to
+> `site-packages/` (read-only, and the wrong place to write a ride log).  They now live
+> under the data dir instead.
+>
+> **One-time migration:** if a *source checkout* still holds an old `gpx/` / `gc/` /
+> `fit/`, either move them into the data dir, or point the old location at the tool for
+> a while — e.g. run from inside that checkout with `TRACKVIEW_HOME=$PWD` (an existing
+> install reads and writes its ride log there until the dirs are moved).
 
 ## Setup
 
@@ -47,7 +80,7 @@ default run stays quick; run it with
 
 ```bash
 python trackview.py --version          # print the trackview version and exit
-python trackview.py                    # ./gpx -> ./output/tracks_overview.png
+python trackview.py                    # ride log -> output/ (both under ~/.trackview)
 python trackview.py --format pdf           # vector PDF instead of PNG
 python trackview.py --split                # one map file per track (default: all in one)
 python trackview.py --style sat        # Esri satellite base map
@@ -104,21 +137,22 @@ tools/                ad-hoc Garmin .fit inspection helpers (see Helper tools be
 CHANGELOG.md          notable changes per release, in Keep a Changelog format (supersedes the git-ignored TODO.lst)
 API.md                module-by-module reference -- the "module map"; per-flag usage lives in README.md
 --
-gpx/                  GPX rides the tool renders (recurse into year/ subfolders)   [git-ignored: personal data]
-gc/                   GoldenCheetah ride exports (*.json, from a Wahoo ELEMNT BOLT) that goldencheetah_to_gpx converts [git-ignored]
-fit/                  Garmin FIT ride exports (*.fit) that fit_to_gpx converts       [git-ignored]
-output/               generated images (the map, ride cards, trend, calendar, HTML)  [git-ignored]
-stats/                generated ride-log / CSV / climbs / summary reports            [git-ignored]
-tiles/                on-disk basemap-tile cache (keyed z/x/y, reused across runs)   [git-ignored]
-lib/                  cached Leaflet CSS + JS the --html inlines for an offline map [git-ignored]
+~/.trackview/         the per-user data dir ($TRACKVIEW_HOME to relocate); created on first use
+  gpx/                GPX rides the tool renders (recurse into year/ subfolders)       [personal data]
+  gc/                 GoldenCheetah ride exports (*.json, from a Wahoo ELEMNT BOLT)    [personal data]
+  fit/                Garmin FIT ride exports (*.fit) that fit_to_gpx converts          [personal data]
+  output/             generated images (the map, ride cards, trend, calendar, HTML)
+  stats/              generated ride-log / CSV / climbs / summary reports
+  tiles/              on-disk basemap-tile cache (keyed z/x/y, reused across runs)
+  lib/                cached Leaflet CSS + JS the --html inlines for an offline map
 ```
 
-The first block is the **source** that ships in the repo; the second block is the
-**local / personal working data** the tool reads from and writes to — all of it
-git-ignored (see `.gitignore`), since it is either private ride data
-(`gpx/`, `gc/`, `fit/`) or regenerable output and cache (`output/`, `stats/`,
-`tiles/`, `lib/`).  A fresh clone has only the source; the data dirs are created
-on first use.
+The first block is the **source** that ships in the repo; the second is the
+**per-user data dir** (`~/.trackview` by default, `$TRACKVIEW_HOME` to relocate, see
+**Data location**) — the private ride data (`gpx/`, `gc/`, `fit/`) and the regenerable
+output and cache (`output/`, `stats/`, `tiles/`, `lib/`).  It lives *outside* the repo,
+so a clone holds only the source and nothing personal is ever committed; the data dirs
+are created on first use.
 
 - **`trackview/`** the package itself — the pipeline's internals split into
   focused modules: `config` (constants + `__version__`), `load` (GPX parse +
@@ -141,23 +175,26 @@ on first use.
 - **`tools/`** two dependency-light diagnostics for *inspecting* a Garmin `.fit`
   ride (the file/session/record layout and a stats summary) — *not* the
   converter, that is `fit_to_gpx.py`.  See **Helper tools** below.
-- **`gpx/`** the input the tool renders: one `*.gpx` per ride, organised one
-  subfolder per year (`2019`…`2026`); discovery recurses into them by default.
-- **`gc/`** the GoldenCheetah ingest input for `goldencheetah_to_gpx.py`: one `*.json` ride
-  export per day (`{"RIDE": {…SAMPLES…}}`, re-saved by GoldenCheetah from a Wahoo
-  ELEMNT BOLT `.fit`), one subfolder per year.
-- **`fit/`** the Garmin ingest input for `fit_to_gpx.py`: one `*.fit` binary
-  ride per day, named `YYYY-MM-DD-…-ELEMNT BOLT …`.
-- **`output/`** the rendered images — `tracks_overview.<png|pdf>` and the
-  `--trend` / `--calendar` / `--gallery` / `--html` figures.
-- **`stats/`** the text/CSV reports — the `trackview-<first>_<last>` ride-log
-  (and `--csv`), plus the `--climbs`, `--summary` and other report variants.
-- **`tiles/`** the basemap-tile cache: downloaded tiles stored `z/x/y` per
+- **`gpx/`** (in the data dir) the input the tool renders: one `*.gpx` per ride,
+  organised one subfolder per year (`2019`…`2026`); discovery recurses into them by
+  default.
+- **`gc/`** (in the data dir) the GoldenCheetah ingest input for
+  `goldencheetah_to_gpx.py`: one `*.json` ride export per day
+  (`{"RIDE": {…SAMPLES…}}`, re-saved by GoldenCheetah from a Wahoo ELEMNT BOLT
+  `.fit`), one subfolder per year.
+- **`fit/`** (in the data dir) the Garmin ingest input for `fit_to_gpx.py`: one
+  `*.fit` binary ride per day, named `YYYY-MM-DD-…-ELEMNT BOLT …`.
+- **`output/`** (in the data dir) the rendered images — `tracks_overview.<png|pdf>`
+  and the `--trend` / `--calendar` / `--gallery` / `--html` figures.
+- **`stats/`** (in the data dir) the text/CSV reports — the
+  `trackview-<first>_<last>` ride-log (and `--csv`), plus the `--climbs`,
+  `--summary` and other report variants.
+- **`tiles/`** (in the data dir) the basemap-tile cache: downloaded tiles stored `z/x/y` per
   provider so a re-render or an offline run reuses them instead of refetching
   (`--no-cache` bypasses it).
-- **`lib/`** the cached Leaflet CSS + JS that `--html` inlines so the interactive
-  map is a genuinely offline single file (`--html-cdn` skips the cache for a
-  smaller, internet-dependent file).
+- **`lib/`** (in the data dir) the cached Leaflet CSS + JS that `--html` inlines so
+  the interactive map is a genuinely offline single file (`--html-cdn` skips the
+  cache for a smaller, internet-dependent file).
 
 ## Output
 
@@ -296,7 +333,7 @@ on first use.
    so it zooms/pans and is shareable with no server.  It complements the static PNG/PDF, and is a
    *different* deliverable from the parent repo's `gpx_viewer.py` (an interactive Streamlit + Folium
    app).  The Leaflet CSS + JS are *inlined* by default (a genuinely offline single file; the ~150 KB
-   download is cached under `lib/`, git-ignored, like the tile cache), so the file opens straight
+   download is cached under the data dir's `lib/`, like the tile cache), so the file opens straight
    from disk; `--html-cdn` references the library from a CDN instead (a smaller file that needs
    internet to *view*).  A standalone output (no basemap fetch, no telemetry), so it writes even
    under `--no-map`; because it embeds every decimated point, pair it with `--top`/`--since` to keep
@@ -321,7 +358,7 @@ Two ad-hoc diagnostics for *inspecting* a Garmin `.fit` ride (not the converter
 that feeds the tool — that is `fit_to_gpx.py`, which turns `fit/` into `gpx/`):
 
 ```bash
-.venv/bin/python tools/garmin_fit_reader.py              # most recent fit/*.fit
+.venv/bin/python tools/garmin_fit_reader.py              # most recent data dir/fit/*.fit
 .venv/bin/python tools/garmin_fit_reader.py <a.fit> ..   # explicit ride(s)
 .venv/bin/python tools/garmin_fit_reader_standalone.py   # no fitparse needed
 ```
@@ -331,8 +368,8 @@ the file/session/lap/record layout and a short stats summary and dumps the *full
 record stream to a sibling `<name>_records.json`.  `garmin_fit_reader_standalone.py`
 is the dependency-free fallback: with no `fitparse` it reads only the FIT header,
 a hex dump and the embedded strings, then points at the tools that can decode the
-rest.  The `.fit` inputs and the dumped `_records.json` are git-ignored (personal
-data and regenerable output).
+rest.  The `.fit` inputs and the dumped `_records.json` live in the data dir's `fit/`
+(personal data and regenerable output).
 
 ## Notes
 

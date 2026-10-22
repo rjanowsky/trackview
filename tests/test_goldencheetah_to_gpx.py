@@ -293,3 +293,36 @@ class TestMain:
         _run_main(tmp_path / "empty", out)
         assert "nothing to convert" in capsys.readouterr().out
         assert not out.exists()
+
+    def test_default_run_creates_the_data_dir_gc_folder(self, tmp_path, capsys):
+        # a default (no --gc-dir, no explicit files) run now creates the input dir
+        # -- and its parents -- so a first run yields a clean ~/.trackview/gc to fill,
+        # not a "nothing found in ~/.trackview/gc" over a missing private dir.  The
+        # --gc-dir default is read from config at *import* time, so both are
+        # reloaded after $TRACKVIEW_HOME is set (the same pattern as test_config.py).
+        import os
+        import importlib
+        old = os.environ.get("TRACKVIEW_HOME")
+        os.environ["TRACKVIEW_HOME"] = str(tmp_path / "home")
+        import sys
+        sys.argv = ["goldencheetah_to_gpx.py", "--out-dir", str(tmp_path / "out")]
+        try:
+            # the --gc-dir default is baked from config at import time, so reload
+            # the *config* module (the source of DATA_DIR/IN_DIR) as well as gcx,
+            # the way test_config.py does -- a bare gcx reload keeps the stale
+            # config binding.
+            import trackview.config as config
+            importlib.reload(config)
+            importlib.reload(gcx)
+            gcx.main()
+            gc = tmp_path / "home" / "gc"
+            assert gc.is_dir() and not any(gc.iterdir())   # made, but empty
+            assert "nothing to convert" in capsys.readouterr().out
+        finally:
+            sys.argv = ["goldencheetah_to_gpx.py"]
+            if old is not None:
+                os.environ["TRACKVIEW_HOME"] = old
+            else:
+                os.environ.pop("TRACKVIEW_HOME", None)
+            importlib.reload(gcx)
+            importlib.reload(config)

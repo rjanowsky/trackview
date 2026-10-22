@@ -17,7 +17,11 @@ dist/
 .coverage
 htmlcov/
 
-# personal ride data & regenerable outputs (not part of the tool)
+# personal ride data & regenerable outputs (not part of the tool).
+# As of the per-user-home change these now live under the data dir
+# (~/.trackview, or $TRACKVIEW_HOME) -- OUTSIDE this repo, so these patterns are
+# vestigial but kept defensively: they still catch a run pointed at the repo via
+# TRACKVIEW_HOME=$PWD, or a tools/ helper's in-repo inputs.
 gpx/
 gc/
 fit/

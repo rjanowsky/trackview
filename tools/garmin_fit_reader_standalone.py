@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Garmin FIT Datei Reader (standalone, ohne externe Abhängigkeiten)
-Liest Grundinformationen aus Garmin FIT-Dateien ohne fitparse.
+Garmin FIT file reader (standalone, no external dependencies)
+Reads basic information out of Garmin FIT files without fitparse.
 
 A *dependency-free* fallback diagnostic: with no `fitparse` installed it reads
 only what the file's raw bytes give for free -- the 14-byte FIT header, a 16-byte
@@ -9,8 +9,9 @@ hex dump, and the readable strings embedded in the binary -- and then points at
 the tools that *can* decode the rest.  For the full record stream use
 `garmin_fit_reader.py` (needs fitparse); the converter that feeds trackview.py
 is `fit_to_gpx.py` (fit/ -> gpx/, a schema-valid GPX 1.1 track).  With no
-argument it inspects the most recent *.fit in the repo's fit/ dir; pass one or
-more explicit paths to inspect those instead.  The .fit inputs are personal data
+argument it inspects the most recent *.fit in the data dir's fit/ folder
+($TRACKVIEW_HOME or ~/.trackview; the same root the converter reads from);
+pass one or more explicit paths to inspect those instead.  The .fit inputs are personal data
 and git-ignored (see .gitignore).
 """
 
@@ -19,12 +20,12 @@ from pathlib import Path
 
 
 def hex_dump(filepath: str, max_bytes=500):
-    """Gibt einen Hex-Dump der ersten max_bytes Bytes der Datei aus."""
+    """Print a hex dump of the first max_bytes bytes of the file."""
     with open(filepath, 'rb') as f:
         data = f.read(max_bytes)
 
     print("=" * 60)
-    print(f"HEX-DUMP (erste {max_bytes} bytes)")
+    print(f"HEX DUMP (first {max_bytes} bytes)")
     print("=" * 60)
 
     for i in range(0, len(data), 16):
@@ -35,15 +36,15 @@ def hex_dump(filepath: str, max_bytes=500):
 
 
 class SimpleFITAnalyzer:
-    """Einfache Analyse von FIT-Dateien durch Pattern-Matching (ohne fitparse)."""
+    """A simple analysis of FIT files via pattern matching (no fitparse)."""
 
     def __init__(self, filepath: str):
         self.filepath = filepath
 
     def analyze(self):
-        """Analysiert die FIT-Datei (Header + String-Fragmente + Empfehlung)."""
+        """Analyse the FIT file (header + string fragments + a recommendation)."""
         print("=" * 60)
-        print("DATEI-INFORMATIONEN")
+        print("FILE INFORMATION")
         print("=" * 60)
 
         try:
@@ -51,9 +52,9 @@ class SimpleFITAnalyzer:
                 data = f.read()
 
             file_size = len(data)
-            print(f"Dateigröße: {file_size} bytes")
+            print(f"File size: {file_size} bytes")
 
-            # Lese Header
+            # Read the header
             if len(data) >= 14:
                 header_size = data[0]
                 protocol_version = data[1]
@@ -69,12 +70,12 @@ class SimpleFITAnalyzer:
 
             print()
             print("=" * 60)
-            print("DATEI-STATISTIKEN")
+            print("FILE STATISTICS")
             print("=" * 60)
 
-            # Suche nach String-Daten
+            # Look for string data
             strings = self._extract_strings(data)
-            print("\nGefundene Textfragmente:")
+            print("\nFound text fragments:")
             for s in strings[:20]:
                 if len(s) > 3:
                     print(f"    - {s}")
@@ -82,25 +83,25 @@ class SimpleFITAnalyzer:
             hex_dump(self.filepath)
 
             print("\n" + "=" * 60)
-            print("EMPFEHLUNG")
+            print("RECOMMENDATION")
             print("=" * 60)
-            print(f"\nDie Datei enthält {file_size} Bytes Binärdaten. "
-                   "Für den vollständigen Record-Stream:")
+            print(f"\nThe file holds {file_size} bytes of binary data. "
+                   "For the full record stream:")
             print("    - fitparse (Python): pip install fitparse (-> tools/garmin_fit_reader.py)")
             print("    - Fit SDK: https://developer.garmin.com/fit/download")
             print("    - Online Viewer: https://www.fitfileviewer.com")
             print("    - trackview: .venv/bin/python fit_to_gpx.py  (-> GPX)")
 
         except Exception as e:
-            print(f"Fehler: {e}")
+            print(f"Error: {e}")
 
     def _extract_strings(self, data, min_length=4):
-        """Extrahiert leserbare Strings aus den Binärdaten."""
+        """Extract readable strings from the binary data."""
         strings = []
         current = []
 
         for byte in data:
-            if 32 <= byte < 127:  # Druckbare ASCII-Zeichen
+            if 32 <= byte < 127:  # Printable ASCII characters
                 current.append(chr(byte))
             else:
                 if len(current) >= min_length:
@@ -114,9 +115,18 @@ class SimpleFITAnalyzer:
 
 
 def _default_fit_files():
-    """The most recent *.fit in the repo's fit/ dir as strings (no-arg default).
-    None when the dir holds no ride - the caller then prints usage."""
-    fit_dir = Path(__file__).resolve().parent.parent / "fit"
+    """The most recent *.fit in the data dir's fit/ folder as strings
+    ($TRACKVIEW_HOME or ~/.trackview, the same root the converter reads from --
+    see trackview.config's DATA_DIR; imported here so the diagnostic and the
+    converter never disagree on where the rides live).  None when the dir holds
+    no ride - the caller then prints usage."""
+    import sys
+    # run as `python tools/..py`, sys.path[0] is tools/, not the repo root -- so
+    # make the package importable whether it is pip-installed or a source checkout.
+    if str(Path(__file__).resolve().parent.parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from trackview.config import DATA_DIR
+    fit_dir = DATA_DIR / "fit"
     return [str(p) for p in sorted(fit_dir.glob("*.fit"))]
 
 
@@ -126,8 +136,8 @@ if __name__ == "__main__":
     else:
         fit_files = _default_fit_files()
         if not fit_files:
-            print("Verwendung: python garmin_fit_reader_standalone.py <pfad-zur-fit-datei> [..]")
-            print("Ohne Argument wird die neueste *.fit in fit/ gelesen.")
+            print("Usage: python garmin_fit_reader_standalone.py <path-to-fit-file> [..]")
+            print("With no argument the most recent *.fit in fit/ is read.")
             sys.exit(1)
 
     for fit_file in fit_files:

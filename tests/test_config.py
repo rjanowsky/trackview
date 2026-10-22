@@ -1,25 +1,29 @@
 """[Phase 4 / 4.1] The config constants -- a pure, offline leaf.
 
         trackview/config.py is the single home for the run-time configuration the
-    CLI reads/writes: the four run-time directories (gpx/ output/ stats/ tiles/),
-    the point-decimation threshold, and the package version (`__version__`, the
-    single source of truth `pyproject.toml` reads dynamically and the `--version`
-    switch reports).  (The Web-Mercator scaling constant `PI_R` is a geometry
-    detail, so it lives -- and is tested -- in trackview.geometry, not here.)  The
-    one value-affecting edit when the constants moved from the repo-root monolith
-    was the one-level `.parent.parent` shift (the module sits a level deeper), so
-    the resolved paths must stay the repo-root gpx/ output/ stats/ tiles/ -- these
-    tests lock that, the decimation threshold and the version constant, guarding
-    them against regression.
+    CLI reads/writes: the per-user data dir (DATA_DIR, $TRACKVIEW_HOME else
+    ~/.trackview) and the four run-time directories that hang off it (gpx/ output/
+    stats/ tiles/), the point-decimation threshold, and the package version
+    (`__version__`, the single source of truth `pyproject.toml` reads dynamically
+    and the `--version` switch reports).  (The Web-Mercator scaling constant `PI_R`
+    is a geometry detail, so it lives -- and is tested -- in trackview.geometry, not
+    here.)  The data dirs are anchored to the *user's home*, not the package -- so
+    an installed run (whose __file__ is site-packages/) never scatters a ride log
+    into the package -- these tests lock the layout (the four subdirs under one
+    shared root) and that the root is the home-anchored DATA_DIR (relocatable via
+    $TRACKVIEW_HOME), never a path off this file, guarding them plus the decimation
+    threshold and the version constant against regression.
 """
+import os
 import re
+from pathlib import Path
 
 from trackview import config
 
 
 class TestRuntimeDirectories:
-    # all four dirs sit under the one shared parent -- the repo root (the dir that
-    # holds this package's parent), reached by config's `.parent.parent`
+    # all four dirs sit under the one shared root -- the per-user data dir (DATA_DIR,
+    # $TRACKVIEW_HOME else ~/.trackview), *not* the repo / the package
     def test_all_four_dirs_share_one_parent(self):
         parents = {config.GPX_DIR.parent, config.OUTPUT_DIR.parent,
                    config.STATS_DIR.parent, config.TILE_CACHE_DIR.parent}
@@ -30,13 +34,54 @@ class TestRuntimeDirectories:
                                   config.STATS_DIR, config.TILE_CACHE_DIR)]
         assert names == ["gpx", "output", "stats", "tiles"]
 
-    def test_directories_resolve_below_the_package_root(self):
-         # the package root is the dir that holds config.py's parent
-        pkg_root = config.GPX_DIR.parent
-        assert config.GPX_DIR == pkg_root / "gpx"
-        assert config.OUTPUT_DIR == pkg_root / "output"
-        assert config.STATS_DIR == pkg_root / "stats"
-        assert config.TILE_CACHE_DIR == pkg_root / "tiles"
+    def test_directories_resolve_below_the_data_root(self):
+        # the four run-time dirs are the data dir's subdirs; the shared root they
+        # all sit under is DATA_DIR itself.
+        data_root = config.GPX_DIR.parent
+        assert config.DATA_DIR == data_root
+        assert config.GPX_DIR == data_root / "gpx"
+        assert config.OUTPUT_DIR == data_root / "output"
+        assert config.STATS_DIR == data_root / "stats"
+        assert config.TILE_CACHE_DIR == data_root / "tiles"
+
+    def test_data_root_is_the_home_not_the_package(self):
+        # the heart of the home anchoring: with no override the data root is
+        # ~/.trackview, NOT a path off this file -- so an installed run (whose
+        # __file__ is site-packages/) never scatters a ride log into the package.
+        import importlib
+        saved = os.environ.get("TRACKVIEW_HOME")
+        os.environ.pop("TRACKVIEW_HOME", None)
+        try:
+            importlib.reload(config)
+            assert config.DATA_DIR == Path.home() / ".trackview"
+            # ...and it is not under the package's own tree (install-independence)
+            pkg_root = Path(config.__file__).resolve().parents[1]
+            assert not config.DATA_DIR.resolve().is_relative_to(pkg_root)
+        finally:
+            if saved is not None:
+                os.environ["TRACKVIEW_HOME"] = saved
+            importlib.reload(config)
+
+    def test_trackview_home_env_relocates_the_data_root(self):
+        # $TRACKVIEW_HOME relocates every run-time dir at once (the migration /
+        # test escape hatch): a converter and the renderer then share the same
+        # gpx/ ride log under the override.
+        import importlib
+        saved = os.environ.get("TRACKVIEW_HOME")
+        try:
+            os.environ["TRACKVIEW_HOME"] = "/tmp/trackview-test-home"
+            importlib.reload(config)
+            assert config.DATA_DIR == Path("/tmp/trackview-test-home")
+            assert config.GPX_DIR == Path("/tmp/trackview-test-home/gpx")
+            assert config.OUTPUT_DIR == Path("/tmp/trackview-test-home/output")
+            assert config.STATS_DIR == Path("/tmp/trackview-test-home/stats")
+            assert config.TILE_CACHE_DIR == Path("/tmp/trackview-test-home/tiles")
+        finally:
+            if saved is not None:
+                os.environ["TRACKVIEW_HOME"] = saved
+            else:
+                os.environ.pop("TRACKVIEW_HOME", None)
+            importlib.reload(config)
 
 
 class TestMagicNumbers:
