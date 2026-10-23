@@ -33,6 +33,13 @@ outputs are the headline; internal refactors and packaging work are noted too.
   together — or one page each under `--pdf`.  Doc-only; no flag or output behaviour
   changes.
 
+- **README "Data location" multi-athlete note.**  The `TRACKVIEW_HOME` "Override"
+  bullet now names its third use — the *multi-athlete* knob: give each rider a
+  distinct home (`TRACKVIEW_HOME=~/.trackview-alice` vs. `~/.trackview-bob`) so two
+  or more athletes keep their own `gpx/`, `output/`, `stats/`, … from a single
+  install.  Doc-only; the capability already existed via `TRACKVIEW_HOME`, this just
+  surfaces it.  No flag or output behaviour changes.
+
 ---
 
 ## [1.0.3] — 2026-10-23

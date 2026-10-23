@@ -25,7 +25,9 @@ the code is installed:
 - **Default:** `~/.trackview` — a dot-prefixed home dir, so it stays out of the way
   and never collides with a `~/trackview` source checkout.
 - **Override:** set `TRACKVIEW_HOME` to relocate it (an existing install, or a test
-  pointing at a temp dir).
+  pointing at a temp dir).  It is also the *multi-athlete* knob: give each rider a
+  distinct home (`TRACKVIEW_HOME=~/.trackview-alice` vs. `~/.trackview-bob`) and each
+  gets its own `gpx/`, `output/`, `stats/`, … from a single install, fully isolated.
 
 Under it sit the folders the tool reads from and writes to: `gpx/` (the ride log it
 plots), `gc/` and `fit/` (the two converters' inputs), and `output/`, `stats/`,
