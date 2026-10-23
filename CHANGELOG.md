@@ -12,7 +12,7 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [1.0.4] — 2026-10-22
+## [1.0.4] — 2026-10-23
 
 Cuts `1.0.3` → `1.0.4` as a doc-only patch: five README clarifications
 (Statistics section, a "Sample output" single-vs-many note, the `TRACKVIEW_HOME`
