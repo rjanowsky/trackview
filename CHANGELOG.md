@@ -12,7 +12,13 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [Unreleased]
+## [1.0.4] — 2026-10-22
+
+Cuts `1.0.3` → `1.0.4` as a doc-only patch: five README clarifications
+(Statistics section, a "Sample output" single-vs-many note, the `TRACKVIEW_HOME`
+multi-athlete use, an "Usage" converter-pipeline intro, and a bare-`python`
+command style in "Usage" / "Helper tools").  No flag, output, or code behaviour
+changes — a documentation patch.
 
 ### Added
 
