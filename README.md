@@ -87,10 +87,10 @@ into GPX with the two converters, which write into the *same* `gpx/` trackview t
 plots:
 
 ```bash
-.venv/bin/python goldencheetah_to_gpx.py        # gc/*.json  (GoldenCheetah) -> gpx/
-.venv/bin/python fit_to_gpx.py                  # fit/*.fit  (Garmin)        -> gpx/
-.venv/bin/python fit_to_gpx.py --ext            # ... plus embed power/speed/cadence/hr/grade/temperature
-.venv/bin/python goldencheetah_to_gpx.py --since 2026-09-01 --until 2026-09-30   # filter by ride date
+python goldencheetah_to_gpx.py               # gc/*.json  (GoldenCheetah) -> gpx/
+python fit_to_gpx.py                         # fit/*.fit  (Garmin)        -> gpx/
+python fit_to_gpx.py --ext                   # ... plus embed power/speed/cadence/hr/grade/temperature
+python goldencheetah_to_gpx.py --since 2026-09-01 --until 2026-09-30   # filter by ride date
 ```
 
 Both read the data dir's `gc/` / `fit/` and write the shared `gpx/` (each `mkdir`s it
@@ -483,10 +483,10 @@ None of them is the converter that feeds the tool — that is `fit_to_gpx.py`
 which turn the data dir's `fit/` / `gc/` into `gpx/`.
 
 ```bash
-.venv/bin/python tools/garmin_fit_reader.py              # most recent data dir/fit/*.fit
-.venv/bin/python tools/garmin_fit_reader.py <a.fit> ..   # explicit ride(s)
-.venv/bin/python tools/garmin_fit_reader_standalone.py   # no fitparse needed
-.venv/bin/python tools/gpx_trim.py ride.gpx --start 10 --end 500   # trim trackpoints
+python tools/garmin_fit_reader.py                  # most recent data dir/fit/*.fit
+python tools/garmin_fit_reader.py <a.fit> ..       # explicit ride(s)
+python tools/garmin_fit_reader_standalone.py       # no fitparse needed
+python tools/gpx_trim.py ride.gpx --start 10 --end 500   # trim trackpoints
 ```
 
 `garmin_fit_reader.py` (needs `fitparse`, already in `requirements.txt`) prints

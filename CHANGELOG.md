@@ -48,6 +48,14 @@ outputs are the headline; internal refactors and packaging work are noted too.
   `--since` / `--until`, or an explicit file), cross-linking the `.fit` *inspection*
   helpers to **Helper tools**.  Doc-only; no flag or output behaviour changes.
 
+- **README "Usage" / "Helper tools" command style.**  The converter and
+  `tools/` command examples in the "Usage" and "Helper tools" sections now run
+  as `python <script>.py` (matching the `python trackview.py` usage block)
+  instead of the fully-qualified `.venv/bin/python` prefix; the trailing
+  comments are re-aligned.  The `.venv/bin/pytest` invocations (Testing) and the
+  `. .venv/bin/activate` shell step are left as-is.  Doc-only; no flag or output
+  behaviour changes.
+
 ---
 
 ## [1.0.3] — 2026-10-23
