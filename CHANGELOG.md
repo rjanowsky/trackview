@@ -27,6 +27,12 @@ outputs are the headline; internal refactors and packaging work are noted too.
   `--climbs` ranking and the `--summary` year-in-review).  The per-flag "Output"
   prose cross-links to it; no flag or output behaviour changes.
 
+- **README "Sample output" note.**  A one-line blockquote under the sample profile
+  strip notes that the sample images each show a *single* ride, whereas `trackview`
+  plots every `.gpx` you hand it onto one image — a week, a month or a whole season
+  together — or one page each under `--pdf`.  Doc-only; no flag or output behaviour
+  changes.
+
 ---
 
 ## [1.0.3] — 2026-10-23

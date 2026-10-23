@@ -352,6 +352,11 @@ axis), for two sample rides.  They are static JPEGs committed to the repo
 
 ![sample ride profile strip](samples/Sample_1_grade.jpg)
 
+> **A single ride, here — but it scales up.** The samples show one ride each.  In
+> practice `trackview` lays **every** `.gpx` you hand it onto one image, so a week, a
+> month or a whole season of rides can share the same map (or, with `--pdf`, one page
+> each).
+
 ## Statistics
 
 Beyond the rendered maps, every run reads the numbers off each ride and writes
