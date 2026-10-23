@@ -226,7 +226,7 @@ are created on first use.
 - **Telemetry** `--ext` adds the calories-burned **total** (kcal) to the main title line and an average power / heart rate / speed / cadence / temperature line just below it, read from the `<extensions>` that `goldencheetah_to_gpx --ext` / `fit_to_gpx --ext` embed.  The calories are estimated as average power times the ride's duration, divided by a ~25% efficiency (the rides carry no calorie field).  Tracks without telemetry (e.g. komoot) simply omit both.
 - The ride **duration** (`Hh MMm`, e.g. `3h 42m`) is always on the title, between
   the distance and the elevation gain — the total across the tracks when combined.
-- Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt` (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row per ride with the same stats as the two title lines (distance, duration, gain — plus the calories-burned total and avg power / speed / cadence / hr / temperature when `--ext`, and a **max grade** column), plus its **device type** (from the GPX `Device:` line) as the last column, closing with a totals/averages **per device type** (device name in the Device column).  A `-` marks a metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot track) reads as `unknown`.
+- Every run also writes a **ride-log table** to `stats/trackview-<first>_<last>.txt` (`<first>`/`<last>` are the earliest and latest ride dates, `YYYY-MM-DD`): one row per ride with the same stats as the two title lines (distance, duration, gain — plus the calories-burned total and avg power / speed / cadence / hr / temperature when `--ext`, and a **max grade** column), plus its **device type** (from the GPX `Device:` line) as the last column, closing with a totals/averages **per device type** (device name in the Device column).  A `-` marks a metric a ride doesn't carry; a ride with no `Device:` line (e.g. a plain komoot track) reads as `unknown`.  (The full set of statistics and the complete `stats/` layout — the `.txt`/`.csv` ride-log, `--climbs` and `--summary` — are gathered in **Statistics** below.)
 - With `--csv`, the same columns (the ride stats plus a trailing device type) are also written to
   `stats/trackview-<first>_<last>.csv` — a header row plus one data row per ride, but
   **no** title or per-device Summary rows (header and data only).  The field delimiter
@@ -351,6 +351,91 @@ axis), for two sample rides.  They are static JPEGs committed to the repo
 (personal-data-free — no EXIF, no GPS), not a runtime output.
 
 ![sample ride profile strip](samples/Sample_1_grade.jpg)
+
+## Statistics
+
+Beyond the rendered maps, every run reads the numbers off each ride and writes
+them to `stats/` (a few reports go to `output/` as standalone figures).  This
+section is the one place the *statistics* and the `stats/` layout live together;
+the per-flag detail is in **Output** above.
+
+### What trackview reads from a `.gpx`
+
+`load_tracks` (in `trackview/load.py`) is the single reader.  For every `*.gpx`
+it parses the file with `gpxpy`, merges the track segments into **one polyline**,
+records the **first→last timestamp span** (the ride's `duration`), **decimates**
+the points to one every `DECIMATE_M` metres (default 5 m — ~68 k points → a few
+thousand), and, when telemetry is wanted, accumulates the **per-point telemetry**
+`goldencheetah_to_gpx --ext` / `fit_to_gpx --ext` embed.  A file that is missing,
+truncated or foreign is *skipped with a note*, not fatal — one bad file in a
+mixed-vendor `gpx/` never aborts the run.
+
+**Geometry (always, pure from lat/lon/elev)** —
+
+- **Distance (km)** — equirectangular sum of segment lengths
+  (`111320·cos(mid-lat)` E–W, `110540` N–S).
+- **Gain (m)** — the sum of *positive* rises; a descent ends the climb only once
+  it exceeds `--gain-noise` (`0` = the raw ascent).
+- **Grade (%)** — per-segment rise ÷ horizontal run ×100.
+- **Cumulative km** — running distance per point.
+- **Duration** — `t_last − t_first` in seconds (always on the map title, `Hh MMm`).
+- **Max grade** — the ride's steepest per-segment grade.
+
+**Telemetry (only when a ride carries it, from `--ext`)** — `power`,
+`speed_kmh`, `cadence`, `heartrate`, `temperature`, read from the
+un-namespaced `<extensions>` children `gpxpy` flattens onto each trackpoint.
+Each is kept as a point-weighted `[sum, count]` pair, so an average is the true
+sum-over-count — **avg power (W) / avg speed (km/h) / avg cadence (rpm) / avg HR
+(bpm) / avg temperature (°C)**.  **Calories (kcal)** is *estimated*, not measured:
+`avg power (W) × duration (s) ÷ 4184 J/kcal ÷ 0.25 efficiency`, so it needs both a
+power average and a duration.  A plain komoot track (no extensions) carries none —
+those columns then read `-`.
+
+**Ride metadata (off the `<desc>` line `goldencheetah_to_gpx` / `fit_to_gpx`
+stamp, and the filename)** — **Device** (e.g. `Wahoo ELEMNT BOLT`) and **Sport**
+(e.g. `Bike`), read case-insensitively; a ride missing a line falls into its own
+`unknown` group.  The **ride date** is *not* from the GPX internals but from a
+Wahoo-style filename stem `YYYY_MM_DD_HH_MM_SS` (a foreign name is *undated*) —
+this is what the `--since`/`--until` filter and the output filenames key off.
+
+**Climbs (geometry-only)** — sustained runs of *smoothed* grade (a 9-segment
+moving average) staying `≥ 4.0 %` over `≥ 250 m` of horizontal run; each climb
+carries gain, average grade, steepest grade and a **score = gain × average
+grade** that ranks a long moderate climb against a short steep one.
+
+### How the `stats/` reports are organised and named
+
+Every report in a run shares **one dated label**, built once from the earliest
+and latest ride (the glob is date-ascending):
+
+```
+trackview-<first>_<last>.<ext>      e.g. trackview-2026-09-01_2026-09-30.txt
+```
+
+`<first>`/`<last>` are the **calendar dates** of the first and last ride
+(`YYYY-MM-DD` for a Wahoo stem, the ride title unchanged otherwise), made
+filesystem-safe — so the *span of the run is the filename*, and every report from
+one run lines up.  The `.txt` tables close with a **`Summary` totals row per
+device type** (rides with no `Device:` line group under `unknown`); the `.csv`
+omits those totals.  The four text reports that live in `stats/`:
+
+| report | flag | file in `stats/` | shape |
+| ------ | ---- | ---------------- | ----- |
+| **Ride-log table** | always | `trackview-<first>_<last>.txt` | one row per ride + one **`Summary`** totals row per device; columns `Ride, Dist (km), Duration, Gain (m)` + `Device`, and under `--ext` also `Calories, Avg power, Avg speed, Avg cadence, Avg HR, Max grade, Avg temperature` |
+| **CSV ride-log** | `--csv` | `trackview-<first>_<last>.csv` | the same columns, but **no** title/rules/`Summary` (totals live only in the `.txt`); decimal-normalised, `--csv-delimiter` (default `;`) |
+| **Climb ranking** | `--climbs [N]` | `trackview-<first>_<last>_climbs.txt` | top `N` (default 10) by score; `#, Ride, From (km), To (km), Len (km), Gain (m), Avg %, Max %, Score`; the header self-describes the thresholds; a "no sustained climbs found." note when empty |
+| **Year-in-review** | `--summary` | `trackview-<first>_<last>_summary.txt` | grouped **year → month**, each block `Month, Rides, Dist (km), Gain (m), Hours` (+ `Avg power (W)` under `--ext`) closed by a `TOTAL`, an `ALL years` grand total when > 1 year, plus an undated-rides note |
+
+Two cross-cutting points:
+
+- The **`.txt` totals come per device group** — the ride-log and summary print one
+  `Summary`/`TOTAL` row *per device type*, so a mixed-device folder gets its own
+  subtotal per device, not one lumped total.
+- The `--summary` and `--climbs` reports are **pure geometry**, so they write
+  even under `--no-map` (no basemap fetch).  The `--trend`, `--calendar` and
+  `--html` outputs are *also* standalone (they write under `--no-map` too), but
+  they are **figures**, so they land in `output/` (`trackview-<first>_<last>_trend.<fmt>`,
+  `_calendar.<fmt>`, `_map.html`), not `stats/`.
 
 ## Base-map providers (`--style`)
 

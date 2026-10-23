@@ -14,7 +14,18 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- **README "Statistics" section.**  A new consolidated section (between "Sample
+  output" and "Base-map providers") gathers the *statistics* trackview reads from
+  each `.gpx` — the always-on geometry (distance, gain, grade, cumulative km,
+  duration, max grade), the `--ext` telemetry (avg power / speed / cadence / HR /
+  temperature, the estimated calories-burned, and the Device / Sport / ride-date
+  metadata), and the geometry-only climb detection — together with *how the `stats/`
+  reports are organised and named* (the single `trackview-<first>_<last>` dated
+  label, and the four text reports: the ride-log `.txt`, the `--csv`, the
+  `--climbs` ranking and the `--summary` year-in-review).  The per-flag "Output"
+  prose cross-links to it; no flag or output behaviour changes.
 
 ---
 
