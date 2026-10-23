@@ -40,6 +40,14 @@ outputs are the headline; internal refactors and packaging work are noted too.
   install.  Doc-only; the capability already existed via `TRACKVIEW_HOME`, this just
   surfaces it.  No flag or output behaviour changes.
 
+- **README "Usage" converter pipeline.**  The "Usage" section now opens by stating
+  that `trackview` plots the `gpx/` ride log and does *not* read a device's native
+  files, so the user must *supply* the `gpx/` — via the two converters, which read the
+  data dir's `gc/` / `fit/` (GoldenCheetah JSON / Garmin `.fit`) and write the *same*
+  `gpx/` trackview then plots (`goldencheetah-to-gpx` / `fit-to-gpx`, with `--ext`,
+  `--since` / `--until`, or an explicit file), cross-linking the `.fit` *inspection*
+  helpers to **Helper tools**.  Doc-only; no flag or output behaviour changes.
+
 ---
 
 ## [1.0.3] — 2026-10-23

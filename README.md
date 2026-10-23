@@ -80,6 +80,24 @@ default run stays quick; run it with
 
 ## Usage
 
+trackview plots the `gpx/` ride log in the data dir — it does **not** read a device's
+native files (Garmin `.fit`, GoldenCheetah JSON, …).  So step one is to *supply* that
+`gpx/`: drop in GPX you already have (e.g. komoot exports), or turn your source rides
+into GPX with the two converters, which write into the *same* `gpx/` trackview then
+plots:
+
+```bash
+.venv/bin/python goldencheetah_to_gpx.py        # gc/*.json  (GoldenCheetah) -> gpx/
+.venv/bin/python fit_to_gpx.py                  # fit/*.fit  (Garmin)        -> gpx/
+.venv/bin/python fit_to_gpx.py --ext            # ... plus embed power/speed/cadence/hr/grade/temperature
+.venv/bin/python goldencheetah_to_gpx.py --since 2026-09-01 --until 2026-09-30   # filter by ride date
+```
+
+Both read the data dir's `gc/` / `fit/` and write the shared `gpx/` (each `mkdir`s it
+on first run).  Once `gpx/` holds your rides, `trackview` plots them — one map plus the
+stats reports per run, driven by the flags below.  (To *inspect* a raw `.fit` rather
+than convert it, see **Helper tools (`tools/`)**.)
+
 ```bash
 python trackview.py --version          # print the trackview version and exit
 python trackview.py                    # ride log -> output/ (both under ~/.trackview)
