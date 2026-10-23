@@ -133,7 +133,8 @@ trackview.py          the root launcher: a thin shim that re-enters trackview.cl
 pyproject.toml        build metadata, deps, the console entry points, ruff + pytest config
 requirements.txt      the same runtime deps as a plain `pip install -r` list
 tests/                the pytest suite (one module per feature; offline markers in pyproject.toml)
-tools/                ad-hoc Garmin .fit inspection helpers (see Helper tools below)
+tools/                ad-hoc helpers: Garmin .fit diagnostics + a GPX trimmer (see Helper tools below)
+samples/              sample rendered profiles (elevation/grade/power/speed strips), for the README
 CHANGELOG.md          notable changes per release, in Keep a Changelog format (supersedes the git-ignored TODO.lst)
 API.md                module-by-module reference -- the "module map"; per-flag usage lives in README.md
 --
@@ -172,9 +173,10 @@ are created on first use.
   (`test_geometry`, `test_filters`, `test_stats`, `test_trend`, …) plus a
   `conftest.py`.  The `network` / `slow` markers (in `pyproject.toml`) let the
   fast, offline subset run in CI.
-- **`tools/`** two dependency-light diagnostics for *inspecting* a Garmin `.fit`
-  ride (the file/session/record layout and a stats summary) — *not* the
-  converter, that is `fit_to_gpx.py`.  See **Helper tools** below.
+- **`tools/`** three dependency-light helpers — two diagnostics for *inspecting*
+  a Garmin `.fit` ride (the file/session/record layout and a stats summary) and
+  `gpx_trim.py`, a pure-stdlib editor that trims `<trkpt>` off a ride's start /
+  end.  *Not* the converter, that is `fit_to_gpx.py`.  See **Helper tools** below.
 - **`gpx/`** (in the data dir) the input the tool renders: one `*.gpx` per ride,
   organised one subfolder per year (`2019`…`2026`); discovery recurses into them by
   default.
@@ -340,6 +342,16 @@ are created on first use.
    a busy log to a handful of rides.
 - **Gallery / contact sheet** `--gallery [N]` (bare `--gallery` = 9) tiles the N *most recent* rides of the already-filtered set into a single mosaic to `output/trackview-<first>_<last>_gallery.<format>` — a "recent rides" overview without opening N files, the *mosaic* alternative to `--split` (one image instead of N).  Each cell is that ride's own basemap + route (the flat per-track look of a `--split` cell) with a green start / red stop and a name / distance / gain caption, laid out in a near-square grid (3x3 for 9, 2x3 for 5, a 1xN row for a small N); the top-left cell is the latest ride.  It fetches a basemap per cell, so it honours `--style` / `--detail` / the tile cache and is skipped under `--no-map` (a line on stdout says so, and the ride-log/CSV are still written); a ride with no route (e.g. a suppressed trainer ride) is dropped from the sheet, and an empty set writes nothing.  `--out` names the single file; otherwise the dated auto name is used.
 
+## Sample output
+
+`samples/` holds a few rendered profile strips so you can see what a ride card
+looks like without running trackview — the same `--profile` mini-panels
+(elevation / grade / power / speed, each on its own strip, sharing the distance
+axis), for two sample rides.  They are static JPEGs committed to the repo
+(personal-data-free — no EXIF, no GPS), not a runtime output.
+
+![sample ride profile strip](samples/Sample_1_grade.jpg)
+
 ## Base-map providers (`--style`)
 
 | key         | source                                    |
@@ -354,13 +366,17 @@ variance, e.g. rate-limiting) automatically falls back to the next one.
 
 ## Helper tools (`tools/`)
 
-Two ad-hoc diagnostics for *inspecting* a Garmin `.fit` ride (not the converter
-that feeds the tool — that is `fit_to_gpx.py`, which turns `fit/` into `gpx/`):
+Three ad-hoc, dependency-light helpers under `tools/` — two *diagnostics* for
+*inspecting* a Garmin `.fit` ride, and one small *editor* for trimming a GPX.
+None of them is the converter that feeds the tool — that is `fit_to_gpx.py`
+(Garmin `.fit` → GPX) / `goldencheetah_to_gpx.py` (GoldenCheetah JSON → GPX),
+which turn the data dir's `fit/` / `gc/` into `gpx/`.
 
 ```bash
 .venv/bin/python tools/garmin_fit_reader.py              # most recent data dir/fit/*.fit
 .venv/bin/python tools/garmin_fit_reader.py <a.fit> ..   # explicit ride(s)
 .venv/bin/python tools/garmin_fit_reader_standalone.py   # no fitparse needed
+.venv/bin/python tools/gpx_trim.py ride.gpx --start 10 --end 500   # trim trackpoints
 ```
 
 `garmin_fit_reader.py` (needs `fitparse`, already in `requirements.txt`) prints
@@ -368,8 +384,12 @@ the file/session/lap/record layout and a short stats summary and dumps the *full
 record stream to a sibling `<name>_records.json`.  `garmin_fit_reader_standalone.py`
 is the dependency-free fallback: with no `fitparse` it reads only the FIT header,
 a hex dump and the embedded strings, then points at the tools that can decode the
-rest.  The `.fit` inputs and the dumped `_records.json` live in the data dir's `fit/`
-(personal data and regenerable output).
+rest.  `gpx_trim.py` is a pure-stdlib editor that removes `N` `<trkpt>` elements
+from the *start* and/or *end* of a `*.gpx` (preserving the file's XML namespaces);
+by default it writes a sibling `<name>_trimmed.gpx` (or use `-o`).  The `.fit`
+inputs and the dumped `_records.json` live in the data dir's `fit/` (personal
+data and regenerable output); `gpx_trim.py` operates on a ride's GPX in place
+(its `_trimmed` sibling is regenerable, like `output/`).
 
 ## Notes
 

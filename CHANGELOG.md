@@ -18,6 +18,40 @@ No changes yet.
 
 ---
 
+## [1.0.3] — 2026-10-23
+
+Cuts `1.0.2` → `1.0.3` on two additive, non-breaking additions: a third `tools/`
+helper (`gpx_trim.py`, a dependency-free GPX trimmer) and a `samples/` folder of
+public, personal-data-free render illustrations.  No flag or output changes, so
+it is a non-breaking patch.
+
+### Added
+
+- **`tools/gpx_trim.py` — a dependency-free GPX trimmer.**  A pure-stdlib helper
+  (no `trackview` import, no new dependency) that removes `N` `<trkpt>` elements
+  from the *start* and/or *end* of a `*.gpx`, preserving the file's XML
+  namespaces.  It writes a sibling `<name>_trimmed.gpx` by default (`-o` to name
+  it), reuses the trimmed file for a round-trip, and is the third entry under
+  `tools/` alongside the two FIT diagnostics.
+- **`samples/` — public sample output.**  A small set of rendered `--profile`
+  strips (elevation / grade / power / speed for two sample rides), committed as
+  static JPEGs so a reader sees what a ride card looks like without running
+  trackview.  They are personal-data-free (no EXIF, no GPS) and are *illustrative*
+  — not a runtime output — so the README's "Sample output" section can link one
+  directly.
+
+### Changed
+
+- **README / Helper tools / Directory Structure now cover `gpx_trim.py` and
+  `samples/`.**  The "Helper tools (`tools/`)" section lists all three helpers and
+  shows a `gpx_trim.py` usage line; the directory tree gains a `samples/` entry;
+  a new "## Sample output" section links `samples/Sample_1_grade.jpg`.
+- **`tools/gpx_trim.py` now carries its own docstring.**  The stale
+  `gpx_trim_en.py` name in the usage examples was corrected to `gpx_trim.py`
+  (the module's real filename).
+
+---
+
 ## [1.0.2] — 2026-10-22
 
 Cuts `1.0.1` → `1.0.2` on the per-user data-dir move below: the run-time data
