@@ -12,6 +12,55 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
+## [1.0.5] — 2026-10-23
+
+Fixes `--style terrain` rendering an all-grey "Map data not yet available" map,
+and hardens the base-map blank-tile detection so a *retired* tile provider
+cascades to a live one instead of being accepted.  No new flags; a behaviour
+fix to an existing one.
+
+### Fixed
+
+- **`--style terrain` (all-grey "Map data not yet available" map).**  The `terrain`
+  source pointed at Esri's `World_Terrain_Base`, a service now *retired* for most
+  of the world -- instead of 404-ing it stamps a small, *textured* grey "Map data
+  not yet available" placeholder at every zoom, so every `terrain` ride plotted grey.
+  The source is now Esri's **`World_Shaded_Relief`** (attribution `© USGS, © Esri`),
+  with `topo` (OpenTopoMap, real global coverage to z17) as the automatic fallback
+  where Shaded Relief has no data.
+
+- **Blank/placeholder tile detection.**  A retired service's placeholder has a *low
+  but non-zero* pixel variance (~29) -- comfortably above the old whole-mosaic floor
+  of `1.0`, so the old check read a blank area as "real" and accepted it.  The blank
+  test is now a *per-tile* **luminance** variance (`_per_tile_var`, added): it splits
+  a fetched image into its 256×256 tiles and reads the mean of each tile's *own*
+  grey-level variance (colours collapsed first, so the number is independent of the
+  channel count), compared against a raised floor of `100` -- above the ~29
+  placeholder, below any real tile's variance (thousands).  A dead provider now
+  cascades to the next live one; if *none* clear the floor the renderer keeps the
+  best-effort (highest-variance) tiles it saw rather than erroring out.
+
+- **`_per_tile_var` on 2-D images.**  The helper previously assumed a 3-D
+  `(H, W, 3)` image and would raise `AxisError` on a plain 2-D grey/alpha tile --
+  which real `contextily` images (4-channel RGBA) can pass through.  It now handles
+  both shapes.
+
+### Added
+
+- **Regression tests** (`tests/test_io.py`): a `TestPerTileVar` class (uniform-grey,
+  the textured-placeholder-defeats-the-old-floor crux, a real high-variance tile, the
+  single-tile case, and the 2-D robustness guard) and a `TestLoadBasemapCascade`
+  class that stubs the `contextily` fetch to verify a placeholder cascades to the next
+  provider, a good provider is kept, a fully-blank run keeps the best-effort tiles, and
+  a provider that keeps raising retries then raises.  All offline.
+
+### Changed
+
+- **Base-map fallback order.**  `_load_basemap` now tracks the richest (highest-variance)
+  provider seen and returns it as a best-effort fallback when no source clears the
+  blank threshold, instead of raising `RuntimeError`.  The provider-cascade behaviour
+  (skip blank/placeholder sources, polite delay between) is unchanged.
+
 ## [1.0.4] — 2026-10-23
 
 Cuts `1.0.3` → `1.0.4` as a doc-only patch: five README clarifications

@@ -50,24 +50,68 @@ USER_AGENT    = "trackview/1.0 (static GPX->map renderer)"
 SOURCES = {
     "topo":   "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     "sat":    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "terrain":"https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}",
+    "terrain":"https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}",
     "osm":    "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
 }
 ATTRIBUTION = {
     "topo":   "© OpenTopoMap (CC-BY-SA)",
     "sat":    "© Esri, Maxar, Earthstar Geographics",
-    "terrain":"© Esri, USGS, NOAA",
+    "terrain":"© USGS, © Esri",
     "osm":    "© OpenStreetMap contributors",
 }
 
 
-def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
+def _per_tile_var(arr: np.ndarray, bbox) -> float:
+    """Mean of each 256x256 tile's own *luminance* variance -- the real 'blank test'.
+
+    A *retired* tile service (Esri's old World_Terrain_Base, or World_Shaded_Relief
+    outside its coverage) doesn't 404 -- it serves a small *textured* grey 'Map data
+    not yet available' placeholder at every zoom.  The texture is a low but *non-zero*
+    grey-level variance (~29) -- comfortably above the old whole-image floor of 1.0,
+    so a naive check reads this blank area as 'real'.  The fix has two parts: (1)
+    read the variance over a *grey level* (``arr.mean(axis=2)``), not the RGB triple,
+    so the number is a luminance variance independent of colour-channel count; and
+    (2) raise the floor to 100 -- above that ~29 placeholder, below any *real* tile's
+    variance (thousands) -- so a dead provider is skipped for a live one.  A ride
+    over a genuinely flat real area (open ocean) can yield a low-variance *tile*, but
+    such a region still spans many tiles, so the *mean* stays well above the floor --
+    only a fully-blank area lands near it."""
+    # contextily's image is usually 3D (H, W, 3/4); a plain grey/alpha tile can be
+    # 2D -- in which case there *is* no channel axis to collapse, and the image
+    # itself is the grey level
+    gray = arr if arr.ndim == 2 else arr.mean(axis=2)   # RGB/RGBA -> a grey level
+    w, s, e, n = bbox
+    nx = max(1, int(math.ceil((e - w) / 256.0)))   # tile grid the bbox fetches
+    ny = max(1, int(math.ceil((n - s) / 256.0)))
+    if nx == 1 and ny == 1:                        # one tile: the image *is* the tile
+        return float(gray.var())
+    H, W = gray.shape
+    if W < nx or H < ny:                           # image smaller than the grid: can't split
+        return float(gray.var())
+    xs = np.linspace(0, W, nx + 1, dtype=int)
+    per = [float(gray[:, xs[i]:xs[i + 1]].var())
+           for i in range(nx) if xs[i] < xs[i + 1]]
+    return float(np.mean(per)) if per else float(gray.var())
+
+
+def _load_basemap(ax, bbox, order, detail, min_var: float = 100.0,
                   retries: int = 3, backoff_s: float = 2.0) -> str:
     """Fall back through tile providers until one shows real tiles.
     A transient fetch failure (a reset or closed connection, common when many
     tiles are pulled at once) is retried a few times with growing backoff; a
     blank fetch (near-zero pixel variance) or an empty response then moves on to
-    the next provider, each after a short, polite delay."""
+    the next provider, each after a short, polite delay.
+
+    The blank test is a *per-tile* variance floor (`min_var`, see `_per_tile_var`): a
+    retired service serves a small, uniform grey placeholder at every zoom (a tile's
+    own variance ~29, far above an old 1.0 floor), so the floor is set at 100 --
+    above that placeholder, below any real tile's variance -- so such a source
+    cascades to the next provider instead of being accepted.  A ride over a
+    genuinely flat area (open ocean) can yield a low-variance *real* tile, so when
+    no provider clears the floor we don't error out -- we keep the last
+    (best-effort, highest-variance) tiles we saw rather than crash."""
+    best_key = None
+    best_var = -1.0
     for key in order:
         ax.clear()
         ax.set_xlim(bbox[0], bbox[2])
@@ -93,18 +137,24 @@ def _load_basemap(ax, bbox, order, detail, min_var: float = 1.0,
         if not loaded:
             time.sleep(2)
             continue                               # give up on this provider, try the next
-        if ax.images:
-            arr = np.asarray(ax.images[0].get_array()).astype(float)
-            var = float(arr.var())
-            if var < min_var:
-                print(f"  base-map '{key}' returned blank tiles, trying next")
-                time.sleep(2)
-                continue
-        else:
+        if not ax.images:
             print(f"  base-map '{key}' added no image, trying next")
             time.sleep(2)
             continue
+        arr = np.asarray(ax.images[0].get_array()).astype(float)
+        var = _per_tile_var(arr, bbox)
+        if var > best_var:                         # remember the richest tiles we've seen
+            best_key, best_var = key, var
+        if var < min_var:
+            print(f"  base-map '{key}' returned blank/placeholder tiles "
+                  f"(per-tile var {var:.1f} < {min_var:.0f}), trying next")
+            time.sleep(2)
+            continue
         return key
+    if best_key is not None:                       # none cleared the floor: keep the best
+        print(f"  no base-map cleared the blank threshold; using best-effort "
+              f"'{best_key}' (per-tile var {best_var:.1f})")
+        return best_key
     raise RuntimeError("all base-map sources failed")
 
 
