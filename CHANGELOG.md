@@ -12,7 +12,7 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [1.0.5] — 2026-10-23
+## [1.0.5] — 2026-10-24
 
 Fixes `--style terrain` rendering an all-grey "Map data not yet available" map,
 and hardens the base-map blank-tile detection so a *retired* tile provider
