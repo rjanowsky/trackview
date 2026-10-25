@@ -192,7 +192,7 @@ def render(rides, out, title=None, top_n=10):
                    f"{total_h:,.0f} h   ({years[0]}-{years[-1]})"
 
     fig, axes = plt.subplots(5, 1, figsize=(13, 19),
-                             gridspec_kw={"height_ratios": [2, 3, 3, 3, 3]})
+                             gridspec_kw={"height_ratios": [1, 3, 3, 3, 3]})
     fig.suptitle(head, fontsize=15, fontweight="bold")
 
     # 1 -- the trophy shelf ---------------------------------------------------
@@ -265,21 +265,24 @@ def render(rides, out, title=None, top_n=10):
     # 5 -- top N rides by distance (a ranked leaderboard) --------------------
     ax = axes[4]
     top = sorted(rides, key=lambda x: x["dist"] or 0.0, reverse=True)[:top_n]
-    labels = [f"#{i + 1}  {r['date']}  ({_dur(r)})" for i, r in enumerate(top)]
-    # highest rank on top: reverse so barh's lowest index sits at the bottom
-    rows = list(reversed(list(enumerate(top))))
+    # barh's index 0 sits at the *bottom*, so put the highest rank (#1) at index
+    # 0 and read it top-down: reverse the sorted list, then reverse the labels
+    # back so the axis reads #1 at top ... #N at bottom.
+    rows = list(enumerate(reversed(top)))
+    labels = [f"#{i + 1}  {r['date']}  ({_dur(r)})"
+              for i, r in enumerate(top)]
     ys = [i for i, _ in rows]
     dists = [r["dist"] or 0.0 for _, r in rows]
     bars = ax.barh(ys, dists, color="#2b6cb0", edgecolor="#fff")
     ax.set_yticks(ys)
-    ax.set_yticklabels([lbl for lbl in reversed(labels)], fontsize=8)
+    ax.set_yticklabels(reversed(labels), fontsize=8)
     ax.set_xlabel("distance (km)")
     ax.set_title(f"5  Top {top_n} rides by distance")
     ax.grid(axis="x", alpha=0.3)
     for b, r in zip(bars, [r for _, r in rows]):
         ax.text(b.get_width(), b.get_y() + b.get_height() / 2,
                 f"{r['dist']:.1f}", va="center", ha="left", fontsize=7)
-    ax.set_xlim(0, (dists[-1] if dists else 1) * 1.12)
+    ax.set_xlim(0, (dists[0] if dists else 1) * 1.12)
 
     fig.tight_layout(rect=[0, 0, 1, 0.98])
     fig.savefig(out, dpi=150)
