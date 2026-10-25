@@ -229,10 +229,16 @@ def render(rides, out, title=None, top_n=10):
     ax.set_xlabel("distance (km)")
     ax.set_title(f"2  Top {top_n} rides by distance", fontweight="bold")
     ax.grid(axis="x", alpha=0.3)
+    # The value labels sit just past each bar's end (ha="left"), so the x-limit
+    # must clear the *longest* label -- a 3-digit ride (e.g. "103.6") overruns a
+    # ~1.12x limit and clips at the figure edge.  A modest padding in *data* units
+    # (5% of the top ride, >=10 km) leaves room for the label and keeps the bars
+    # comparable, without an auto axis that would clip on a tight span.
+    top_dist = dists[0] if dists else 1.0
+    ax.set_xlim(0, top_dist * 1.05 + 10.0)
     for b, r in zip(bars, [r for _, r in rows]):
         ax.text(b.get_width(), b.get_y() + b.get_height() / 2,
                 f"{r['dist']:.1f}", va="center", ha="left", fontsize=7)
-    ax.set_xlim(0, (dists[0] if dists else 1) * 1.12)
 
     # 3 -- cumulative distance ------------------------------------------------
     ax = axes[2]
