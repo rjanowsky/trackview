@@ -192,7 +192,7 @@ def render(rides, out, title=None, top_n=10):
                    f"{total_h:,.0f} h   ({years[0]}-{years[-1]})"
 
     fig, axes = plt.subplots(5, 1, figsize=(13, 19),
-                             gridspec_kw={"height_ratios": [1, 3, 3, 3, 3]})
+                             gridspec_kw={"height_ratios": [1, 3, 3, 3, 2]})
     fig.suptitle(head, fontsize=15, fontweight="bold")
 
     # 1 -- the trophy shelf ---------------------------------------------------
@@ -238,14 +238,24 @@ def render(rides, out, title=None, top_n=10):
     for x in rides:
         grid[x["mo"] - 1, x["d"] - 1] += x["dist"] or 0.0
     nz = grid[grid > 0]
-    # Robust cap: median * 3 keeps an occasional long day (the 103 km one) from
-    # crushing the scale -- a raw 98th percentile pegs at that single max.
-    vmax = float(np.median(nz) * 3) if nz.size else 1.0
+    # Cap the colour scale so the grid reads day-to-day intensity, not one
+    # outlier.  median * 3 (the original cap) can pin every active day at the
+    # darkest green -- a low cap washes the grid flat and shows no structure --
+    # so the cap keys off the *total* distance on a calendar day (this grid
+    # sums multi-ride days), and a high quantile of the riding days captures the
+    # strong days a rider remembers, while a floor keeps a quiet season from
+    # under-scaling the grid.
+    if nz.size:
+        vmax = max(float(np.quantile(nz, 0.9)), 15.0)
+    else:
+        vmax = 15.0
     ax.imshow(grid, aspect="auto", cmap=GREENS, origin="upper", vmin=0, vmax=vmax)
     ax.set_yticks(range(12)); ax.set_yticklabels(MONTHS)
     ax.set_xticks(range(0, 31, 2)); ax.set_xticklabels([str(d + 1) for d in range(0, 31, 2)])
     ax.set_xlabel("day of month"); ax.set_title("3  Ride calendar (colour = distance that day)")
-    sm = fig.colorbar(plt.cm.ScalarMappable(cmap=GREENS), ax=ax, fraction=0.02, pad=0.01)
+    sm = fig.colorbar(plt.cm.ScalarMappable(cmap=GREENS,
+                   norm=matplotlib.colors.Normalize(0, vmax)), ax=ax,
+                   fraction=0.02, pad=0.01)
     sm.set_label("km / day")
 
     # 4 -- monthly distance vs. gain by year ---------------------------------
