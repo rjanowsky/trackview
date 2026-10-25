@@ -153,7 +153,7 @@ trackview.py          the root launcher: a thin shim that re-enters trackview.cl
 pyproject.toml        build metadata, deps, the console entry points, ruff + pytest config
 requirements.txt      the same runtime deps as a plain `pip install -r` list
 tests/                the pytest suite (one module per feature; offline markers in pyproject.toml)
-tools/                ad-hoc helpers: Garmin .fit diagnostics + a GPX trimmer (see Helper tools below)
+tools/                ad-hoc helpers: Garmin .fit diagnostics + a GPX trimmer + a ride-log dashboard (see Helper tools below)
 samples/              sample rendered profiles (elevation/grade/power/speed strips), for the README
 CHANGELOG.md          notable changes per release, in Keep a Changelog format (supersedes the git-ignored TODO.lst)
 API.md                module-by-module reference -- the "module map"; per-flag usage lives in README.md
@@ -193,10 +193,12 @@ are created on first use.
   (`test_geometry`, `test_filters`, `test_stats`, `test_trend`, …) plus a
   `conftest.py`.  The `network` / `slow` markers (in `pyproject.toml`) let the
   fast, offline subset run in CI.
-- **`tools/`** three dependency-light helpers — two diagnostics for *inspecting*
-  a Garmin `.fit` ride (the file/session/record layout and a stats summary) and
+- **`tools/`** four dependency-light helpers — two diagnostics for *inspecting*
+  a Garmin `.fit` ride (the file/session/record layout and a stats summary),
   `gpx_trim.py`, a pure-stdlib editor that trims `<trkpt>` off a ride's start /
-  end.  *Not* the converter, that is `fit_to_gpx.py`.  See **Helper tools** below.
+  end, and `ride_dashboard.py`, a matplotlib-only "year-in-review" PNG over a
+  ride-log stats table.  *Not* the converter, that is `fit_to_gpx.py`.  See
+  **Helper tools** below.
 - **`gpx/`** (in the data dir) the input the tool renders: one `*.gpx` per ride,
   organised one subfolder per year (`2019`…`2026`); discovery recurses into them by
   default.
@@ -476,8 +478,9 @@ variance, e.g. rate-limiting) automatically falls back to the next one.
 
 ## Helper tools (`tools/`)
 
-Three ad-hoc, dependency-light helpers under `tools/` — two *diagnostics* for
-*inspecting* a Garmin `.fit` ride, and one small *editor* for trimming a GPX.
+Four ad-hoc, dependency-light helpers under `tools/` — two *diagnostics* for
+*inspecting* a Garmin `.fit` ride, one small *editor* for trimming a GPX, and one
+*report* that turns a ride log into a shareable "year-in-review" picture.
 None of them is the converter that feeds the tool — that is `fit_to_gpx.py`
 (Garmin `.fit` → GPX) / `goldencheetah_to_gpx.py` (GoldenCheetah JSON → GPX),
 which turn the data dir's `fit/` / `gc/` into `gpx/`.
@@ -487,6 +490,8 @@ python tools/garmin_fit_reader.py                  # most recent data dir/fit/*.
 python tools/garmin_fit_reader.py <a.fit> ..       # explicit ride(s)
 python tools/garmin_fit_reader_standalone.py       # no fitparse needed
 python tools/gpx_trim.py ride.gpx --start 10 --end 500   # trim trackpoints
+python tools/ride_dashboard.py                     # newest log -> a dashboard PNG
+python tools/ride_dashboard.py <log.txt> --top 5   # a named log, 5-row leaderboard
 ```
 
 `garmin_fit_reader.py` (needs `fitparse`, already in `requirements.txt`) prints
@@ -500,6 +505,26 @@ by default it writes a sibling `<name>_trimmed.gpx` (or use `-o`).  The `.fit`
 inputs and the dumped `_records.json` live in the data dir's `fit/` (personal
 data and regenerable output); `gpx_trim.py` operates on a ride's GPX in place
 (its `_trimmed` sibling is regenerable, like `output/`).
+
+`ride_dashboard.py` is a local, personal "year-in-review" picture: it reads a
+trackview *per-ride* stats table — the `trackview-<first>_<last>` ride log the
+tool writes to the `stats/` dir — and renders one shareable, five-panel PNG:
+(1) the *trophy shelf* (the single best ride by distance, gain, avg power, time
+on the bike, and the steepest climb ever logged), (2) a top-N *leaderboard* of
+rides by distance (`--top N`, default 10), (3) *cumulative distance* over time,
+(4) a GitHub-style *ride calendar* — a month × day-of-month grid coloured by
+distance ridden that day — and (5) *monthly distance vs. climbing gain, by year*.
+It is dependency-light the way the others are: only `matplotlib` (already a
+trackview dependency) plus the stdlib — the fixed-width 12-column ride log is
+parsed by a small reader, so no `pandas` — and it works *from the stats table the
+tool already wrote*, so it fetches no basemap.  With no argument it reports on
+the newest table in the `stats/` dir and writes its PNG to the `output/` dir
+(`~/.trackview/output/…` by default — the same place the tool drops its maps, and
+git-ignored, since a rendered dashboard is personal, regenerable output, not part
+of the repo); `--out` names the file anywhere, `--top N` sizes the leaderboard,
+and `--title` overrides the heading.  As a *report over your own ride log* (not
+the converter pipeline) it is the odd one out: it reads the tool's output, not a
+ride.
 
 ## Notes
 

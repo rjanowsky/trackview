@@ -12,6 +12,62 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
+## [1.0.6] — 2026-10-22
+
+Adds a fifth, dependency-light `tools/` helper — a "year-in-review" dashboard that
+turns a trackview ride log into a single, shareable picture — with no change to the
+tool's own flags or outputs.
+
+### Added
+
+- **`tools/ride_dashboard.py`** — a "year-in-review" dashboard, a local, personal
+  helper that reads a trackview *per-ride* stats table (the `trackview-<first>_<last>`
+  ride log the tool writes to the `stats/` dir, `~/.trackview/stats/` by default)
+  and renders one shareable, five-panel PNG — "one picture of my whole life riding".
+  The panels, top to bottom:
+  1. the **trophy shelf** — one card for the single best ride by *distance*, by
+     *climbing gain*, by *avg power*, by *time on the bike*, and the *steepest
+     climb* (max grade) ever logged (a metric with no data yet reads "no data");
+  2. a **top-N leaderboard** of rides by distance (`--top N`, default 10 — the
+     "best rides" list, rank #1 at the top, each bar labelled with its date and
+     duration);
+  3. **cumulative distance over time** — a rising curve with a dashed total line and
+     a plain one-year-per-tick x-axis (unambiguous through a century rollover);
+  4. a **ride calendar** — a GitHub-style contribution grid (rows = calendar month,
+     columns = day-of-month, cell colour = distance ridden *that day*, the year at a
+     glance), its colour scale capped off a high day-quantile so it reads intensity,
+     not one outlier;
+  5. **monthly distance vs. climbing gain, by year** — the seasonality / progress
+     view (solid = km, dashed = 1000 m of gain, one pair of lines per year).
+  It is *dependency-light* the way the other helpers are: only `matplotlib` (already
+  a trackview dependency) plus the stdlib — the fixed-width, 12-column ride log is
+  parsed by a small reader, so no `pandas` is pulled in — and it works *from the
+  stats table the tool already wrote*, so it fetches no basemap.  Missing metrics
+  (power / HR / temperature / grade, only logged from ~2024 on) read as "missing",
+  not zero, so the power / climb panels skip pre-power-meter rows.  With no argument
+  it reports on the newest per-ride table in the `stats/` dir (skipping the
+  `_summary` / `_climbs` variants) and writes its PNG to the `output/` dir
+  (`~/.trackview/output/<log-stem>_dashboard.png` by default — the same place the
+  tool drops its maps, and git-ignored, since a rendered dashboard is personal,
+  regenerable output, not part of the repo); `--out` names the file anywhere, `--top
+  N` sizes the leaderboard, and `--title` overrides the heading.  As a *report over
+  your own ride log* (not the converter pipeline) it is the odd one out: it reads the
+  tool's output, not a ride.
+
+### Fixed
+
+- **`ride_dashboard.py`, panel 2 x-axis "ends at 100 km".**  The top-N leaderboard
+  capped its x-axis at the *shortest* of the reversed top-N rides (`dists[0]`), so
+  a top ride above 100 km (e.g. 103.6 km) overran a ~1.12× limit and clipped at the
+  figure edge, the axis reading as if it "ended at 100".  The limit now keys off the
+  *longest* ride (`top[0]`, the first of the sorted-descending `top` list) and rounds
+  up to the next 10 km past it, so the axis clears the longest value label while the
+  bars stay comparable.
+- **`ride_dashboard.py`, `--top` help "panel 5".**  The `--top` flag's help still
+  pointed at "panel 5" after the leaderboard moved to panel 2; it now reads "panel 2".
+
+---
+
 ## [1.0.5] — 2026-10-24
 
 Fixes `--style terrain` rendering an all-grey "Map data not yet available" map,

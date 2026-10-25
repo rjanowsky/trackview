@@ -44,7 +44,7 @@ from pathlib import Path
 # `pyproject.toml` reads it dynamically rather than hard-coding a second copy, so
 # the build-stamped version and `trackview --version` always agree.  A PEP 440
 # release tag (a numeric X.Y.Z), bumped by hand when a release is cut.
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 # The per-user data root: $TRACKVIEW_HOME when set (a relocation escape hatch --
 # an existing install, or a test pointing at a tmp dir), else ~/.trackview
