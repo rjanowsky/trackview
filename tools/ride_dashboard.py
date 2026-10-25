@@ -6,7 +6,7 @@ Reads a trackview *per-ride* stats table -- the "trackview - N rides" report the
 tool writes to $TRACKVIEW_HOME/stats/ (~/.trackview/stats/) -- and renders a
 single, shareable PNG "one picture of my whole life riding":
 
-    1  Cumulative distance over time            (rising staircase + total)
+    1  Cumulative distance over time            (rising curve + total)
     2  Ride calendar -- a contribution grid,
        rows = calendar month, columns = day-of-month, cells = distance ridden
        that day (the GitHub heatmap habit, a year at a glance)
@@ -204,7 +204,16 @@ def render(rides, out, title=None, top_n=10):
     ax.axhline(total_km, ls="--", lw=1, color="#999", label=f"total {total_km:,.0f} km")
     ax.set_title("1  Cumulative distance"); ax.set_ylabel("km (cumulative)")
     ax.legend(loc="upper left"); ax.grid(alpha=0.3)
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
+    # A plain, fixed one-year-per-tick axis (2014 ... 2026).  The alternative,
+    # ConciseDateFormatter, collapses labels on a century rollover (2000->00,
+    # 2010->10, 2020->20) so a tight span reads as a scrambled '14 26 08 23 04 16'
+    # -- cryptic, and its decade ticks land unevenly.  Explicit year labels are
+    # unambiguous; skip the tick every few years if the span ever runs long.
+    yrs = list(range(years[0], years[-1] + 1))
+    step = 1 if len(yrs) <= 12 else max(1, len(yrs) // 12)
+    ticks = [mdates.date2num(_dt.date(y, 1, 1)) for y in yrs[::step]]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([str(yrs[i]) for i in range(0, len(yrs), step)])
 
     # 2 -- ride calendar (contribution grid) ---------------------------------
     ax = axes[1]
