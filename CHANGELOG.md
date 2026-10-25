@@ -12,7 +12,7 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [1.0.6] — 2026-10-22
+## [1.0.6] — 2026-10-25
 
 Adds a fifth, dependency-light `tools/` helper — a "year-in-review" dashboard that
 turns a trackview ride log into a single, shareable picture — with no change to the
