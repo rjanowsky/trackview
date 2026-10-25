@@ -6,13 +6,13 @@ Reads a trackview *per-ride* stats table -- the "trackview - N rides" report the
 tool writes to $TRACKVIEW_HOME/stats/ (~/.trackview/stats/) -- and renders a
 single, shareable PNG "one picture of my whole life riding":
 
-    1  Cumulative distance over time            (rising curve + total)
-    2  Ride calendar -- a contribution grid,
+    1  The trophy shelf -- the top ride by distance / gain / avg power /
+       time on the bike, and the biggest climb (max grade) ever logged
+    2  Cumulative distance over time            (rising curve + total)
+    3  Ride calendar -- a contribution grid,
        rows = calendar month, columns = day-of-month, cells = distance ridden
        that day (the GitHub heatmap habit, a year at a glance)
-    3  Monthly distance vs. climbing gain, by year (seasonality / progress)
-    4  The trophy shelf -- the top ride by distance / gain / avg power /
-       time on the bike, and the biggest climb (max grade) ever logged
+    4  Monthly distance vs. climbing gain, by year (seasonality / progress)
     5  The top N rides by distance -- a ranked horizontal-bar list
        (N via --top, default 10; the "best rides" leaderboard)
 
@@ -177,7 +177,7 @@ def top_rides(rides):
 def render(rides, out, title=None, top_n=10):
     """Draw the five-panel dashboard to `out` (a PNG path); returns `out`.
 
-    `top_n` sizes the panel-5 "top rides by distance" leaderboard.
+    `top_n` sizes the "top rides by distance" leaderboard (the bottom panel).
     """
     cumulative(rides)
     agg = monthly(rides)
@@ -192,61 +192,11 @@ def render(rides, out, title=None, top_n=10):
                    f"{total_h:,.0f} h   ({years[0]}-{years[-1]})"
 
     fig, axes = plt.subplots(5, 1, figsize=(13, 19),
-                             gridspec_kw={"height_ratios": [3, 3, 3, 2, 3]})
+                             gridspec_kw={"height_ratios": [2, 3, 3, 3, 3]})
     fig.suptitle(head, fontsize=15, fontweight="bold")
 
-    # 1 -- cumulative distance ------------------------------------------------
+    # 1 -- the trophy shelf ---------------------------------------------------
     ax = axes[0]
-    pts = sorted(rides, key=lambda x: x["date"])
-    import datetime as _dt
-    xs = [mdates.date2num(_dt.date.fromisoformat(r["date"])) for r in pts]
-    ax.plot(xs, [x["cum"] for x in pts], lw=1.4, color="#2b6cb0")
-    ax.axhline(total_km, ls="--", lw=1, color="#999", label=f"total {total_km:,.0f} km")
-    ax.set_title("1  Cumulative distance"); ax.set_ylabel("km (cumulative)")
-    ax.legend(loc="upper left"); ax.grid(alpha=0.3)
-    # A plain, fixed one-year-per-tick axis (2014 ... 2026).  The alternative,
-    # ConciseDateFormatter, collapses labels on a century rollover (2000->00,
-    # 2010->10, 2020->20) so a tight span reads as a scrambled '14 26 08 23 04 16'
-    # -- cryptic, and its decade ticks land unevenly.  Explicit year labels are
-    # unambiguous; skip the tick every few years if the span ever runs long.
-    yrs = list(range(years[0], years[-1] + 1))
-    step = 1 if len(yrs) <= 12 else max(1, len(yrs) // 12)
-    ticks = [mdates.date2num(_dt.date(y, 1, 1)) for y in yrs[::step]]
-    ax.set_xticks(ticks)
-    ax.set_xticklabels([str(yrs[i]) for i in range(0, len(yrs), step)])
-
-    # 2 -- ride calendar (contribution grid) ---------------------------------
-    ax = axes[1]
-    grid = np.zeros((12, 32))                       # [month][day-1] = distance that day
-    for x in rides:
-        grid[x["mo"] - 1, x["d"] - 1] += x["dist"] or 0.0
-    nz = grid[grid > 0]
-    # Robust cap: median * 3 keeps an occasional long day (the 103 km one) from
-    # crushing the scale -- a raw 98th percentile pegs at that single max.
-    vmax = float(np.median(nz) * 3) if nz.size else 1.0
-    ax.imshow(grid, aspect="auto", cmap=GREENS, origin="upper", vmin=0, vmax=vmax)
-    ax.set_yticks(range(12)); ax.set_yticklabels(MONTHS)
-    ax.set_xticks(range(0, 31, 2)); ax.set_xticklabels([str(d + 1) for d in range(0, 31, 2)])
-    ax.set_xlabel("day of month"); ax.set_title("2  Ride calendar (colour = distance that day)")
-    sm = fig.colorbar(plt.cm.ScalarMappable(cmap=GREENS), ax=ax, fraction=0.02, pad=0.01)
-    sm.set_label("km / day")
-
-    # 3 -- monthly distance vs. gain by year ---------------------------------
-    ax = axes[2]
-    mo_order = list(range(1, 13))
-    for y in years:
-        ds = [agg[(y, m)]["dist"] for m in mo_order]
-        gs = [agg[(y, m)]["gain"] / 1000.0 for m in mo_order]   # gain in 1000 m
-        ax.plot(mo_order, ds, "-o", ms=3, label=f"{y} dist (km)")
-        ax.plot(mo_order, gs, "--", ms=0, alpha=0.6, label=f"{y} gain (1000 m)")
-    ax.set_xticks(mo_order); ax.set_xticklabels(MONTHS)
-    ax.set_title("3  Monthly distance (solid) & climbing gain (dashed), by year")
-    ax.set_ylabel("km / 1000 m")
-    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.12))
-    ax.grid(alpha=0.3)
-
-    # 4 -- the trophy shelf ---------------------------------------------------
-    ax = axes[3]
     ax.axis("off")
     cards = [
         ("Longest ride",        _fmt(tops["dist"], "dist")),
@@ -260,7 +210,57 @@ def render(rides, out, title=None, top_n=10):
         x = i / ncol + 0.5 / ncol
         ax.text(x, 0.62, label, ha="center", va="center", fontsize=9, color="#666")
         ax.text(x, 0.30, body, ha="center", va="center", fontsize=11, fontweight="bold")
-    ax.set_title("4  Best rides on record")
+    ax.set_title("1  Best rides on record")
+
+    # 2 -- cumulative distance ------------------------------------------------
+    ax = axes[1]
+    pts = sorted(rides, key=lambda x: x["date"])
+    import datetime as _dt
+    xs = [mdates.date2num(_dt.date.fromisoformat(r["date"])) for r in pts]
+    ax.plot(xs, [x["cum"] for x in pts], lw=1.4, color="#2b6cb0")
+    ax.axhline(total_km, ls="--", lw=1, color="#999", label=f"total {total_km:,.0f} km")
+    ax.set_title("2  Cumulative distance"); ax.set_ylabel("km (cumulative)")
+    ax.legend(loc="upper left"); ax.grid(alpha=0.3)
+    # A plain, fixed one-year-per-tick axis (2014 ... 2026).  The alternative,
+    # ConciseDateFormatter, collapses labels on a century rollover (2000->00,
+    # 2010->10, 2020->20) so a tight span reads as a scrambled '14 26 08 23 04 16'
+    # -- cryptic, and its decade ticks land unevenly.  Explicit year labels are
+    # unambiguous; skip the tick every few years if the span ever runs long.
+    yrs = list(range(years[0], years[-1] + 1))
+    step = 1 if len(yrs) <= 12 else max(1, len(yrs) // 12)
+    ticks = [mdates.date2num(_dt.date(y, 1, 1)) for y in yrs[::step]]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([str(yrs[i]) for i in range(0, len(yrs), step)])
+
+    # 3 -- ride calendar (contribution grid) ---------------------------------
+    ax = axes[2]
+    grid = np.zeros((12, 32))                       # [month][day-1] = distance that day
+    for x in rides:
+        grid[x["mo"] - 1, x["d"] - 1] += x["dist"] or 0.0
+    nz = grid[grid > 0]
+    # Robust cap: median * 3 keeps an occasional long day (the 103 km one) from
+    # crushing the scale -- a raw 98th percentile pegs at that single max.
+    vmax = float(np.median(nz) * 3) if nz.size else 1.0
+    ax.imshow(grid, aspect="auto", cmap=GREENS, origin="upper", vmin=0, vmax=vmax)
+    ax.set_yticks(range(12)); ax.set_yticklabels(MONTHS)
+    ax.set_xticks(range(0, 31, 2)); ax.set_xticklabels([str(d + 1) for d in range(0, 31, 2)])
+    ax.set_xlabel("day of month"); ax.set_title("3  Ride calendar (colour = distance that day)")
+    sm = fig.colorbar(plt.cm.ScalarMappable(cmap=GREENS), ax=ax, fraction=0.02, pad=0.01)
+    sm.set_label("km / day")
+
+    # 4 -- monthly distance vs. gain by year ---------------------------------
+    ax = axes[3]
+    mo_order = list(range(1, 13))
+    for y in years:
+        ds = [agg[(y, m)]["dist"] for m in mo_order]
+        gs = [agg[(y, m)]["gain"] / 1000.0 for m in mo_order]   # gain in 1000 m
+        ax.plot(mo_order, ds, "-o", ms=3, label=f"{y} dist (km)")
+        ax.plot(mo_order, gs, "--", ms=0, alpha=0.6, label=f"{y} gain (1000 m)")
+    ax.set_xticks(mo_order); ax.set_xticklabels(MONTHS)
+    ax.set_title("4  Monthly distance (solid) & climbing gain (dashed), by year")
+    ax.set_ylabel("km / 1000 m")
+    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.12))
+    ax.grid(alpha=0.3)
 
     # 5 -- top N rides by distance (a ranked leaderboard) --------------------
     ax = axes[4]
