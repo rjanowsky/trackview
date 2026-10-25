@@ -210,7 +210,7 @@ def render(rides, out, title=None, top_n=10):
         x = i / ncol + 0.5 / ncol
         ax.text(x, 0.62, label, ha="center", va="center", fontsize=9, color="#666")
         ax.text(x, 0.30, body, ha="center", va="center", fontsize=11, fontweight="bold")
-    ax.set_title("1  Best rides on record")
+    ax.set_title("1  Best rides on record", fontweight="bold")
 
     # 2 -- top N rides by distance (a ranked leaderboard) --------------------
     ax = axes[1]
@@ -227,7 +227,7 @@ def render(rides, out, title=None, top_n=10):
     ax.set_yticks(ys)
     ax.set_yticklabels(reversed(labels), fontsize=8)
     ax.set_xlabel("distance (km)")
-    ax.set_title(f"2  Top {top_n} rides by distance")
+    ax.set_title(f"2  Top {top_n} rides by distance", fontweight="bold")
     ax.grid(axis="x", alpha=0.3)
     for b, r in zip(bars, [r for _, r in rows]):
         ax.text(b.get_width(), b.get_y() + b.get_height() / 2,
@@ -241,7 +241,7 @@ def render(rides, out, title=None, top_n=10):
     xs = [mdates.date2num(_dt.date.fromisoformat(r["date"])) for r in pts]
     ax.plot(xs, [x["cum"] for x in pts], lw=1.4, color="#2b6cb0")
     ax.axhline(total_km, ls="--", lw=1, color="#999", label=f"total {total_km:,.0f} km")
-    ax.set_title("3  Cumulative distance"); ax.set_ylabel("km (cumulative)")
+    ax.set_title("3  Cumulative distance", fontweight="bold"); ax.set_ylabel("km (cumulative)")
     ax.legend(loc="upper left"); ax.grid(alpha=0.3)
     # A plain, fixed one-year-per-tick axis (2014 ... 2026).  The alternative,
     # ConciseDateFormatter, collapses labels on a century rollover (2000->00,
@@ -274,7 +274,7 @@ def render(rides, out, title=None, top_n=10):
     ax.imshow(grid, aspect="auto", cmap=GREENS, origin="upper", vmin=0, vmax=vmax)
     ax.set_yticks(range(12)); ax.set_yticklabels(MONTHS)
     ax.set_xticks(range(0, 31, 2)); ax.set_xticklabels([str(d + 1) for d in range(0, 31, 2)])
-    ax.set_xlabel("day of month"); ax.set_title("4  Ride calendar (colour = distance that day)")
+    ax.set_xlabel("day of month"); ax.set_title("4  Ride calendar (colour = distance that day)", fontweight="bold")
     sm = fig.colorbar(plt.cm.ScalarMappable(cmap=GREENS,
                    norm=matplotlib.colors.Normalize(0, vmax)), ax=ax,
                    fraction=0.02, pad=0.01)
@@ -289,7 +289,7 @@ def render(rides, out, title=None, top_n=10):
         ax.plot(mo_order, ds, "-o", ms=3, label=f"{y} dist (km)")
         ax.plot(mo_order, gs, "--", ms=0, alpha=0.6, label=f"{y} gain (1000 m)")
     ax.set_xticks(mo_order); ax.set_xticklabels(MONTHS)
-    ax.set_title("5  Monthly distance (solid) & climbing gain (dashed), by year")
+    ax.set_title("5  Monthly distance (solid) & climbing gain (dashed), by year", fontweight="bold")
     ax.set_ylabel("km / 1000 m")
     ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.12))
     ax.grid(alpha=0.3)
