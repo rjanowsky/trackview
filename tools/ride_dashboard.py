@@ -364,7 +364,7 @@ def main(argv=None):
     ap.add_argument("--title", help="override the dashboard heading")
     ap.add_argument("--top", type=int, default=10, metavar="N",
                     help="how many rides the 'top by distance' list shows "
-                         "(panel 5; default 10)")
+                         "(panel 2; default 10)")
     args = ap.parse_args(argv)
 
     log = Path(args.log) if args.log else _latest_log()
