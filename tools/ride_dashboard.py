@@ -40,6 +40,7 @@ Usage:
 """
 
 import argparse
+import math
 import re
 import sys
 from collections import defaultdict
@@ -231,11 +232,17 @@ def render(rides, out, title=None, top_n=10):
     ax.grid(axis="x", alpha=0.3)
     # The value labels sit just past each bar's end (ha="left"), so the x-limit
     # must clear the *longest* label -- a 3-digit ride (e.g. "103.6") overruns a
-    # ~1.12x limit and clips at the figure edge.  A modest padding in *data* units
-    # (5% of the top ride, >=10 km) leaves room for the label and keeps the bars
-    # comparable, without an auto axis that would clip on a tight span.
-    top_dist = dists[0] if dists else 1.0
-    ax.set_xlim(0, top_dist * 1.05 + 10.0)
+    # ~1.12x limit and clips at the figure edge.  Round the limit up to the next
+    # 10 km *past* the top ride (>= +10 km of room) so the last gridline sits
+    # beyond the longest label -- the axis no longer *reads* as "ends at 100" when
+    # a ride tops 100 km -- while the bars stay comparable and the span stays
+    # tight.  (A plain auto axis would instead clip a tight top-N span.)
+    # `top` is sorted *descending*, so its first element is the longest ride; use
+    # that -- not dists[0], which is the *shortest* here because `dists` tracks the
+    # reversed (bottom-to-top) bar order, so dists[0] is the smallest ride.
+    top_dist = (top[0]["dist"] or 0.0) if top else 1.0
+    ax.set_xlim(0, math.ceil((top_dist + 10.0) / 10.0) * 10.0)
+    ax.set_xticks(range(0, int(top_dist) + 20, 20))
     for b, r in zip(bars, [r for _, r in rows]):
         ax.text(b.get_width(), b.get_y() + b.get_height() / 2,
                 f"{r['dist']:.1f}", va="center", ha="left", fontsize=7)
