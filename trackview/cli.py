@@ -29,6 +29,7 @@ from trackview.climbs import (write_climbs)
 from trackview.summary import (write_summary)
 from trackview.activitygrid import (write_calendar, _CALENDAR_METRICS)
 from trackview.trend import (write_trend)
+from trackview.dashboard import (write_dashboard)
 from trackview.io import (SOURCES, write_html,
                           DETAIL_MIN, DETAIL_MAX, write_gallery)
 from trackview.mapfig import (render, PROF_METRICS)
@@ -231,10 +232,69 @@ def main() -> None:
                     help="reference Leaflet from a CDN instead of inlining it into the "
                             "--html file: a smaller .html that needs internet to view "
                             "(default: inline it for a genuinely offline single file)")
+    # --dashboard is `nargs="?"`: a bare flag must stay distinct from "not passed at
+    # all", so a bare `--dashboard` resolves to BARE (a sentinel) rather than None
+    # (the default when the flag is absent).  Three states: BARE = "bare flag, use the
+    # newest CSV"; a path string = "report on this named LOG"; None = "no dashboard".
+    # BARE is a unique, non-path sentinel, and every test compares it by *equality*
+    # (`!= BARE`, `== BARE`), never identity (`is`): CPython interns short string
+    # literals non-deterministically, so `args.dashboard is BARE` on a short const can
+    # flip between runs -- the guard would then fire only ~half the time.  "was the
+    # flag passed at all" is `args.dashboard is not None` (BARE and a path are both
+    # non-None; only the absent flag is None); "a named LOG was given" is
+    # `args.dashboard != BARE`.
+    BARE = "__bare_dashboard__"
+    ap.add_argument("--dashboard", nargs="?", const=BARE, default=None, metavar="LOG",
+                    help="also write a 'year-in-review' dashboard -- a single shareable PNG "
+                          "of the whole ride log (trophy shelf, top-N leaderboard, cumulative "
+                          "distance, a ride calendar, and monthly distance-vs-gain by year) -- "
+                          "reported over the persisted per-ride CSV in stats/ (a named "
+                          "stats/trackview-<range>.csv when LOG is given, else the newest "
+                          "one; a run with none yet writes the current log's CSV first, "
+                          "ext-forced so it carries power/grade), and written to "
+                          "output/trackview-<range>_dashboard.<format> unless --out names "
+                          "the file; a report over the ride log, so it fetches no basemap "
+                          "and writes even with --no-map, decoupled from this run's "
+                          "--since/--until/--device/--sport/--top selection")
+    ap.add_argument("--dashboard-top", type=int, default=5, metavar="N",
+                    help="size the --dashboard leaderboard (panel 2) to the top N rides by "
+                          "distance (default 5)")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
         raise SystemExit("error: --csv-delimiter must be a non-empty character")
+
+      # --dashboard is a report over the *persisted* per-ride CSV in stats/, so when one
+      # already exists -- a named --dashboard LOG, or the bare default with any plain
+      # trackview-*.csv present -- the whole gpx load / map / stats path is unnecessary:
+      # skip it (the minutes-long load_tracks over every ride is the cost, and the
+      # dashboard reads the CSV, not the tracks) and render straight from the CSV.  A
+      # bare --dashboard with NO csv yet falls through to the normal load, which then
+      # auto-generates the csv (ext-forced, so it carries power/grade) and reports on it
+      # further down.  --out names the output anywhere; with none, write_dashboard names
+      # it after the source CSV's own stem (<log-stem>_dashboard.<format>).
+      # `want_dashboard` (is not None -- a reliable singleton, so `is` is safe here)
+      # fires for a bare flag too (its const is BARE, a non-None sentinel -- see its
+      # definition); `named` (!= BARE) is the explicit LOG path, else the bare flag
+      # reports the newest CSV (write_dashboard resolves None via _latest_log).  BARE
+      # itself is compared by equality, not `is`: CPython interns short string
+      # literals non-deterministically, so `is` on a short const can flip between runs.
+    want_dashboard = args.dashboard is not None
+    named = args.dashboard != BARE
+    if want_dashboard and (named or any(
+            p for p in STATS_DIR.glob("trackview-*.csv")
+            if not p.name.endswith(("_summary.csv", "_climbs.csv")))):
+        write_dashboard(None if not named else args.dashboard,
+                       Path(args.out) if args.out is not None else None,
+                       top_n=args.dashboard_top, fmt=args.format,
+                       # Pass our own (patchable) data-dir constants through, rather
+                       # than letting write_dashboard fall back to its frozen default
+                       # args (bound to the *import-time* config values): the bare-flag
+                       # branch resolves the newest CSV via _latest_log and names its PNG
+                       # from out_dir, and both must honour the STATS_DIR / OUTPUT_DIR we
+                       # just globbed above (a TRACKVIEW_HOME user, or a redirected test).
+                       stats=STATS_DIR, out_dir=OUTPUT_DIR)
+        return
 
       # --today is the shorthand for '--flat --since <today>' -- a one-flag "what did I
       # ride today?" glance.  It folds into the two existing knobs -- flat discovery
@@ -291,11 +351,14 @@ def main() -> None:
         # features that need it: --color-by speed/power shade by it, --profile's
         # ride card plots it, --heat's density wants point timestamps, and --trend's
         # calories panel needs a power average.  The map-only ones (speed/power,
-        # profile, heat) collect only when a map is drawn; --trend is standalone (a
-        # --no-map run still charts it), so it always collects.     --ext additionally
+        # profile, heat) collect only when a map is drawn; --trend and --dashboard
+        # are standalone (a --no-map run still charts them), so they always collect --
+        # --dashboard reads the ride log's power/grade columns (its trophy shelf), so
+        # a --dashboard run writes them even with no map.     --ext additionally
         # gates the avg-telemetry title line and the ride-log columns.
-    want_ext = args.ext or args.trend or (not args.no_map
-                  and (color_by in ("speed", "power") or args.heat or args.profile))
+    want_ext = (args.ext or args.trend or args.dashboard is not None
+                or (not args.no_map
+                    and (color_by in ("speed", "power") or args.heat or args.profile)))
     tracks = load_tracks(paths, DECIMATE_M, with_ext=want_ext, noise_m=args.gain_noise)
     if not tracks:
         print(f"No *.gpx found in {gpx_dir}"
@@ -345,8 +408,12 @@ def main() -> None:
             print(f"     - {t['name']:<20s} {t['dist_km']:6.1f} km     "
                   f"+{t['gain_m']:6.0f} m     {t['n']:>6,} -> {t['ndec']:>5,} pts")
 
-    if args.no_map:
-        print("      --no-map: skipping map generation (stats + ride-log only)")
+    if args.no_map or args.dashboard is not None:
+        if args.dashboard is not None and not args.no_map:
+            print("      --dashboard: pure-geometry report over the ride-log CSV "
+                  "-- skipping the basemap (no map fetched or drawn)")
+        else:
+            print("      --no-map: skipping map generation (stats + ride-log only)")
     else:
         out_dir = Path(args.out).parent if args.out is not None else OUTPUT_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -472,3 +539,32 @@ def main() -> None:
     if args.html:
         html_path = OUTPUT_DIR / f"trackview-{label}_map.html"
         write_html(tracks, html_path, style=args.style, inline=not args.html_cdn)
+
+        # --dashboard: a 'year-in-review' figure -> ./output/trackview-<first>_<last
+        # ride date>_dashboard.<format> unless --out names the file.  Unlike the other
+        # standalone outputs it reports over the *persisted per-ride CSV* in stats/
+        # (the one just written with --csv, or a named one via --dashboard LOG), not
+        # this run's `tracks` -- so it is a report over the whole ride log, decoupled
+        # from this run's --since/--until/--device/--sport/--top selection, and
+        # --dashboard-top (default 5) sizes its leaderboard.  The CSV -- not the .txt --
+        # is the source: it is stable (a header + one row per ride, fixed 12 columns),
+        # whereas the .txt ride-log's column *count* varies by device type, so a
+        # fixed-position .txt reader would misread it.  A --dashboard run auto-collects
+        # --ext (see want_ext) so the CSV it generates carries power/grade, and it
+        # skips the basemap -- a pure-geometry report, so it writes even under
+        # --no-map / --sparse.
+    if args.dashboard is not None:
+        # Reaching this tail means the short-circuit above did NOT fire, i.e. the flag
+        # is bare (named short-circuits on its own) AND no plain CSV is on disk yet: a
+        # first-ever `--dashboard`.  So args.dashboard is always BARE here -- report the
+        # newest CSV once it exists.  With none yet, write this run's log first
+        # (ext-forced, so it carries power/grade), then report it -- so a first
+        # `trackview --dashboard` just works, generating the CSV it then reports on.
+        if not any(STATS_DIR.glob("trackview-*.csv")):
+            csv_path = STATS_DIR / f"trackview-{label}.csv"
+            write_csv(tracks, csv_path, show_ext=True, delimiter=args.csv_delimiter)
+            print(f"      --dashboard: wrote ride-log CSV -> '{csv_path.name}' "
+                  f"(no stats/trackview-*.csv present yet)")
+        dash_path = (Path(args.out) if args.out is not None
+                     else OUTPUT_DIR / f"trackview-{label}_dashboard.{args.format}")
+        write_dashboard(None, dash_path, top_n=args.dashboard_top, fmt=args.format)

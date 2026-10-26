@@ -12,6 +12,90 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
+## [1.1.0] — 2026-10-26
+
+Promotes the `1.0.6` `tools/ride_dashboard.py` "year-in-review" helper into a first-class,
+flag-driven `--dashboard` of `trackview` itself (a MINOR bump: a new, backward-compatible
+feature — the tool's own flags and outputs are unchanged except for the two new
+dashboard flags), and retires the standalone helper to a thin pointer.  The dashboard
+reports over the *per-ride CSV* the tool writes to `stats/` (the `--csv` ride log),
+*not* the fixed-width `.txt` table: the CSV is *stable* (a header + one row per ride,
+the same columns in the same order), so the reader keys by *column header* and never
+drifts, whereas the `.txt` table's column *count* varies with `--ext` (and, in older
+logs, by device type) and a fixed-position reader would misread it.  A dedicated
+`--dashboard-top` flag (default 5, *not* the tool's `--top` 10) sizes the leaderboard,
+and a `--dashboard`-only run auto-collects `--ext` (so the CSV it generates carries
+power / grade) and skips the basemap (a pure-geometry report).
+
+### Added
+
+- **`--dashboard [LOG]`** — the "year-in-review" dashboard, promoted from the
+  `tools/ride_dashboard.py` helper into an in-package, flag-driven output (`trackview`
+  `dashboard.py` beside `trend` / `activitygrid`).  It reports over a trackview
+  *per-ride CSV* — the `trackview-<first>_<last>.csv` ride log the tool writes to the
+  `stats/` dir (`~/.trackview/stats/` by default, via `--csv`) — and renders the same
+  five-panel PNG the helper did (trophy shelf, top-N leaderboard, cumulative distance,
+  ride calendar, monthly distance-vs-gain by year).  The CSV is the source, *not* the
+  fixed-width `.txt` table: the CSV is *stable* (a header + one row per ride, the same
+  columns in the same order), so the reader maps by *column header* (never fixed
+  position) and is robust to columns being added or reordered, while the `.txt` table's
+  column *count* varies with `--ext` and, in older logs, by device type.  The ride's
+  calendar date is derived from the `Ride` column's `YYYY-MM-DD` prefix; a ride whose
+  name carries no date is still counted but is skipped by the time-axis panels.  It is a
+  *report over the persisted ride log*, so it is decoupled from this run's
+  `--since/--until/--device/--sport/--top` selection (those filter `tracks`, not the
+  CSV); a positional `LOG` names a specific CSV and with none it reports on the newest
+  plain CSV in the stats dir (skipping the `_summary` / `_climbs` variants, newest by
+  mtime).  When no CSV is present yet, a bare `--dashboard` writes the current run's
+  log's CSV *first* (ext-forced, so it carries power / grade) and then reports on it —
+  so a first `trackview --dashboard` just works.  A `--dashboard`-only run
+  auto-collects `--ext` (the trophy shelf reads the CSV's power / grade columns) and
+  skips the basemap, so it is a pure-geometry report that writes even under
+  `--no-map` / `--sparse`.  It honours the CLI's `--out` / `--format` (a positional
+  `LOG` names the source CSV, *not* the output — the output is `--out`, else
+  `output/trackview-<range>_dashboard.<format>`), and is dependency-light — only
+  `matplotlib` + `numpy` (already trackview deps) plus the stdlib `csv` module, no
+  `pandas`.
+- **`--dashboard-top N`** — a dedicated flag (default **5**) that sizes the "top rides by
+  distance" leaderboard (panel 2); it is *not* the tool's `--top` (whose default is `10`),
+  so the two can be used together on one run without one clobbering the other.
+
+### Changed
+
+- **`tools/ride_dashboard.py` is now a pointer.**  The helper's rendering body is promoted
+  into `trackview.dashboard`; the file keeps only a short module docstring pointing at
+  `trackview --dashboard` (with `--dashboard-top` / `--out` examples) and a `main()` that
+  prints a redirect to stderr and returns 0, so an old `python tools/ride_dashboard.py`
+  still runs cleanly and points the user at the new flag.
+
+### Fixed
+
+- **The dashboard reads the CSV, not the fixed-width `.txt` table.**  The `1.0.6`
+  helper parsed the `.txt` ride-log by fixed column position, which is fragile — the
+  `.txt` table's column *count* varies with `--ext` and, in older logs, by device type,
+  so a fixed-position reader misaligns (an inner `1h 00m` duration, a multi-word device
+  name, both split a naive field reader).  `1.1.0` reports over the `--csv` ride log
+  instead (a header + one row per ride, the same columns in the same order) and maps by
+  *column header*, so it is immune to column-count drift.
+- **The "best rides" shelf now carries power and grade.**  A `--dashboard`-only run
+  auto-collects `--ext`, so the CSV it generates includes the `Avg power (W)` and
+  `Max grade (%)` columns the trophy shelf reads — the old `.txt` ride-log, written with
+  no `--ext`, was a 5-column table with no power / grade, so the panel read "no data".
+- **The CSV reader is robust to a hand-edited or compact file.**  It sniffs the field
+  delimiter (`;`, trackview's default, or `,` for a hand-edited file), reads any
+  non-numeric cell (blank, a stray token, `-`) as "missing" not a crash, and caps the
+  "steepest climb" trophy at a plausible grade so a noisy single-point spike can't win.
+- **A round-trip test guards power / grade.**  `tests/test_dashboard.py` writes a real
+  track dict through `stats.write_csv(show_ext=True)` and reads it back with
+  `parse_rides`, asserting the `Avg power` / `Max grade` columns survive the round-trip —
+  the regression guard for the panel-1 fix above.
+- **Carried from 1.0.6** — the panel-2 x-axis keyed off the *longest* ride (not the
+  shortest reversed one, which clipped a >100 km ride at the figure edge) and the
+  leaderboard flag's "panel 5" help carryover are now the promoted `--dashboard` /
+  `--dashboard-top` behaviour, not the retired helper's.
+
+---
+
 ## [1.0.6] — 2026-10-25
 
 Adds a fifth, dependency-light `tools/` helper — a "year-in-review" dashboard that
