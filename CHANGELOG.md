@@ -40,6 +40,41 @@ unchanged).
 
 ---
 
+## [Unreleased] — 2026-10-22
+
+Cosmetic polish to the `--dashboard` picture and its docs, with no change to any
+flag's behaviour, its outputs, or their names — a purely presentational addition
+(the panel titles and a README section), so it is not yet a versioned release.
+
+### Changed
+
+- **The dashboard panel titles are bracketed and larger.**  Each of the five
+  panels in `trackview/dashboard.py` now carries a `[ N  -  Title ]` heading
+  (`[ 1  -  Best rides on record ]`, `[ 2  -  Top N rides by distance ]`,
+  `[ 3  -  Cumulative distance ]`, `[ 4  -  Ride calendar (colour = distance that
+  day) ]`, `[ 5  -  Monthly distance (solid) & climbing gain (dashed), by year ]`),
+  up from the unbracketed `N  Title` form, and the panel title font is bumped
+  (the figure's own suptitle header is untouched, keeping its larger size).  Purely
+  cosmetic — the panels, their content, the PNG/PDF output and its name are
+  unchanged.
+
+### Documentation
+
+- **The `--dashboard` / `--dashboard-year` switches are documented in `README`'s
+  Output section.**  A new bullet, after `--gallery`, records both forms end to
+  end — `--dashboard [LOG]` (a report over your own ride log: five panels,
+  honours `--out` / `--format`, dependency-light, no basemap, writes even under
+  `--no-map` / `--sparse`; bare → `output/trackview_dashboard.<format>`, a named
+  `LOG` → `output/trackview-<range>_dashboard.<format>`, `--dashboard-top N` sizes
+  the leaderboard, default 5) and `--dashboard-year YYYY` (implies `--no-map`,
+  filters `*.gpx` to that year via `--since` / `--until`, writes the `--ext`-forced
+  `stats/trackview-YYYY.csv`, and renders *from that CSV* to
+  `output/trackview-dashboard-YYYY.<format>` — *generates* the year's CSV rather
+  than short-circuiting a pre-existing one, so an empty year writes nothing).  It
+  mirrors the `--dashboard` paragraph already in the Helper tools section.
+
+---
+
 ## [1.1.0] — 2026-10-27
 
 Promotes the `1.0.6` `tools/ride_dashboard.py` "year-in-review" helper into a first-class,
