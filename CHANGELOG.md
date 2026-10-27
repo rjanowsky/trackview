@@ -12,7 +12,7 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
-## [1.1.0] — 2026-10-26
+## [1.1.0] — 2026-10-27
 
 Promotes the `1.0.6` `tools/ride_dashboard.py` "year-in-review" helper into a first-class,
 flag-driven `--dashboard` of `trackview` itself (a MINOR bump: a new, backward-compatible
