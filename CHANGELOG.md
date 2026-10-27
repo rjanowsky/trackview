@@ -16,7 +16,8 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 Cosmetic polish to the `--dashboard` picture and its docs, with no change to any
 flag's behaviour, its outputs, or their names — a purely presentational addition
-(the panel titles and a README section), so it is not yet a versioned release.
+(the panel titles, a README section, and the launcher's usage header), so it is
+not yet a versioned release.
 
 ### Changed
 
@@ -44,6 +45,16 @@ flag's behaviour, its outputs, or their names — a purely presentational additi
   `output/trackview-dashboard-YYYY.<format>` — *generates* the year's CSV rather
   than short-circuiting a pre-existing one, so an empty year writes nothing).  It
   mirrors the `--dashboard` paragraph already in the Helper tools section.
+
+- **The `trackview.py` launcher's `Usage:` header now lists `--dashboard` /
+  `--dashboard-year`.**  The root launcher's module docstring curates a *subset*
+  of the CLI (the README carries all the flags), so two lines are added after
+  `--summary`, in step with the README Output bullet above: a `--dashboard` line
+  (a "year-in-review" ride-log PNG over the newest per-ride CSV in `stats/` →
+  `output/`) and a `--dashboard-year 2026` line (a single calendar year:
+  `--no-map` + that year's `*.gpx` → `stats/trackview-2026.csv` →
+  `output/trackview-dashboard-2026.png`).  Docstring-only — no flag, output, or
+  behaviour changes.
 
 ---
 

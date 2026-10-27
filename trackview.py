@@ -39,6 +39,8 @@ Usage:
     python trackview.py --calendar --calendar-by gain # colour each day by m gain (or 'rides') instead of km
     python trackview.py --calendar --year 2026  # restrict the grid to one calendar year
     python trackview.py --summary               # a year-in-review report (per year/month) -> stats/
+    python trackview.py --dashboard                # a single shareable 'year-in-review' ride-log PNG (trophy shelf, top-N leaderboard, cumulative distance, a ride calendar, monthly distance-vs-gain by year) reported over the persisted per-ride CSV -> output/
+    python trackview.py --dashboard-year 2026      # scope the --dashboard to one calendar year YYYY (implies --no-map; generates that year's ride-log CSV) -> output/
     python trackview.py --html                    # a self-contained interactive Leaflet map (inline GeoJSON + a tile layer) -> output/
     python trackview.py --html --html-cdn         # reference Leaflet from a CDN instead of inlining it (a smaller file, needs internet to view)
     python trackview.py --no-scale             # omit the map's lower-right scale bar (on by default)
