@@ -12,6 +12,34 @@ outputs are the headline; internal refactors and packaging work are noted too.
 
 ---
 
+## [1.1.1] — 2026-10-27
+
+Adds `--dashboard-year`, the *year-scoped* form of the `--dashboard`
+"year-in-review": instead of reporting a pre-existing per-ride CSV (what the bare
+`--dashboard` does — the newest one on disk), a year run *generates* the year's
+own CSV from that year's `*.gpx` and renders the dashboard from it.  A
+backward-compatible addition (the flag is new; every existing flag and output is
+unchanged).
+
+### Added
+
+- **`--dashboard-year YYYY`** — scope the `--dashboard` to one calendar year.  It
+  (a) implies `--no-map`, (b) filters the `*.gpx` to that year by folding onto a
+  `--since YYYY-01-01 --until YYYY-12-31` selection by the ride date (the same
+  Wahoo-filename date filter the `--today` run uses), (c) writes the year-named
+  ride-log `stats/trackview-YYYY.csv` (`--ext`-forced, so it carries the power /
+  grade the trophy shelf reads — the `1.1.0` fix), and (d) renders the dashboard
+  *from that CSV* to `output/trackview-dashboard-YYYY.<format>` unless `--out`
+  names the file.  A bare `--dashboard-year YYYY` also works (`--dashboard` is
+  implied).  Because it *generates* the year's CSV it runs the load rather than the
+  bare `--dashboard`'s newest-on-disk short-circuit (so a stale range CSV on disk
+  never stands in for the year), and a year with no rides writes nothing (the
+  "No tracks within" guard).  Note the year naming `trackview-YYYY.csv` /
+  `trackview-dashboard-YYYY.<format>` differs from the bare run's range naming
+  `trackview-<first>_<last>.csv` / `trackview_dashboard.<format>`.
+
+---
+
 ## [1.1.0] — 2026-10-27
 
 Promotes the `1.0.6` `tools/ride_dashboard.py` "year-in-review" helper into a first-class,

@@ -259,6 +259,18 @@ def main() -> None:
     ap.add_argument("--dashboard-top", type=int, default=5, metavar="N",
                     help="size the --dashboard leaderboard (panel 2) to the top N rides by "
                           "distance (default 5)")
+    ap.add_argument("--dashboard-year", type=int, default=None, metavar="YYYY",
+                    help="scope the --dashboard to one calendar year YYYY: implies "
+                          "--no-map, filters the *.gpx to that year (a --since "
+                          "YYYY-01-01 --until YYYY-12-31 selection by the Wahoo-style "
+                          "ride date), writes a year-named ride-log "
+                          "stats/trackview-YYYY.csv (ext-forced, so it carries "
+                          "power/grade), and renders the dashboard from that CSV to "
+                          "output/trackview-dashboard-YYYY.<format> unless --out names "
+                          "the file; a bare --dashboard-year YYYY also works "
+                          "(--dashboard is implied).  Unlike the bare --dashboard it "
+                          "GENERATES the year's CSV from that year's *.gpx -- it does "
+                          "not report a pre-existing one.")
     args = ap.parse_args()
 
     if args.csv and not args.csv_delimiter:
@@ -281,7 +293,12 @@ def main() -> None:
       # literals non-deterministically, so `is` on a short const can flip between runs.
     want_dashboard = args.dashboard is not None
     named = args.dashboard != BARE
-    if want_dashboard and (named or any(
+      # A --dashboard-year run must NOT short-circuit: it *generates* a year-named CSV
+      # from that year's *.gpx, so it has to run the load, not report a pre-existing
+      # CSV.  --dashboard-year sets args.dashboard = BARE further down (so want_dashboard
+      # is True for it) -- the `args.dashboard_year is None` guard is what keeps it off
+      # the short-circuit here (and off the bare-report tail, via its own early return).
+    if want_dashboard and args.dashboard_year is None and (named or any(
             p for p in STATS_DIR.glob("trackview-*.csv")
             if not p.name.endswith(("_summary.csv", "_climbs.csv")))):
         write_dashboard(None if not named else args.dashboard,
@@ -307,6 +324,24 @@ def main() -> None:
         args.flat = True
         args.since = date.today().isoformat()
         print(f"        --today: flat discovery + since {args.since} (today's rides)")
+
+      # --dashboard-year YYYY is the "which year am I reviewing?" form of a --dashboard
+      # run.  It folds into the existing knobs -- --no-map (a), and a --since
+      # YYYY-01-01 / --until YYYY-12-31 bound (b: the same Wahoo-filename date filter as
+      # --today, so the whole load/stats path transparently sees only that year's rides)
+      # -- and renames the two outputs to the year: a year-named ride-log CSV
+      # (stats/trackview-YYYY.csv, c) and the dashboard rendered *from that CSV*
+      # (output/trackview-dashboard-YYYY.<format>, d).  It implies --dashboard, so a bare
+      # `--dashboard-year YYYY` also works; and because it *generates* the year CSV it skips
+      # the --dashboard short-circuit (guarded above) and runs the load itself.
+    if args.dashboard_year is not None:
+        args.no_map = True
+        if args.dashboard is None:
+            args.dashboard = BARE
+        args.since = f"{args.dashboard_year:04d}-01-01"
+        args.until = f"{args.dashboard_year:04d}-12-31"
+        print(f"        --dashboard-year {args.dashboard_year}: --no-map + "
+              f"since {args.since} until {args.until} (that year's rides only)")
 
     gpx_dir = Path(args.gpx_dir)
        # By default the search recurses into subfolders (rglob), so rides organised
@@ -357,6 +392,7 @@ def main() -> None:
         # a --dashboard run writes them even with no map.     --ext additionally
         # gates the avg-telemetry title line and the ride-log columns.
     want_ext = (args.ext or args.trend or args.dashboard is not None
+                or args.dashboard_year is not None
                 or (not args.no_map
                     and (color_by in ("speed", "power") or args.heat or args.profile)))
     tracks = load_tracks(paths, DECIMATE_M, with_ext=want_ext, noise_m=args.gain_noise)
@@ -407,6 +443,24 @@ def main() -> None:
         for t in tracks:
             print(f"     - {t['name']:<20s} {t['dist_km']:6.1f} km     "
                   f"+{t['gain_m']:6.0f} m     {t['n']:>6,} -> {t['ndec']:>5,} pts")
+
+      # --dashboard-year YYYY: a year-scoped 'year-in-review'.  The year was folded into
+      # --since/--until above, so `tracks` is exactly this year's rides and --no-map is on;
+      # write the year-named ride-log CSV (ext-forced, so it carries power/grade -- the 1.1.0
+      # fix the dashboard's trophy shelf reads) and render the dashboard *from that CSV*,
+      # then stop: a focused year report -- no basemap, and no range .txt/.csv (the year CSV
+      # is the artifact).  An empty year returns earlier at the "No tracks within" guard, so
+      # no year CSV/PNG is written for a year with no rides.
+    if args.dashboard_year is not None:
+        csv_path = STATS_DIR / f"trackview-{args.dashboard_year}.csv"
+        write_csv(tracks, csv_path, show_ext=True, delimiter=args.csv_delimiter)
+        print(f"   --dashboard-year {args.dashboard_year}: {len(tracks)} ride(s) -> "
+              f"'{csv_path.name}'")
+        dash_path = (Path(args.out) if args.out is not None
+                     else OUTPUT_DIR / f"trackview-dashboard-{args.dashboard_year}.{args.format}")
+        write_dashboard(str(csv_path), dash_path, top_n=args.dashboard_top,
+                        fmt=args.format, stats=STATS_DIR, out_dir=OUTPUT_DIR)
+        return
 
     if args.no_map or args.dashboard is not None:
         if args.dashboard is not None and not args.no_map:

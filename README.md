@@ -143,6 +143,7 @@ python trackview.py --gallery 6                  # tile the N most recent rides 
 python trackview.py --dashboard                 # a "year-in-review" dashboard (5 panels) over the newest per-ride CSV in stats/ -> output/
 python trackview.py --dashboard <log.csv>       # ... or a named per-ride CSV from stats/
 python trackview.py --dashboard --dashboard-top 10   # size the leaderboard (panel 2) to the top N rides by distance (default 5)
+python trackview.py --dashboard --dashboard-year 2026   # a single year: --no-map + that year's *.gpx -> stats/trackview-2026.csv -> output/trackview-dashboard-2026.png
 python trackview.py --sparse                 # quiet stdout: skip the per-track stats listing
 ```
 
@@ -525,8 +526,18 @@ per-ride CSV in the `stats/` dir and writes its PNG to the `output/` dir
 by default — the same place the tool drops its maps, and git-ignored, since a
 rendered dashboard is personal, regenerable output, not part of the repo);
 `--out` names the file anywhere and `--dashboard-top N` sizes the leaderboard
-(default 5).  As a *report over your own ride log* (not the converter pipeline)
-it is the odd one out: it reads the tool's output, not a ride.
+(default 5).  A `--dashboard --dashboard-year YYYY` run scopes the picture to one
+calendar year instead of a pre-existing log: it implies `--no-map`, filters the
+`*.gpx` to that year (a `--since YYYY-01-01 --until YYYY-12-31` selection by the
+ride date), writes the year-named ride-log `stats/trackview-YYYY.csv`
+(`--ext`-forced, so it carries power / grade), and renders the dashboard *from
+that CSV* to `output/trackview-dashboard-YYYY.<format>` — a bare
+`--dashboard-year YYYY` works too (`--dashboard` is implied).  Unlike the bare
+`--dashboard`, a year run *generates* the year's CSV from that year's `*.gpx`
+rather than reporting a pre-existing one, so it runs the load instead of the
+newest-CSV short-circuit; a year with no rides writes nothing.  As a *report over
+your own ride log* (not the converter pipeline) it is the odd one out: it reads
+the tool's output, not a ride.
 
 ## Notes
 

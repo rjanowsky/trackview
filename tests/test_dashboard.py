@@ -59,6 +59,23 @@ def _isolate_data_dir(tmp_path, monkeypatch):
         monkeypatch.setattr(mod, "GPX_DIR", gpx, raising=False)
 
 
+@pytest.fixture
+def dashboard_home(_isolate_data_dir):
+    """The home the autouse `_isolate_data_dir` fixture already redirected the data
+    dir onto -- we do NOT spin up a second, conflicting tmp_path.  The autouse
+    fixture is the single source of truth: it patches each data-dir constant onto
+    every module that holds a copy of it (config, and the two bound copies in cli
+    and dashboard), so a real main() run here resolves its newest CSV and writes its
+    PNG inside THIS tmp tree, never the real ~/.trackview.  We hand back the
+    redirected stats dir's parent (its tmp root) so a test can lay a CSV on the very
+    disk `dash._latest_log` / `cli.STATS_DIR` glob, or (the year tests) point
+    --gpx-dir at the ride folder on the same tree.  Module-scoped (not nested in a
+    class) so both `TestDashboardShortCircuit` and `TestDashboardYear` share it; the
+    empty gpx dir (also made by the autouse fixture) makes a bare --dashboard a clean
+    no-tracks early return."""
+    return cli.STATS_DIR.parent
+
+
 # A compact per-ride CSV (a subset of the 12 columns, as a narrow table writes),
 # ';' delimited (trackview's default).  The 2023 row carries '-' for power/grade
 # (a pre-power-meter era); the 2024 rows don't.  The `Ride` column is the ride
@@ -271,20 +288,6 @@ class TestDashboardShortCircuit:
         finally:
             sys.argv = old
 
-    @pytest.fixture
-    def dashboard_home(self, _isolate_data_dir):
-        """The home the autouse `_isolate_data_dir` fixture already redirected the
-        data dir onto -- we do NOT spin up a second, conflicting tmp_path.  The
-        autouse fixture is the single source of truth: it patches each data-dir
-        constant onto every module that holds a copy of it (config, and the two bound
-        copies in cli and dashboard), so a real main() run here resolves its newest
-        CSV and writes its PNG inside THIS tmp tree, never the real ~/.trackview.  We
-        just hand back the redirected stats dir's parent (its tmp root) so the test
-        can lay a CSV on the very disk `dash._latest_log` / `cli.STATS_DIR` glob; the
-        empty gpx dir (also made by the autouse fixture) makes a bare --dashboard a
-        clean no-tracks early return."""
-        return cli.STATS_DIR.parent
-
     def _stats_csvs(self, dashboard_home):
         return sorted(p.name for p in (dashboard_home / "stats").glob("*.csv"))
 
@@ -334,3 +337,86 @@ class TestDashboardShortCircuit:
         png = dashboard_home / "output" / "trackview-2024-07-10_2024-07-20_dashboard.png"
         assert png.exists()
         assert self._stats_csvs(dashboard_home) == ["trackview-2024-07-10_2024-07-20.csv"]
+
+
+class TestDashboardYear:
+    """The `--dashboard-year YYYY` switch: a *year-scoped* 'year-in-review'.  Unlike the
+    bare --dashboard -- a report over a *pre-existing* per-ride CSV, so it short-circuits
+    the minutes-long load -- --dashboard-year *generates* a year-named CSV from that year's
+    *.gpx: it implies --no-map (a), folds into a --since YYYY-01-01 / --until YYYY-12-31
+    bound (b -- the Wahoo-filename date filter, so only that year's rides survive), writes
+    stats/trackview-YYYY.csv ext-forced (c -- the trophy shelf reads power/grade, so the
+    1.1.0 fix must carry them), and renders the dashboard *from that CSV* to
+    output/trackview-dashboard-YYYY.<format> (d).  These drive cli.main() on the redirected
+    data dir over the two-ride 2026 `gpx_folder` fixture, so the fold, the short-circuit
+    skip, the year filter, and the year naming all execute for real -- the pure-helper tests
+    above never touch cli.py's year branch."""
+
+    @staticmethod
+    def _run(argv, gpx_dir):
+        # Like the short-circuit driver, but points --gpx-dir at the fixture's ride folder
+        # (the redirected GPX_DIR is empty, so the year's rides come from here): a year run
+        # that HAS rides loads + writes the year CSV + PNG and returns normally; an empty
+        # year returns early at the "No tracks within" guard.  main() returns, not SystemExit.
+        old = sys.argv
+        sys.argv = ["trackview", "--gpx-dir", str(gpx_dir), *argv]
+        try:
+            cli.main()
+        finally:
+            sys.argv = old
+
+    # ---- (b)+(c)+(d): the year CSV + the year dashboard, over the year's rides ----
+    def test_year_run_writes_year_csv_and_dashboard(self, dashboard_home, gpx_folder):
+        self._run(["--dashboard", "--dashboard-year", "2026"], gpx_folder)
+        csv = dashboard_home / "stats" / "trackview-2026.csv"
+        png = dashboard_home / "output" / "trackview-dashboard-2026.png"
+        assert csv.exists()                                # (c) year-named CSV
+        assert png.exists()                                 # (d) year-named dashboard
+        # (b) the year filter kept exactly the two 2026 rides, nothing else
+        assert [r["date"] for r in dash.parse_rides(csv)] == ["2026-01-15", "2026-09-07"]
+
+    def test_year_csv_is_ext_forced(self, dashboard_home, gpx_folder):
+        # the trophy shelf reads power/grade, so the year CSV is ext-forced even under the
+        # implied --no-map (the 1.1.0 fix): the telemetry ride's 250 W survives, the plain
+        # ride's power stays missing (None), not 0.
+        self._run(["--dashboard", "--dashboard-year", "2026"], gpx_folder)
+        csv = dashboard_home / "stats" / "trackview-2026.csv"
+        by_date = {r["date"]: r for r in dash.parse_rides(csv)}
+        assert by_date["2026-01-15"]["power"] == 250.0
+        assert by_date["2026-09-07"]["power"] is None
+
+    # ---- (a): --no-map is implied, so no basemap map is drawn or written ----
+    def test_no_map_implied_no_overview_png(self, dashboard_home, gpx_folder):
+        self._run(["--dashboard", "--dashboard-year", "2026"], gpx_folder)
+        out = dashboard_home / "output"
+        assert (out / "trackview-dashboard-2026.png").exists()
+        assert not (out / "tracks_overview.png").exists()
+
+    # ---- --dashboard-year implies --dashboard, so a bare year flag works alone ----
+    def test_year_alone_implies_dashboard(self, dashboard_home, gpx_folder):
+        self._run(["--dashboard-year", "2026"], gpx_folder)
+        assert (dashboard_home / "stats" / "trackview-2026.csv").exists()
+        assert (dashboard_home / "output" / "trackview-dashboard-2026.png").exists()
+
+    # ---- a year run GENERATES its own CSV; it must not short-circuit on a stale one ----
+    def test_year_run_skips_short_circuit_generates_csv(self, dashboard_home, gpx_folder):
+        # A stale (pre-existing) plain CSV sits on disk: WITHOUT the `args.dashboard_year
+        # is None` guard the bare --dashboard short-circuit would fire and merely *report*
+        # the stale csv (no new CSV written).  With the guard, --dashboard-year skips it and
+        # *generates* the year CSV -- so the 2026 csv appears, the stale 2020 csv is
+        # untouched, and no range-named csv is written (the year branch names it trackview-
+        # 2026.csv, not trackview-<first>_<last>.csv).
+        stats = dashboard_home / "stats"
+        stats.mkdir()
+        (stats / "trackview-2020-01-01_2020-12-31.csv").write_text(CSV)
+        self._run(["--dashboard", "--dashboard-year", "2026"], gpx_folder)
+        names = sorted(p.name for p in stats.glob("*.csv"))
+        assert "trackview-2026.csv" in names
+        assert "trackview-2020-01-01_2020-12-31.csv" in names
+        assert "trackview-2026-01-15_2026-09-07.csv" not in names
+
+    # ---- a year with no rides writes nothing (the "No tracks within" early return) ----
+    def test_empty_year_writes_nothing(self, dashboard_home, gpx_folder):
+        self._run(["--dashboard", "--dashboard-year", "2025"], gpx_folder)
+        assert not (dashboard_home / "stats" / "trackview-2025.csv").exists()
+        assert not (dashboard_home / "output").exists()
